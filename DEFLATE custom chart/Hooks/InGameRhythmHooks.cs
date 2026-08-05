@@ -34,7 +34,7 @@ namespace DEFLATE_custom_chart.Hooks
                     MelonLogger.Msg($"  - 타겟 차트 Key: {__instance.gameData.targetKorePath}");
 
                     // hwa/ 커스텀 png·bga·bgm 에셋을 사본(테스트 곡)에만 적용하기 위한 활성 트랙 갱신
-                    isTargetTrack = HwaAssetManager.SetActiveTrack(__instance.gameData.NowTrackID);
+                    isTargetTrack = HwaAssetManager.SetActiveTrack(__instance.gameData.NowTrackID, __instance.gameData.NowTrackTitle);
                     MelonLogger.Msg($"  - 커스텀 에셋 사본 여부: {isTargetTrack}");
                 }
                 if (DEFLATE_custom_chart.Core.ModConfig.Instance.AutoMode)
@@ -133,6 +133,11 @@ namespace DEFLATE_custom_chart.Hooks
             public static void Postfix(RhythmGameController __instance, string trackID, LaneController lane)
             {
                 if (lane == null) return;
+
+                if (__instance != null && __instance.gameData != null)
+                {
+                    HwaAssetManager.SetActiveTrack(__instance.gameData.NowTrackID, __instance.gameData.NowTrackTitle);
+                }
 
                 // 테스트 곡(사본) 외의 원본 곡들은 노트 배치를 원본 그대로 유지한다.
                 if (!HwaAssetManager.IsTargetTrackActive) return;

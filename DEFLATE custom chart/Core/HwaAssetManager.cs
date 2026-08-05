@@ -44,16 +44,15 @@ namespace DEFLATE_custom_chart.Core
         /// 로딩/인게임 씬의 실제 오디오 로드 요청을 잘못 가로채 원본 로직을 스킵시키는(크래시 원인) 것을 막습니다.</summary>
         public static bool IsInSongSelectContext { get; set; } = true;
 
-        /// <summary>주어진 trackId가 주입 대상(사본)인지 판정하고 IsTargetTrackActive 상태를 갱신합니다.</summary>
-        public static bool SetActiveTrack(string trackId)
+        public static bool SetActiveTrack(string activeTrackID, string activeTitle = null)
         {
-            IsTargetTrackActive = !string.IsNullOrEmpty(TargetTrackID) &&
-                !string.IsNullOrEmpty(trackId) &&
-                string.Equals(TargetTrackID, trackId, StringComparison.OrdinalIgnoreCase);
+            bool isActiveByID = !string.IsNullOrEmpty(TargetTrackID) && !string.IsNullOrEmpty(activeTrackID) && string.Equals(TargetTrackID, activeTrackID, StringComparison.OrdinalIgnoreCase);
+            bool isActiveByTitle = CurrentMeta != null && !string.IsNullOrEmpty(CurrentMeta.Title) && string.Equals(CurrentMeta.Title, activeTitle, StringComparison.OrdinalIgnoreCase);
+
+            IsTargetTrackActive = isActiveByID || isActiveByTitle;
             return IsTargetTrackActive;
         }
 
-        /// <summary>곡 목록에서 오디오 프리뷰로 요청된 key가 사본 자신의 오디오 key와 일치하는지 (선택 상태까지 함께) 판정합니다.</summary>
         public static bool IsTargetAudioPreview(string audioKey)
         {
             return IsInSongSelectContext &&
@@ -61,6 +60,23 @@ namespace DEFLATE_custom_chart.Core
                 !string.IsNullOrEmpty(TargetAudioKey) &&
                 string.Equals(TargetAudioKey, audioKey, StringComparison.OrdinalIgnoreCase);
         }
+
+        public class HwaMetaInfo
+        {
+            public string Title { get; set; } = "どりーむもーど";
+            public string Artist { get; set; } = "화영왕";
+            public string Album { get; set; } = "custom albums";
+            public string BgaAuthor { get; set; } = "화영왕";
+            public string ChartAuthor { get; set; } = "화영왕";
+            public string ChartMaker => ChartAuthor;
+
+            public int EasyLevel { get; set; } = 8;
+            public int NormalLevel { get; set; } = 8;
+            public int HardLevel { get; set; } = 8;
+        }
+
+        public static HwaMetaInfo CurrentMeta { get; private set; } = new HwaMetaInfo();
+        public static string InfoFilePath { get; private set; }
 
         public static void Initialize()
         {
@@ -79,6 +95,7 @@ namespace DEFLATE_custom_chart.Core
             }
 
             ScanHwaDirectory();
+            ParseInfoTxt();
             LoadCoverSprite();
             _isInitialized = true;
         }
@@ -93,10 +110,13 @@ namespace DEFLATE_custom_chart.Core
             BgaFilePath = null;
             BgaFileUrl = null;
             CoverFilePath = null;
+            InfoFilePath = null;
 
             foreach (var f in files)
             {
                 string ext = Path.GetExtension(f).ToLowerInvariant();
+                string name = Path.GetFileName(f).ToLowerInvariant();
+
                 if (BgmFilePath == null && (ext == ".wav" || ext == ".mp3" || ext == ".ogg"))
                 {
                     BgmFilePath = f;
@@ -110,12 +130,63 @@ namespace DEFLATE_custom_chart.Core
                 {
                     CoverFilePath = f;
                 }
+                else if (InfoFilePath == null && (name == "info.txt" || ext == ".txt"))
+                {
+                    InfoFilePath = f;
+                }
             }
 
             MelonLogger.Msg($"[HwaAssetManager] hwa 폴더 에셋 감지 완료:");
             MelonLogger.Msg($"  - BGM 파일:   {(BgmFilePath != null ? Path.GetFileName(BgmFilePath) : "없음")}");
             MelonLogger.Msg($"  - BGA 비디오: {(BgaFilePath != null ? Path.GetFileName(BgaFilePath) : "없음")}");
             MelonLogger.Msg($"  - PNG 자켓:   {(CoverFilePath != null ? Path.GetFileName(CoverFilePath) : "없음")}");
+        }
+
+        public static void ParseInfoTxt()
+        {
+            CurrentMeta = new HwaMetaInfo();
+
+            if (string.IsNullOrEmpty(InfoFilePath) || !File.Exists(InfoFilePath))
+            {
+                MelonLogger.Msg("[HwaAssetManager] info.txt 파일이 없어 기본 메타데이터를 사용합니다.");
+                return;
+            }
+
+            try
+            {
+                string[] lines = File.ReadAllLines(InfoFilePath);
+                foreach (var line in lines)
+                {
+                    if (string.IsNullOrWhiteSpace(line)) continue;
+
+                    string[] parts = line.Split(new char[] { ':', '=' }, 2);
+                    if (parts.Length < 2) continue;
+
+                    string key = parts[0].Trim().ToLowerInvariant();
+                    string val = parts[1].Trim();
+
+                    if (key.Contains("제목") || key.Contains("title")) CurrentMeta.Title = val;
+                    else if (key.Contains("아티스트") || key.Contains("artist")) CurrentMeta.Artist = val;
+                    else if (key.Contains("앨범") || key.Contains("album")) CurrentMeta.Album = val;
+                    else if (key.Contains("bga") || key.Contains("pv")) CurrentMeta.BgaAuthor = val;
+                    else if (key.Contains("제작자") || key.Contains("maker") || key.Contains("charter")) CurrentMeta.ChartAuthor = val;
+                    else if (key.Equals("easy", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int ez)) CurrentMeta.EasyLevel = ez;
+                    else if (key.Equals("normal", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int nm)) CurrentMeta.NormalLevel = nm;
+                    else if (key.Equals("hard", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int hd)) CurrentMeta.HardLevel = hd;
+                }
+
+                MelonLogger.Msg($"[HwaAssetManager] ★ info.txt 파싱 성공 ★");
+                MelonLogger.Msg($"  - 곡 제목:   '{CurrentMeta.Title}'");
+                MelonLogger.Msg($"  - 아티스트:   '{CurrentMeta.Artist}'");
+                MelonLogger.Msg($"  - 앨범:       '{CurrentMeta.Album}'");
+                MelonLogger.Msg($"  - BGA 제작자: '{CurrentMeta.BgaAuthor}'");
+                MelonLogger.Msg($"  - 채보 제작자: '{CurrentMeta.ChartAuthor}'");
+                MelonLogger.Msg($"  - 난이도:     Easy={CurrentMeta.EasyLevel}, Normal={CurrentMeta.NormalLevel}, Hard={CurrentMeta.HardLevel}");
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Error($"[HwaAssetManager] info.txt 파싱 예외 발생: {ex.Message}");
+            }
         }
 
         // =========================================================================

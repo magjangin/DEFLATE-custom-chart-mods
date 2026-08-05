@@ -25,17 +25,19 @@ namespace DEFLATE_custom_chart.Hooks
             {
                 if (__instance == null || __instance.tracks == null || __instance.tracks.Length == 0) return;
 
-                // 이미 이번 tracks 배열에 사본("테스트 곡")이 존재하면 중복 생성하지 않고 상태만 재동기화한다.
+                string customTitle = HwaAssetManager.CurrentMeta?.Title ?? "どりーむもーど";
+
+                // 이미 이번 tracks 배열에 사본(customTitle)이 존재하면 중복 생성하지 않고 상태만 재동기화한다.
                 foreach (var existing in __instance.tracks)
                 {
                     if (existing == null) continue;
                     var existingWrapper = new CustomTrackWrapper(existing);
-                    if (existingWrapper.Title == "테스트 곡")
+                    if (existingWrapper.Title == customTitle)
                     {
                         HwaAssetManager.TargetTrackID = existingWrapper.UniqueID;
                         HwaAssetManager.TargetAudioKey = existingWrapper.AudioKey;
                         HwaAssetManager.TargetVideoKey = existingWrapper.VideoKey;
-                        MelonLogger.Msg($"[곡 목록 주입] 기존 사본을 재사용합니다 (ID: {existingWrapper.UniqueID}). 재생성을 건너뜁니다.");
+                        MelonLogger.Msg($"[곡 목록 주입] 기존 사본 '{customTitle}'을 재사용합니다 (ID: {existingWrapper.UniqueID}). 재생성을 건너뜁니다.");
                         return;
                     }
                 }
@@ -94,10 +96,26 @@ namespace DEFLATE_custom_chart.Hooks
                     method?.Invoke(cloneBlock, null);
                 }
 
-                // 사본 래퍼 갱신 및 제목 설정 ("테스트 곡")
+                // 사본 래퍼 갱신 및 커스텀 info.txt 메타데이터 / PNG 커버 자켓 주입
                 var cloneWrapper = new CustomTrackWrapper(cloneBlock);
-                cloneWrapper.Title = "테스트 곡";
+                var meta = HwaAssetManager.CurrentMeta ?? new HwaAssetManager.HwaMetaInfo();
+                var customCover = HwaAssetManager.LoadCoverSprite();
+
+                cloneWrapper.Title = meta.Title;
+                cloneWrapper.Artist = meta.Artist;
+                cloneWrapper.AlbumName = meta.Album;
+                if (customCover != null) cloneWrapper.CoverSprite = customCover;
                 cloneWrapper.ApplyTo(cloneBlock);
+
+                // MainTrackListBlock 직접 속성에도 확실히 반영
+                cloneBlock.TrackTitle = meta.Title;
+                cloneBlock.TrackAuthor = meta.Artist;
+                cloneBlock.TrackAlbum = meta.Album;
+                if (customCover != null) cloneBlock.TrackCover = customCover;
+                cloneBlock.EZ_Star = meta.EasyLevel;
+                cloneBlock.NM_Star = meta.NormalLevel;
+                cloneBlock.HD_Star = meta.HardLevel;
+                cloneBlock.Description = $"BGA: {meta.BgaAuthor} | Chart: {meta.ChartMaker} | Easy:{meta.EasyLevel} Normal:{meta.NormalLevel} Hard:{meta.HardLevel}";
 
                 // 4) tracks 배열 확장 주입
                 var oldTracks = __instance.tracks;

@@ -7,6 +7,45 @@ namespace DEFLATE_custom_chart.Hooks
 {
     public static class LoadingSceneHooks
     {
+        private static void ApplyLoadingUiMetadata(LoadingGamePlay instance)
+        {
+            if (instance == null || instance.gameData == null) return;
+            if (!HwaAssetManager.IsTargetTrackActive) return;
+
+            var meta = HwaAssetManager.CurrentMeta ?? new HwaAssetManager.HwaMetaInfo();
+            var gd = instance.gameData;
+
+            var customCover = HwaAssetManager.LoadCoverSprite();
+
+            int targetStar = meta.NormalLevel;
+            int diffVal = (int)gd.nowDifficulty;
+            if (diffVal == 0) targetStar = meta.EasyLevel;
+            else if (diffVal == 1) targetStar = meta.NormalLevel;
+            else if (diffVal == 2) targetStar = meta.HardLevel;
+
+            gd.NowTrackTitle = meta.Title;
+            gd.NowTrackAurthor = meta.Artist;
+            gd.NowTrackPVAuthor = meta.BgaAuthor;
+            gd.NowTracLabel = meta.Album;
+            gd.NowTrackLevel = targetStar.ToString();
+            if (customCover != null) gd.NowTrackCover = customCover;
+
+            if (instance.NowTrackTitle != null) instance.NowTrackTitle.text = meta.Title;
+            if (instance.NowTrackAurthor != null) instance.NowTrackAurthor.text = meta.Artist;
+            if (instance.NowTrackPVAuthor != null) instance.NowTrackPVAuthor.text = meta.BgaAuthor;
+            if (instance.NowTracLabel != null) instance.NowTracLabel.text = meta.Album;
+            if (instance.NowTrackDifficulty != null) instance.NowTrackDifficulty.text = targetStar.ToString();
+            if (instance.diffStarsCtrl != null) instance.diffStarsCtrl.GenerateStarImages(targetStar);
+
+            if (customCover != null)
+            {
+                if (instance.NowTrackCover != null) instance.NowTrackCover.sprite = customCover;
+                if (instance.NowTrackCover_bg != null) instance.NowTrackCover_bg.sprite = customCover;
+            }
+
+            MelonLogger.Msg($"[로딩 씬 커스텀 UI 주입] 제목: '{meta.Title}' | 난이도: {gd.nowDifficulty}(★{targetStar}) | BGA: '{meta.BgaAuthor}' | 앨범: '{meta.Album}'");
+        }
+
         [HarmonyPatch(typeof(LoadingGamePlay), nameof(LoadingGamePlay.Start))]
         public static class LoadingGamePlay_Start_Patch
         {
@@ -17,18 +56,36 @@ namespace DEFLATE_custom_chart.Hooks
                 // 크래시를 막기 위해, 로딩 씬 진입 시점에 프리뷰 컨텍스트를 명시적으로 종료한다.
                 HwaAssetManager.IsInSongSelectContext = false;
 
-                if (__instance == null || __instance.gameData == null) return;
+                ApplyLoadingUiMetadata(__instance);
 
+                if (__instance == null || __instance.gameData == null) return;
                 var gd = __instance.gameData;
+
                 MelonLogger.Msg("==================================================");
-                MelonLogger.Msg("[로딩 씬 진입] 곡 선택 정보 검증 완료!");
+                MelonLogger.Msg($"[로딩 씬 진입 감지] TargetActive: {HwaAssetManager.IsTargetTrackActive}");
                 MelonLogger.Msg($"  - 곡 제목:      '{gd.NowTrackTitle}'");
                 MelonLogger.Msg($"  - 곡 아티스트:   '{gd.NowTrackAurthor}'");
+                MelonLogger.Msg($"  - PV/BGA 제작자: '{gd.NowTrackPVAuthor}'");
                 MelonLogger.Msg($"  - 곡 ID:        '{gd.NowTrackID}'");
-                MelonLogger.Msg($"  - 타겟 차트 Key: '{gd.targetKorePath}'");
-                MelonLogger.Msg($"  - 오디오 Key:    '{gd.audioClip_Key}'");
-                MelonLogger.Msg($"  - BGA Key:      '{gd.pv_Key}'");
                 MelonLogger.Msg("==================================================");
+            }
+        }
+
+        [HarmonyPatch(typeof(LoadingGamePlay), nameof(LoadingGamePlay.InitializeAndPlayAnimations))]
+        public static class LoadingGamePlay_InitializeAndPlayAnimations_Patch
+        {
+            public static void Postfix(LoadingGamePlay __instance)
+            {
+                ApplyLoadingUiMetadata(__instance);
+            }
+        }
+
+        [HarmonyPatch(typeof(LoadingGamePlay), nameof(LoadingGamePlay.HandleEmptyFields))]
+        public static class LoadingGamePlay_HandleEmptyFields_Patch
+        {
+            public static void Postfix(LoadingGamePlay __instance)
+            {
+                ApplyLoadingUiMetadata(__instance);
             }
         }
 
