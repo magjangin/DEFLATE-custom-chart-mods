@@ -48,6 +48,26 @@ namespace DEFLATE_custom_chart.Hooks
 
                 if (isTargetTrack)
                 {
+                    // hwa/ Custom BGM (.ogg/.wav/.mp3) 사전 로드된 클립 0ms 즉시 할당 (원곡 소리 튐 차단)
+                    if (__instance.audioCom != null)
+                    {
+                        if (HwaAssetManager.CustomBgmClip != null)
+                        {
+                            __instance.audioCom.clip = HwaAssetManager.CustomBgmClip;
+                            MelonLogger.Msg($"  - [Start] Custom BGM 사전 클립 즉시 할당 완료: '{HwaAssetManager.CustomBgmClip.name}'");
+                        }
+                        else
+                        {
+                            __instance.audioCom.mute = true;
+                            MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(__instance.audioCom, true, (clip) => {
+                                if (__instance != null && __instance.audioCom != null)
+                                {
+                                    __instance.audioCom.mute = false;
+                                }
+                            }));
+                        }
+                    }
+
                     // hwa/ Custom BGA (.mp4) 사전 주입 (사본 전용)
                     if (__instance.videoPlayer != null)
                     {
@@ -270,7 +290,22 @@ namespace DEFLATE_custom_chart.Hooks
 
                 if (HwaAssetManager.IsTargetTrackActive && __instance.audioCom != null && !string.IsNullOrEmpty(HwaAssetManager.BgmFilePath))
                 {
-                    MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(__instance.audioCom, true));
+                    if (HwaAssetManager.CustomBgmClip != null)
+                    {
+                        __instance.audioCom.clip = HwaAssetManager.CustomBgmClip;
+                        __instance.audioCom.mute = false;
+                        MelonLogger.Msg($"  - [BGM 재생 준비] 사전 로드 클립 0ms 할당 완료: '{HwaAssetManager.CustomBgmClip.name}'");
+                    }
+                    else
+                    {
+                        __instance.audioCom.mute = true;
+                        MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(__instance.audioCom, true, (clip) => {
+                            if (__instance != null && __instance.audioCom != null)
+                            {
+                                __instance.audioCom.mute = false;
+                            }
+                        }));
+                    }
                 }
 
                 if (__instance.audioCom != null && __instance.audioCom.clip != null)

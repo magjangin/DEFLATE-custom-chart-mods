@@ -58,6 +58,12 @@ namespace DEFLATE_custom_chart.Hooks
 
                 ApplyLoadingUiMetadata(__instance);
 
+                if (HwaAssetManager.IsTargetTrackActive && !string.IsNullOrEmpty(HwaAssetManager.BgmFilePath))
+                {
+                    MelonLogger.Msg("[로딩 씬] 커스텀 BGM 사전 로딩(Preload) 시작!");
+                    MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(null, false));
+                }
+
                 if (__instance == null || __instance.gameData == null) return;
                 var gd = __instance.gameData;
 
