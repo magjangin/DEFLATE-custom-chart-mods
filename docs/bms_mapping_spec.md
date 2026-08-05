@@ -7,13 +7,23 @@
 
 ## 1. BMS 채널 ↔ DEFLATE 레인 매핑
 
-| BMS 채널 | DEFLATE 타겟 레인 ID | 레인 이름 | 비고 |
-| :--- | :--- | :--- | :--- |
-| **`16`** | `hihat_1` | 1번 레인 (HiHat 1) | 하이햇 1번 |
-| **`11`** | `hihat_2` | 2번 레인 (HiHat 2) | 하이햇 2번 |
-| **`12`** | `hihat_3` | 3번 레인 (HiHat 3) | 하이햇 3번 |
-| **`13`** | `hihat_4` | 4번 레인 (HiHat 4) | 하이햇 4번 |
-| **`14`** | `drop` | 드롭(Drop) 전용 레인 | 특수 드롭 심벌 전용 |
+| BMS 채널 | LN 채널 | 대체 채널 | DEFLATE 타겟 레인 ID | 레인 이름 |
+| :--- | :--- | :--- | :--- | :--- |
+| **`16`** | `56` | — | `hihat_1` | 1번 레인 (HiHat 1) |
+| **`11`** | `51` | — | `hihat_2` | 2번 레인 (HiHat 2) |
+| **`12`** | `52` | — | `hihat_3` | 3번 레인 (HiHat 3) |
+| **`13`** | `53` | — | `hihat_4` | 4번 레인 (HiHat 4) |
+| **`14`** | `54` | — | `drop` | 드롭(Drop) 전용 레인 |
+| **`15`** | `55` | `22` | `kick_left` | 좌측 킥 |
+| **`18`** | `58` | `23` | `kick_right` | 우측 킥 |
+| **`19`** | `59` | `24` | `snare_left` | 좌측 스네어 |
+| **`17`** | `57` | `25` | `snare_right` | 우측 스네어 |
+
+> [!TIP]
+> **채널을 못 외워도 됩니다.** 위 표에 없는 채널에 찍힌 노트는 **키음 파일명으로 레인을 추론**합니다
+> (`kick_left.wav`, `snare_right 홀드 시작.wav` → 각각 `kick_left`, `snare_right` 레인).
+> 레인 판정 로직은 [`BmsLaneMapper`](../DEFLATE%20custom%20chart/Core/Bms/BmsLaneMapper.cs)에 모여 있으며, **채널 매핑 우선 → 없으면 키음 이름** 순으로 판정합니다.
+> 어느 쪽으로도 레인이 안 잡히는 노트(예: BGM 표기용 `#00021:016`의 `music.ogg`)는 조용히 무시되므로 유령 노트가 생기지 않습니다.
 
 ---
 
@@ -60,12 +70,11 @@
 
 ## 3. BMS 파서 처리 규칙 (Engine Parser Logic)
 
-1. **채널 감지:** 
-   * `16` ➔ `hihat_1`
-   * `11` ➔ `hihat_2`
-   * `12` ➔ `hihat_3`
-   * `13` ➔ `hihat_4`
-   * `14` ➔ `drop` (RhythmGameController의 `dropEventSamples` 및 드롭 전용 노트에 할당)
+1. **레인 감지 (`BmsLaneMapper.ResolveNoteLane`):**
+   * 1순위 — 채널 매핑표 (`16/11/12/13/14/15/18/19/17` + LN `5x` + 대체 `22~25`)
+   * 2순위 — 키음 파일명 추론 (`hihat_1~4`, `kick_left/right`, `snare_left/right`, `drop` 문자열 포함 여부)
+   * 어느 쪽도 안 걸리면 무시 (BGM 표기 등)
+   * `drop` 레인 노트는 `RhythmGameController.dropEventSamples`에도 함께 등록됩니다.
 2. **롱노트 (Hold) 쌍 매핑:** — ✅ 구현됨 (`BmsParser.PairHoldNotesByKeysound`)
    * `#WAV00B`와 `#WAV00A`처럼 `홀드 시작` ➔ `홀드 끝` 순서로 쌍을 구성하여 인게임 `KoreographyEvent`의 `StartSample` 및 `EndSample`로 변환 주입합니다.
    * **판정 기준은 채널이 아니라 노트가 참조하는 `#WAV` 파일명**입니다. 파일명에 `홀드 시작`(또는 `hold start`, `ln start`)이 들어가면 Head, `홀드 끝`(`hold end`, `ln end`)이 들어가면 Tail로 봅니다. 즉 홀드도 단노트와 **같은 레인 채널(11/12/13/16/14)에 그대로** 찍으면 됩니다.
@@ -75,7 +84,7 @@
      3. 짝이 맞은 Tail은 노트 목록에서 **제거** (남겨두면 홀드 끝 지점에 유령 단타가 하나 더 스폰됨)
      4. 짝을 못 찾은 Head는 **단타로 강등**, 고아 Tail은 제거 (둘 다 로그에 개수 출력)
    * 표준 BMS 방식인 **LN 채널(`51`~`69`)과 `#LNOBJ`도 그대로 동작**하며, 이미 그쪽으로 짝이 맞은 노트는 키음 이름 매칭이 건드리지 않습니다.
-   * ⚠️ 현재 인게임 주입 매핑(`InGameRhythmHooks`)은 `hihat_1~4`와 `drop` 레인만 처리하므로, `kick_*` / `snare_*` 홀드 키음을 정의해도 해당 레인에는 아직 노트가 들어가지 않습니다.
+   * `hihat_1~4` / `drop` 뿐 아니라 **`kick_left/right`, `snare_left/right` 레인도 동일하게 홀드가 들어갑니다.**
 
 ```bms
 ; hihat_2(채널 11) 레인에 1/2마디 길이 홀드 하나

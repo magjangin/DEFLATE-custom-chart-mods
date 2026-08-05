@@ -11,6 +11,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.Video;
 using DEFLATE_custom_chart.Core;
+using DEFLATE_custom_chart.Core.Bms;
 
 namespace DEFLATE_custom_chart.Hooks
 {
@@ -145,13 +146,13 @@ namespace DEFLATE_custom_chart.Hooks
                     if (__instance.processedDropSamples != null) __instance.processedDropSamples.Clear();
                     __instance.nextDropEventIdx = 0;
 
-                    // 2. BMS 14번 채널(드롭 전용) 노트가 파싱되어 있다면 dropEventSamples에 주입
+                    // 2. 드롭 레인으로 라우팅되는 BMS 노트(14/54 채널 또는 drop 키음)를 dropEventSamples에 주입
                     var bmsChart = HwaAssetManager.LoadedBmsChart;
                     if (bmsChart != null && bmsChart.Notes.Count > 0 && __instance.dropEventSamples != null)
                     {
                         foreach (var n in bmsChart.Notes)
                         {
-                            if (n.Channel == "14" || n.Channel == "54")
+                            if (BmsLaneMapper.ResolveNoteLane(n) == BmsLaneMapper.Drop)
                             {
                                 __instance.dropEventSamples.Add(n.SamplePosition);
                             }
@@ -238,40 +239,31 @@ namespace DEFLATE_custom_chart.Hooks
                 {
                     // =========================================================
                     // 1. 사용자 지정 규격 BMS ➔ DEFLATE 레인 노트 변환 주입
-                    // 채널 매핑: 16 -> hihat_1, 11 -> hihat_2, 12 -> hihat_3, 13 -> hihat_4, 14 -> drop
+                    // 레인 판정은 BmsLaneMapper가 담당 (채널 매핑 ➔ 없으면 키음 이름 추론)
                     // =========================================================
                     lane.laneEvents?.Clear();
 
-                    string tid = trackID != null ? trackID.ToLowerInvariant() : "";
-                    string ltype = lane.laneType.ToString().ToLowerInvariant();
+                    string targetLane = BmsLaneMapper.ResolveLaneId(trackID, lane.laneType.ToString());
 
-                    string targetChannel = null;
-                    if (tid.Contains("hihat_1") || ltype.Contains("hihat_1")) targetChannel = "16";
-                    else if (tid.Contains("hihat_2") || ltype.Contains("hihat_2")) targetChannel = "11";
-                    else if (tid.Contains("hihat_3") || ltype.Contains("hihat_3")) targetChannel = "12";
-                    else if (tid.Contains("hihat_4") || ltype.Contains("hihat_4")) targetChannel = "13";
-                    else if (tid.Contains("drop") || ltype.Contains("drop")) targetChannel = "14";
-
-                    if (targetChannel != null)
+                    if (targetLane != null)
                     {
                         int addedCount = 0;
+                        int holdCount = 0;
                         foreach (var bmsNote in bmsChart.Notes)
                         {
-                            // 주 채널(16, 11, 12, 13, 14) 및 롱노트 채널(56, 51, 52, 53, 54) 검사
-                            string longChannel = "5" + targetChannel.Substring(1);
-                            if (bmsNote.Channel == targetChannel || bmsNote.Channel == longChannel)
-                            {
-                                int startSample = bmsNote.SamplePosition;
-                                int endSample = bmsNote.IsLongNote ? bmsNote.LongNoteEndSamplePosition : startSample + (int)(koreo.SampleRate * 0.1f);
+                            if (!string.Equals(BmsLaneMapper.ResolveNoteLane(bmsNote), targetLane, StringComparison.OrdinalIgnoreCase)) continue;
 
-                                var newEvt = new KoreographyEvent();
-                                newEvt.StartSample = startSample;
-                                newEvt.EndSample = endSample;
-                                lane.laneEvents.Add(newEvt);
-                                addedCount++;
-                            }
+                            int startSample = bmsNote.SamplePosition;
+                            int endSample = bmsNote.IsLongNote ? bmsNote.LongNoteEndSamplePosition : startSample + (int)(koreo.SampleRate * 0.1f);
+
+                            var newEvt = new KoreographyEvent();
+                            newEvt.StartSample = startSample;
+                            newEvt.EndSample = endSample;
+                            lane.laneEvents.Add(newEvt);
+                            addedCount++;
+                            if (bmsNote.IsLongNote) holdCount++;
                         }
-                        MelonLogger.Msg($"[★ HWA BMS 노트 주입 ★] 레인: '{trackID}'(Channel {targetChannel}) | {before}개 ➔ {addedCount}개 주입 완료");
+                        MelonLogger.Msg($"[★ HWA BMS 노트 주입 ★] 레인: '{trackID}'(lane {targetLane}) | {before}개 ➔ {addedCount}개 주입 완료 (홀드 {holdCount}개)");
                     }
                     else
                     {
