@@ -11,7 +11,7 @@ namespace DEFLATE_custom_chart.Core
 {
     /// <summary>
     /// 실시간 5구간 판정바 (Judgment Bar / Early-Late Indicator) 렌더러
-    /// Il2Cpp 도메인 호환을 위해 RegisterTypeInIl2Cpp 및 (IntPtr ptr) 생성자 적용
+    /// UGUI Canvas 내부 상위에 자동 배치하여 화면 렌더링 보장
     /// </summary>
     [RegisterTypeInIl2Cpp]
     public class JudgmentBarController : MonoBehaviour
@@ -24,10 +24,9 @@ namespace DEFLATE_custom_chart.Core
 
         private GameObject _barContainer;
         private RectTransform _barRectTransform;
-        private List<Image> _hitMarkers = new List<Image>();
 
-        private const float BarLength = 200.0f; // 판정바 전체 길이
-        private const float BarWidth = 14.0f;   // 판정바 두께
+        private const float BarLength = 220.0f; // 판정바 전체 길이
+        private const float BarWidth = 16.0f;   // 판정바 두께
 
         public static void RegisterType()
         {
@@ -46,23 +45,46 @@ namespace DEFLATE_custom_chart.Core
             }
         }
 
-        public static void EnsureInstance(Transform parentTransform)
+        public static void EnsureInstance(Transform fallbackParent)
         {
             if (!ModConfig.Instance.EnableJudgmentBar) return;
 
             RegisterType();
 
+            // 씬 내부 UGUI Canvas 탐색
+            Canvas targetCanvas = null;
+            var canvases = UnityEngine.Object.FindObjectsOfType<Canvas>();
+            if (canvases != null && canvases.Length > 0)
+            {
+                foreach (var c in canvases)
+                {
+                    if (c != null && c.enabled && c.gameObject.activeInHierarchy)
+                    {
+                        targetCanvas = c;
+                        break;
+                    }
+                }
+            }
+
+            Transform parentTransform = targetCanvas != null ? targetCanvas.transform : fallbackParent;
+
             if (Instance == null || Instance.gameObject == null)
             {
                 var holder = new GameObject("HwaCustomJudgmentBarHolder");
                 holder.transform.SetParent(parentTransform, false);
+
+                var holderRect = holder.AddComponent<RectTransform>();
+                holderRect.anchorMin = new Vector2(0.5f, 0.5f);
+                holderRect.anchorMax = new Vector2(0.5f, 0.5f);
+                holderRect.anchoredPosition = Vector2.zero;
+
                 Instance = holder.AddComponent<JudgmentBarController>();
-                Instance.InitUI(parentTransform);
+                Instance.InitUI();
             }
         }
 
         [HideFromIl2Cpp]
-        private void InitUI(Transform parentTransform)
+        private void InitUI()
         {
             _barContainer = new GameObject("JudgmentBarContainer");
             _barContainer.transform.SetParent(this.transform, false);
@@ -72,7 +94,6 @@ namespace DEFLATE_custom_chart.Core
             bool isCapsule = ModConfig.Instance.JudgmentBarCapsule;
             string side = ModConfig.Instance.JudgmentBarSide ?? "Center";
 
-            // 세로/가로 판정바 피벗 및 크기 설정
             if (isVertical)
             {
                 _barRectTransform.sizeDelta = new Vector2(BarWidth, BarLength);
@@ -82,16 +103,11 @@ namespace DEFLATE_custom_chart.Core
                 _barRectTransform.sizeDelta = new Vector2(BarLength, BarWidth);
             }
 
-            // 위치 (Side) 설정
             SetBarPosition(side, isVertical);
-
-            // 5구간 박스 배경 생성 (Far Late, Late, PERFECT, Early, Far Early)
             CreateBoxSegments(isVertical, isCapsule);
-
-            // 중앙 0ms 기준선 생성
             CreateCenterLine(isVertical);
 
-            MelonLogger.Msg($"[JudgmentBar] 실시간 판정바 UI 로드 완료 (Vertical={isVertical}, Side='{side}', Capsule={isCapsule})");
+            MelonLogger.Msg($"[JudgmentBar] ★ 실시간 5구간 판정바 UI 렌더링 활성화 ★ (Vertical={isVertical}, Side='{side}', Parent='{this.transform.parent?.name}')");
         }
 
         [HideFromIl2Cpp]
@@ -106,22 +122,21 @@ namespace DEFLATE_custom_chart.Core
             string s = side.Trim().ToLowerInvariant();
             if (s == "left")
             {
-                posX = -500f;
+                posX = -450f;
             }
             else if (s == "right")
             {
-                posX = 500f;
+                posX = 450f;
             }
             else
             {
-                // Center
                 if (isVertical)
                 {
-                    posX = -580f; // 세로 기본: 화면 왼쪽 레인 옆
+                    posX = -500f;
                 }
                 else
                 {
-                    posY = -280f; // 가로 기본: 화면 중앙 아래
+                    posY = -250f;
                 }
             }
 
@@ -131,14 +146,13 @@ namespace DEFLATE_custom_chart.Core
         [HideFromIl2Cpp]
         private void CreateBoxSegments(bool isVertical, bool isCapsule)
         {
-            // 5개 박스 구간 비율 (-1.0 ~ +1.0)
             var segments = new[]
             {
-                new { Min = -1.0f, Max = -0.50f, Color = new Color(0.9f, 0.2f, 0.2f, 0.75f) }, // Far Late (Red)
-                new { Min = -0.50f, Max = -0.18f, Color = new Color(0.95f, 0.75f, 0.2f, 0.75f) },// Late Good (Yellow)
-                new { Min = -0.18f, Max = 0.18f, Color = new Color(0.2f, 0.9f, 0.95f, 0.85f) },  // PERFECT (Cyan)
-                new { Min = 0.18f, Max = 0.50f, Color = new Color(0.2f, 0.5f, 0.95f, 0.75f) },  // Early Good (Blue)
-                new { Min = 0.50f, Max = 1.0f, Color = new Color(0.7f, 0.2f, 0.9f, 0.75f) }    // Far Early (Purple)
+                new { Min = -1.0f, Max = -0.50f, Color = new Color(0.9f, 0.2f, 0.2f, 0.85f) }, // Far Late (Red)
+                new { Min = -0.50f, Max = -0.18f, Color = new Color(0.95f, 0.75f, 0.2f, 0.85f) },// Late Good (Yellow)
+                new { Min = -0.18f, Max = 0.18f, Color = new Color(0.2f, 0.9f, 0.95f, 0.95f) },  // PERFECT (Cyan)
+                new { Min = 0.18f, Max = 0.50f, Color = new Color(0.2f, 0.5f, 0.95f, 0.85f) },  // Early Good (Blue)
+                new { Min = 0.50f, Max = 1.0f, Color = new Color(0.7f, 0.2f, 0.9f, 0.85f) }    // Far Early (Purple)
             };
 
             foreach (var seg in segments)
@@ -184,12 +198,12 @@ namespace DEFLATE_custom_chart.Core
 
             if (isVertical)
             {
-                rect.sizeDelta = new Vector2(BarWidth + 6.0f, 2.5f);
+                rect.sizeDelta = new Vector2(BarWidth + 8.0f, 3.0f);
                 rect.anchoredPosition = Vector2.zero;
             }
             else
             {
-                rect.sizeDelta = new Vector2(2.5f, BarWidth + 6.0f);
+                rect.sizeDelta = new Vector2(3.0f, BarWidth + 8.0f);
                 rect.anchoredPosition = Vector2.zero;
             }
         }
@@ -210,7 +224,7 @@ namespace DEFLATE_custom_chart.Core
             markerObj.transform.SetParent(_barContainer.transform, false);
 
             var img = markerObj.AddComponent<Image>();
-            img.color = Math.Abs(norm) <= 0.18f ? new Color(1.0f, 1.0f, 1.0f, 0.95f) : new Color(1.0f, 0.9f, 0.3f, 0.95f);
+            img.color = Math.Abs(norm) <= 0.18f ? new Color(1.0f, 1.0f, 1.0f, 1.0f) : new Color(1.0f, 0.95f, 0.3f, 1.0f);
 
             var rect = markerObj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0.5f, 0.5f);
@@ -219,12 +233,12 @@ namespace DEFLATE_custom_chart.Core
             float offsetPos = norm * (BarLength * 0.5f);
             if (isVertical)
             {
-                rect.sizeDelta = new Vector2(BarWidth + 4.0f, 3.0f);
+                rect.sizeDelta = new Vector2(BarWidth + 6.0f, 4.0f);
                 rect.anchoredPosition = new Vector2(0, offsetPos);
             }
             else
             {
-                rect.sizeDelta = new Vector2(3.0f, BarWidth + 4.0f);
+                rect.sizeDelta = new Vector2(4.0f, BarWidth + 6.0f);
                 rect.anchoredPosition = new Vector2(offsetPos, 0);
             }
 
@@ -234,7 +248,7 @@ namespace DEFLATE_custom_chart.Core
         [HideFromIl2Cpp]
         private System.Collections.IEnumerator FadeOutMarker(Image img, GameObject obj)
         {
-            float duration = 0.45f;
+            float duration = 0.5f;
             float elapsed = 0.0f;
             Color startColor = img.color;
 

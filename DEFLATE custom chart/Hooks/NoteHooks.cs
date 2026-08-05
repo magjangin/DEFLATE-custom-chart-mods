@@ -44,16 +44,30 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(NoteObject __instance)
             {
-                if (__instance == null || __instance.gameController == null) return;
+                TriggerJudgmentMarker(__instance);
+            }
+        }
 
-                if (JudgmentBarController.Instance != null)
-                {
-                    float timeDiff = __instance.timeDiff;
-                    float hitWindow = __instance.gameController.hitWindowRangeInMS;
-                    if (hitWindow <= 0) hitWindow = 90.0f;
+        [HarmonyPatch(typeof(NoteObject), nameof(NoteObject.PlayHitSound))]
+        public static class NoteObject_PlayHitSound_Patch
+        {
+            public static void Postfix(NoteObject __instance)
+            {
+                TriggerJudgmentMarker(__instance);
+            }
+        }
 
-                    JudgmentBarController.Instance.OnNoteHit(timeDiff, hitWindow);
-                }
+        private static void TriggerJudgmentMarker(NoteObject instance)
+        {
+            if (instance == null || instance.gameController == null) return;
+
+            if (JudgmentBarController.Instance != null)
+            {
+                float timeDiff = instance.timeDiff;
+                float hitWindow = instance.gameController.hitWindowRangeInMS;
+                if (hitWindow <= 0) hitWindow = 100.0f;
+
+                JudgmentBarController.Instance.OnNoteHit(timeDiff, hitWindow);
             }
         }
 
