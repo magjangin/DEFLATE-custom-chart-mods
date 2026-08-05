@@ -59,6 +59,15 @@ namespace DEFLATE_custom_chart.Core.Bms
         public double LongNoteEndTick { get; set; }
         public double LongNoteEndTimeSeconds { get; set; }
         public int LongNoteEndSamplePosition { get; set; }
+
+        /// <summary>이 노트가 참조하는 #WAV 키음 파일명 (홀드 시작/끝 판정에 사용).</summary>
+        public string KeysoundFile { get; set; } = string.Empty;
+
+        /// <summary>키음 이름이 "홀드 시작"류인 노트 (홀드 Head 후보).</summary>
+        public bool IsHoldStart { get; set; }
+
+        /// <summary>키음 이름이 "홀드 끝"류인 노트 (홀드 Tail 후보). 매칭 후 차트에서 제거됩니다.</summary>
+        public bool IsHoldEnd { get; set; }
     }
 
     /// <summary>
@@ -79,5 +88,14 @@ namespace DEFLATE_custom_chart.Core.Bms
         public BmsHeader Header { get; set; } = new BmsHeader();
         public List<BmsBpmEvent> BpmEvents { get; set; } = new List<BmsBpmEvent>();
         public List<BmsNote> Notes { get; set; } = new List<BmsNote>();
+
+        /// <summary>키음 이름 기반으로 짝이 맞아 홀드가 된 노트 수.</summary>
+        public int HoldPairedCount { get; set; }
+
+        /// <summary>"홀드 시작"인데 짝이 없어 단타로 강등된 노트 수.</summary>
+        public int HoldOrphanHeadCount { get; set; }
+
+        /// <summary>"홀드 끝"인데 짝이 없어 제거된 노트 수.</summary>
+        public int HoldOrphanTailCount { get; set; }
     }
 }

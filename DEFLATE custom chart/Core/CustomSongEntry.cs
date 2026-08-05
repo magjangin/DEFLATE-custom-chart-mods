@@ -209,6 +209,7 @@ namespace DEFLATE_custom_chart.Core
                 var parser = new Bms.BmsParser();
                 Chart = parser.ParseFile(BmsFilePath, targetSampleRate);
                 MelonLogger.Msg($"  - [BMS 파싱] '{Meta.Title}' ➔ '{Chart.Header.Title}' | BPM {Chart.Header.InitialBpm} | 노트 {Chart.Notes.Count}개");
+                MelonLogger.Msg($"    홀드 매칭: {Chart.HoldPairedCount}개 성사 | 짝 없는 시작 {Chart.HoldOrphanHeadCount}개(단타 강등) | 짝 없는 끝 {Chart.HoldOrphanTailCount}개(제거)");
             }
             catch (Exception ex)
             {

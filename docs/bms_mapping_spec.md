@@ -66,5 +66,21 @@
    * `12` ➔ `hihat_3`
    * `13` ➔ `hihat_4`
    * `14` ➔ `drop` (RhythmGameController의 `dropEventSamples` 및 드롭 전용 노트에 할당)
-2. **롱노트 (Hold) 쌍 매핑:**
+2. **롱노트 (Hold) 쌍 매핑:** — ✅ 구현됨 (`BmsParser.PairHoldNotesByKeysound`)
    * `#WAV00B`와 `#WAV00A`처럼 `홀드 시작` ➔ `홀드 끝` 순서로 쌍을 구성하여 인게임 `KoreographyEvent`의 `StartSample` 및 `EndSample`로 변환 주입합니다.
+   * **판정 기준은 채널이 아니라 노트가 참조하는 `#WAV` 파일명**입니다. 파일명에 `홀드 시작`(또는 `hold start`, `ln start`)이 들어가면 Head, `홀드 끝`(`hold end`, `ln end`)이 들어가면 Tail로 봅니다. 즉 홀드도 단노트와 **같은 레인 채널(11/12/13/16/14)에 그대로** 찍으면 됩니다.
+   * 매칭 규칙 (GRC2 `HoldNoteProcessor.MatchHoldNotes` / sxtg2 `CalculateHoldNoteLengths`와 동일한 시맨틱):
+     1. 같은 채널에서 Head보다 **뒤에 있는 가장 가까운 Tail** 하나와 짝 (마디를 넘어가도 매칭됨)
+     2. 한 번 소비된 Tail은 다른 Head가 다시 가져가지 못함
+     3. 짝이 맞은 Tail은 노트 목록에서 **제거** (남겨두면 홀드 끝 지점에 유령 단타가 하나 더 스폰됨)
+     4. 짝을 못 찾은 Head는 **단타로 강등**, 고아 Tail은 제거 (둘 다 로그에 개수 출력)
+   * 표준 BMS 방식인 **LN 채널(`51`~`69`)과 `#LNOBJ`도 그대로 동작**하며, 이미 그쪽으로 짝이 맞은 노트는 키음 이름 매칭이 건드리지 않습니다.
+   * ⚠️ 현재 인게임 주입 매핑(`InGameRhythmHooks`)은 `hihat_1~4`와 `drop` 레인만 처리하므로, `kick_*` / `snare_*` 홀드 키음을 정의해도 해당 레인에는 아직 노트가 들어가지 않습니다.
+
+```bms
+; hihat_2(채널 11) 레인에 1/2마디 길이 홀드 하나
+#00111:00D00C
+;       ^   ^
+;       │   └─ 00C = hihat_2 홀드 끝  (Tail, 매칭 후 제거됨)
+;       └───── 00D = hihat_2 홀드 시작 (Head ➔ KoreographyEvent.StartSample)
+```

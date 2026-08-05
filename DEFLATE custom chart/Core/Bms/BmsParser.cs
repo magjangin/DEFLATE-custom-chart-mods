@@ -98,6 +98,12 @@ namespace DEFLATE_custom_chart.Core.Bms
             // 롱노트(LN) Head-Tail 페어링 처리
             PairLongNotes(chart, targetSampleRate);
 
+            // 키음 이름("홀드 시작"/"홀드 끝") 기반 홀드 페어링 (GRC2 / sxtg2와 동일한 매칭 시맨틱)
+            PairHoldNotesByKeysound(chart);
+
+            // 짝을 못 찾은 홀드 Head는 단타로 강등 (EndSample이 StartSample보다 앞서는 유령 노트 방지)
+            SanitizeUnpairedLongNotes(chart);
+
             // 최종 틱 순서 정렬
             chart.Notes = chart.Notes.OrderBy(n => n.Tick).ThenBy(n => n.Channel).ToList();
 
@@ -451,6 +457,132 @@ namespace DEFLATE_custom_chart.Core.Bms
                     // Tail 노트는 Head에 통합되었으므로 리스트에서 제거
                     chart.Notes.Remove(tail);
                 }
+            }
+        }
+
+        // =====================================================================
+        // 키음 이름 기반 홀드 시작/끝 매칭
+        // =====================================================================
+
+        private static readonly string[] HoldStartKeywords = { "홀드 시작", "홀드시작", "hold start", "holdstart", "hold_start", "ln start", "lnstart" };
+        private static readonly string[] HoldEndKeywords = { "홀드 끝", "홀드끝", "hold end", "holdend", "hold_end", "ln end", "lnend" };
+
+        private static bool ContainsAny(string text, string[] keywords)
+        {
+            foreach (var kw in keywords)
+            {
+                if (text.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// #WAV 키음 파일명이 "홀드 시작" / "홀드 끝"인 노트를 Head / Tail로 보고 짝을 맞춥니다.
+        ///
+        /// 매칭 규칙 (GRC2 <c>HoldNoteProcessor.MatchHoldNotes</c> / sxtg2 <c>CalculateHoldNoteLengths</c>와 동일):
+        ///   - 레인(= BMS 채널)이 같고, Head보다 뒤에 있는 Tail 중 **가장 가까운 것** 하나와 짝
+        ///   - 한 번 소비된 Tail은 다른 Head가 다시 가져가지 못함
+        ///   - 짝이 맞은 Tail은 차트에서 제거 (안 그러면 홀드 끝 지점에 유령 단타가 하나 더 생김)
+        ///   - 짝을 못 찾은 Head는 단타로 강등, 고아 Tail은 제거
+        /// </summary>
+        private void PairHoldNotesByKeysound(BmsChart chart)
+        {
+            var wavTable = chart.Header.WavTable;
+            if (wavTable.Count == 0 || chart.Notes.Count == 0) return;
+
+            // 1. 키음 파일명으로 Head / Tail 분류
+            int startCount = 0, endCount = 0;
+            foreach (var note in chart.Notes)
+            {
+                if (string.IsNullOrEmpty(note.NoteValue)) continue;
+                if (!wavTable.TryGetValue(note.NoteValue, out string wavFile) || string.IsNullOrEmpty(wavFile)) continue;
+
+                note.KeysoundFile = wavFile;
+
+                if (ContainsAny(wavFile, HoldEndKeywords)) { note.IsHoldEnd = true; endCount++; }
+                else if (ContainsAny(wavFile, HoldStartKeywords)) { note.IsHoldStart = true; startCount++; }
+            }
+
+            if (startCount == 0 && endCount == 0) return;
+
+            // 2. 레인(채널)별로 Head ➔ 가장 가까운 Tail 매칭
+            var consumedTails = new HashSet<BmsNote>();
+            var toRemove = new HashSet<BmsNote>();
+            int paired = 0, orphanHeads = 0, orphanTails = 0;
+
+            foreach (var group in chart.Notes.GroupBy(n => n.Channel))
+            {
+                var ordered = group.OrderBy(n => n.Tick).ToList();
+
+                foreach (var head in ordered)
+                {
+                    if (!head.IsHoldStart) continue;
+
+                    // 이미 LN 채널 / #LNOBJ 로 짝이 맞은 노트는 그대로 둔다.
+                    if (head.LongNoteEndSamplePosition > head.SamplePosition) continue;
+
+                    BmsNote tail = null;
+                    foreach (var candidate in ordered)
+                    {
+                        if (!candidate.IsHoldEnd || consumedTails.Contains(candidate)) continue;
+                        if (candidate.Tick <= head.Tick) continue;
+                        tail = candidate; // ordered 정렬이므로 첫 후보가 가장 가까운 Tail
+                        break;
+                    }
+
+                    if (tail == null)
+                    {
+                        head.IsLongNote = false;
+                        orphanHeads++;
+                        continue;
+                    }
+
+                    consumedTails.Add(tail);
+                    toRemove.Add(tail);
+
+                    head.IsLongNote = true;
+                    head.LongNoteEndTick = tail.Tick;
+                    head.LongNoteEndTimeSeconds = tail.TimeSeconds;
+                    head.LongNoteEndSamplePosition = tail.SamplePosition;
+                    paired++;
+                }
+
+                // 짝 없는 Tail은 남겨두면 단타로 스폰되므로 제거한다.
+                foreach (var note in ordered)
+                {
+                    if (note.IsHoldEnd && !consumedTails.Contains(note))
+                    {
+                        toRemove.Add(note);
+                        orphanTails++;
+                    }
+                }
+            }
+
+            if (toRemove.Count > 0)
+            {
+                chart.Notes = chart.Notes.Where(n => !toRemove.Contains(n)).ToList();
+            }
+
+            chart.HoldPairedCount = paired;
+            chart.HoldOrphanHeadCount = orphanHeads;
+            chart.HoldOrphanTailCount = orphanTails;
+        }
+
+        /// <summary>
+        /// 짝을 못 찾아 종단 정보가 없는 롱노트(LN 채널 홀수 개 등)를 단타로 강등시킵니다.
+        /// (EndSample이 0으로 남아 StartSample보다 앞서는 노트가 주입되는 것을 방지)
+        /// </summary>
+        private void SanitizeUnpairedLongNotes(BmsChart chart)
+        {
+            foreach (var note in chart.Notes)
+            {
+                if (!note.IsLongNote) continue;
+                if (note.LongNoteEndSamplePosition > note.SamplePosition) continue;
+
+                note.IsLongNote = false;
+                note.LongNoteEndTick = 0;
+                note.LongNoteEndTimeSeconds = 0;
+                note.LongNoteEndSamplePosition = 0;
             }
         }
 
