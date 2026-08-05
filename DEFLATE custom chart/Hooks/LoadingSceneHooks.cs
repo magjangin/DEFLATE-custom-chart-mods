@@ -34,6 +34,7 @@ namespace DEFLATE_custom_chart.Hooks
             if (instance.NowTrackAurthor != null) instance.NowTrackAurthor.text = meta.Artist;
             if (instance.NowTrackPVAuthor != null) instance.NowTrackPVAuthor.text = gd.NowTrackPVAuthor;
             if (instance.NowTracLabel != null) instance.NowTracLabel.text = meta.Album;
+            if (instance.NowTrackScore != null) instance.NowTrackScore.text = meta.ChartAuthor;
             if (instance.NowTrackDifficulty != null) instance.NowTrackDifficulty.text = targetStar.ToString();
             if (instance.diffStarsCtrl != null) instance.diffStarsCtrl.GenerateStarImages(targetStar);
 
