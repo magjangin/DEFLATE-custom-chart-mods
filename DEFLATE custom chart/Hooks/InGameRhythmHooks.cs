@@ -138,6 +138,31 @@ namespace DEFLATE_custom_chart.Hooks
                     }
                 }
 
+                if (HwaAssetManager.IsTargetTrackActive)
+                {
+                    // 1. 드롭 심벌 전용 독립 배열 초기화
+                    if (__instance.dropEventSamples != null) __instance.dropEventSamples.Clear();
+                    if (__instance.processedDropSamples != null) __instance.processedDropSamples.Clear();
+                    __instance.nextDropEventIdx = 0;
+
+                    // 2. Koreography 원본 차트 트랙 중 hihat_3 이외 트랙의 mEventList 클리어
+                    if (koreo.Tracks != null)
+                    {
+                        for (int i = 0; i < koreo.Tracks.Count; i++)
+                        {
+                            var trk = koreo.Tracks[i];
+                            if (trk == null || trk.mEventList == null) continue;
+                            bool isHiHat3 = string.Equals(trk.EventID, "hihat_3", StringComparison.OrdinalIgnoreCase);
+                            if (!isHiHat3)
+                            {
+                                trk.mEventList.Clear();
+                            }
+                        }
+                    }
+
+                    MelonLogger.Msg("[★ 잔여 dropEventSamples 및 원본 차트 에셋 잔여 노트 완전 소탕 완료 ★]");
+                }
+
                 MelonLogger.Msg("----------------------------------------------------------------------------------------------------");
                 MelonLogger.Msg($"[★ 핵심 훅: RhythmGameController.InitializeKoreographyTracks ★] 차트(Koreography) 로드 완료!");
                 MelonLogger.Msg($"  - 차트 이름: '{koreo.name}' | 오디오 샘플레이트: {koreo.SampleRate}Hz | 트랙 수: {koreo.Tracks?.Count ?? 0} | 총 노트 이벤트 수: {totalEvents}개");
@@ -221,7 +246,7 @@ namespace DEFLATE_custom_chart.Hooks
                     int intervalSamples = koreo.SampleRate * 5;
 
                     lane.laneEvents?.Clear();
-                    for (int copy = 0; copy < 3; copy++)
+                    for (int copy = 0; copy < 10; copy++)
                     {
                         int start = globalFirstStart + intervalSamples * copy;
                         var newEvt = new KoreographyEvent();
@@ -230,7 +255,7 @@ namespace DEFLATE_custom_chart.Hooks
                         lane.laneEvents.Add(newEvt);
                     }
 
-                    MelonLogger.Msg($"[★ hihat_3 롱노트 3연발 주입 ★] trackID='{trackID}' (LaneType={lane.laneType}) | StartSample={globalFirstStart}, 롱노트 길이={longNoteDuration}샘플(1.5초), 간격={intervalSamples}샘플(5초) | {before}개 -> {lane.laneEvents?.Count ?? -1}개");
+                    MelonLogger.Msg($"[★ hihat_3 롱노트 10연발 주입 ★] trackID='{trackID}' (LaneType={lane.laneType}) | StartSample={globalFirstStart}, 롱노트 길이={longNoteDuration}샘플(1.5초), 간격={intervalSamples}샘플(5초) | {before}개 -> {lane.laneEvents?.Count ?? -1}개");
                 }
                 else
                 {

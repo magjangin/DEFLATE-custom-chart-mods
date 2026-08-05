@@ -25,6 +25,10 @@
       <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\Il2CppAssemblies\Il2Cppmscorlib.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="Il2CppSystem.Core">
+      <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\Il2CppAssemblies\Il2CppSystem.Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Assembly-CSharp">
       <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\Il2CppAssemblies\Assembly-CSharp.dll</HintPath>
       <Private>False</Private>
