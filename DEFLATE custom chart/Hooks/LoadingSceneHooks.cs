@@ -25,7 +25,7 @@ namespace DEFLATE_custom_chart.Hooks
 
             gd.NowTrackTitle = meta.Title;
             gd.NowTrackAurthor = meta.Artist;
-            gd.NowTrackPVAuthor = !string.IsNullOrEmpty(meta.ChartAuthor) ? $"{meta.BgaAuthor} / Mapper: {meta.ChartAuthor}" : meta.BgaAuthor;
+            gd.NowTrackPVAuthor = meta.BgaAuthor;
             gd.NowTracLabel = meta.Album;
             gd.NowTrackLevel = targetStar.ToString();
             if (customCover != null) gd.NowTrackCover = customCover;
