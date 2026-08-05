@@ -194,8 +194,24 @@ namespace DEFLATE_custom_chart.Hooks
         }
 
         // =========================================================================
-        // 결과 씬 (Panel_Result) BGA & PNG Cover 주입
+        // 결과 씬 (Panel_Result) BGA & PNG Cover & 파형/재생 미리듣기 BGM 주입
         // =========================================================================
+
+        // Panel_Result의 파형/재생 미리듣기 위젯이 사용할 오디오 클립을 강제로 커스텀 BGM으로 오버라이드한다.
+        // (내부적으로 태그 기반 AudioSource 자동탐색(TryAutoFindBgmSource)에 의존하므로, 명시적으로 고정해 신뢰성을 확보)
+        [HarmonyPatch(typeof(Panel_Result), nameof(Panel_Result.GetPreviewClip))]
+        public static class Panel_Result_GetPreviewClip_Patch
+        {
+            public static bool Prefix(Panel_Result __instance, ref AudioClip __result)
+            {
+                if (__instance == null || !HwaAssetManager.IsTargetTrackActive) return true;
+                if (HwaAssetManager.CustomBgmClip == null) return true;
+
+                __result = HwaAssetManager.CustomBgmClip;
+                MelonLogger.Msg($"[HwaAssetManager] ★ 결과 화면 파형/재생 미리듣기 Custom BGM 오버라이드 ★: '{__result.name}' ({__result.length:F2}초)");
+                return false;
+            }
+        }
 
         [HarmonyPatch(typeof(Panel_Result), nameof(Panel_Result.Awake))]
         public static class Panel_Result_Awake_Patch

@@ -15,6 +15,9 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(MainTrackList __instance)
             {
+                // 곡 목록 씬으로 (재)진입 시 프리뷰 컨텍스트를 다시 활성화한다.
+                HwaAssetManager.IsInSongSelectContext = true;
+
                 if (__instance == null || __instance.tracks == null) return;
 
                 MelonLogger.Msg("--------------------------------------------------");

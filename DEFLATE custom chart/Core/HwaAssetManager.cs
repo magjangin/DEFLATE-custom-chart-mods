@@ -40,6 +40,10 @@ namespace DEFLATE_custom_chart.Core
         public static string TargetAudioKey { get; set; }
         public static string TargetVideoKey { get; set; }
 
+        /// <summary>곡 목록(프리뷰) 씬에 있는지 여부. 로딩 씬 진입 시 false로 전환되어, 프리뷰 전용 BGM 오버라이드 훅이
+        /// 로딩/인게임 씬의 실제 오디오 로드 요청을 잘못 가로채 원본 로직을 스킵시키는(크래시 원인) 것을 막습니다.</summary>
+        public static bool IsInSongSelectContext { get; set; } = true;
+
         /// <summary>주어진 trackId가 주입 대상(사본)인지 판정하고 IsTargetTrackActive 상태를 갱신합니다.</summary>
         public static bool SetActiveTrack(string trackId)
         {
@@ -52,7 +56,8 @@ namespace DEFLATE_custom_chart.Core
         /// <summary>곡 목록에서 오디오 프리뷰로 요청된 key가 사본 자신의 오디오 key와 일치하는지 (선택 상태까지 함께) 판정합니다.</summary>
         public static bool IsTargetAudioPreview(string audioKey)
         {
-            return IsTargetTrackActive &&
+            return IsInSongSelectContext &&
+                IsTargetTrackActive &&
                 !string.IsNullOrEmpty(TargetAudioKey) &&
                 string.Equals(TargetAudioKey, audioKey, StringComparison.OrdinalIgnoreCase);
         }
