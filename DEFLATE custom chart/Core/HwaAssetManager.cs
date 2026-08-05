@@ -424,6 +424,7 @@ namespace DEFLATE_custom_chart.Core
                 CustomBgmClip = DownloadHandlerAudioClip.GetContent(www);
                 if (CustomBgmClip != null)
                 {
+                    CustomBgmClip.name = Path.GetFileNameWithoutExtension(BgmFilePath);
                     ApplyLoadedBgm(targetAudioSource, forcePlay, onLoaded, fromCache: false);
                 }
             }
