@@ -15,13 +15,6 @@ namespace DEFLATE_custom_chart.Core
 
         public bool BlockSave { get; set; } = true;
 
-        // 2. 판정바 & 키뷰어 설정
-        public bool EnableJudgmentBar { get; set; } = false;
-        public bool JudgmentBarVertical { get; set; } = true;
-        public bool EnableKeyViewer { get; set; } = true;
-        public bool JudgmentBarCapsule { get; set; } = false;
-        public string JudgmentBarSide { get; set; } = "Center";
-
         // 3. 눈송이 흔들림 노트 연출 (NoteSway)
         public bool NoteSway { get; set; } = false;
         public float NoteSwayAmplitude { get; set; } = 20.0f;
@@ -34,11 +27,6 @@ namespace DEFLATE_custom_chart.Core
         public float NoteSpeedChaosMin { get; set; } = 0.6f;
         public float NoteSpeedChaosMax { get; set; } = 1.8f;
         public bool NoteSpeedChaosPerLane { get; set; } = true;
-
-        // 5. 키뷰어 색상 설정
-        public string KeyViewerPressedColor { get; set; } = "#26BFD9D9";
-        public string KeyViewerNormalColor { get; set; } = "#141414A6";
-        public string KeyViewerDropPressedColor { get; set; } = "#FF4081E6";
 
         private static string ConfigFilePath =>
             Path.Combine(MelonEnvironment.GameRootDirectory, "savecustomkey", "config.txt");
@@ -95,18 +83,6 @@ namespace DEFLATE_custom_chart.Core
                 {
                     if (TryParseFlexibleBool(val, out bool b)) config.BlockSave = b;
                 }
-                else if (key.Equals("EnableJudgmentBar", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (TryParseFlexibleBool(val, out bool b)) config.EnableJudgmentBar = b;
-                }
-                else if (key.Equals("JudgmentBarVertical", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (TryParseFlexibleBool(val, out bool b)) config.JudgmentBarVertical = b;
-                }
-                else if (key.Equals("EnableKeyViewer", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (TryParseFlexibleBool(val, out bool b)) config.EnableKeyViewer = b;
-                }
                 else if (key.Equals("NoteSway", StringComparison.OrdinalIgnoreCase))
                 {
                     if (TryParseFlexibleBool(val, out bool b)) config.NoteSway = b;
@@ -142,26 +118,6 @@ namespace DEFLATE_custom_chart.Core
                 else if (key.Equals("NoteSpeedChaosPerLane", StringComparison.OrdinalIgnoreCase))
                 {
                     if (TryParseFlexibleBool(val, out bool b)) config.NoteSpeedChaosPerLane = b;
-                }
-                else if (key.Equals("JudgmentBarCapsule", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (TryParseFlexibleBool(val, out bool b)) config.JudgmentBarCapsule = b;
-                }
-                else if (key.Equals("JudgmentBarSide", StringComparison.OrdinalIgnoreCase))
-                {
-                    config.JudgmentBarSide = val;
-                }
-                else if (key.Equals("KeyViewerPressedColor", StringComparison.OrdinalIgnoreCase))
-                {
-                    config.KeyViewerPressedColor = val;
-                }
-                else if (key.Equals("KeyViewerNormalColor", StringComparison.OrdinalIgnoreCase))
-                {
-                    config.KeyViewerNormalColor = val;
-                }
-                else if (key.Equals("KeyViewerDropPressedColor", StringComparison.OrdinalIgnoreCase) || key.Equals("KeyViewerGatePressedColor", StringComparison.OrdinalIgnoreCase))
-                {
-                    config.KeyViewerDropPressedColor = val;
                 }
             }
             Instance = config;
@@ -212,15 +168,6 @@ namespace DEFLATE_custom_chart.Core
                     "# 베스트 스코어 / 랭킹 저장 차단 (1 = 켜짐, 0 = 꺼짐)",
                     $"BlockSave={(Instance.BlockSave ? 1 : 0)}",
                     "",
-                    "# 실시간 판정바 표시 (1 = 켜짐, 0 = 꺼짐)",
-                    $"EnableJudgmentBar={(Instance.EnableJudgmentBar ? 1 : 0)}",
-                    "",
-                    "# 판정바 형태 (1 = 세로 판정바, 0 = 가로 판정바)",
-                    $"JudgmentBarVertical={(Instance.JudgmentBarVertical ? 1 : 0)}",
-                    "",
-                    "# 실시간 키뷰어 표시 (1 = 켜짐, 0 = 꺼짐)",
-                    $"EnableKeyViewer={(Instance.EnableKeyViewer ? 1 : 0)}",
-                    "",
                     "# 노트가 눈송이처럼 좌우로 흔들리며 내려오는 연출 (1 = 켜짐, 0 = 꺼짐)",
                     "# 판정에는 전혀 영향이 없는 순수 시각 효과입니다.",
                     $"NoteSway={(Instance.NoteSway ? 1 : 0)}",
@@ -248,24 +195,7 @@ namespace DEFLATE_custom_chart.Core
                     "",
                     "# 1 = 레인마다 속도가 다름(같은 레인 안에서는 순서 유지, 읽을 수는 있음)",
                     "# 0 = 노트마다 속도가 다름(완전 카오스)",
-                    $"NoteSpeedChaosPerLane={(Instance.NoteSpeedChaosPerLane ? 1 : 0)}",
-                    "",
-                    "# 판정바 모양 (1 = 알약 캡슐 모양(양끝 둥글게), 0 = 사각 바)",
-                    $"JudgmentBarCapsule={(Instance.JudgmentBarCapsule ? 1 : 0)}",
-                    "",
-                    "# 판정바 위치 (Left = 화면 왼쪽, Right = 화면 오른쪽, Center = 기본 위치)",
-                    "# 기본 위치는 세로 판정바는 왼쪽 고정, 가로 판정바는 화면 정중앙입니다.",
-                    $"JudgmentBarSide={Instance.JudgmentBarSide}",
-                    "",
-                    "# 키뷰어 눌림 색상 (일반 노트 키 입력 시)",
-                    "# 지원 형식: #RRGGBB, #RRGGBBAA, R,G,B,A, 영문/한글 색상명 (시안, 마젠타, 노랑, 빨강, 파랑, 초록, 흰색, 검정, 주황, 보라, 분홍, 하늘, 민트)",
-                    $"KeyViewerPressedColor={Instance.KeyViewerPressedColor}",
-                    "",
-                    "# 키뷰어 미입력 기본 색상",
-                    $"KeyViewerNormalColor={Instance.KeyViewerNormalColor}",
-                    "",
-                    "# 키뷰어 Drop 키 전용 눌림 색상",
-                    $"KeyViewerDropPressedColor={Instance.KeyViewerDropPressedColor}"
+                    $"NoteSpeedChaosPerLane={(Instance.NoteSpeedChaosPerLane ? 1 : 0)}"
                 };
                 File.WriteAllLines(ConfigFilePath, lines);
             }
