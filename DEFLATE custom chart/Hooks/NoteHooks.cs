@@ -30,21 +30,21 @@ namespace DEFLATE_custom_chart.Hooks
                 if (ModConfig.Instance.BlockSave)
                 {
                     MelonLogger.Msg("[ModConfig] BlockSave=1: 게임 스코어 및 랭킹 데이터 저장을 차단했습니다.");
-                    return false; // 세이브 스킵
+                    return false;
                 }
                 return true;
             }
         }
 
         // =========================================================================
-        // [판정바 히트 마커] 노트 타격 오차 timeDiff 수집 훅 (CalculateHitAccuracy & OnHit)
+        // [판정바 히트 마커 & 디버그] 노트 타격 오차 측정 훅
         // =========================================================================
         [HarmonyPatch(typeof(NoteObject), nameof(NoteObject.CalculateHitAccuracy))]
         public static class NoteObject_CalculateHitAccuracy_Patch
         {
             public static void Postfix(NoteObject __instance)
             {
-                TriggerJudgmentMarker(__instance);
+                TriggerJudgmentMarker(__instance, "CalculateHitAccuracy");
             }
         }
 
@@ -53,21 +53,54 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(NoteObject __instance)
             {
-                TriggerJudgmentMarker(__instance);
+                TriggerJudgmentMarker(__instance, "OnHit");
             }
         }
 
-        private static void TriggerJudgmentMarker(NoteObject instance)
+        [HarmonyPatch(typeof(LaneController), nameof(LaneController.CheckNoteHit))]
+        public static class LaneController_CheckNoteHit_Patch
+        {
+            public static void Prefix(LaneController __instance)
+            {
+                if (__instance == null || __instance.trackedNotes == null || __instance.trackedNotes.Count == 0) return;
+                
+                var note = __instance.trackedNotes.Peek();
+                if (note != null && !note.isProcessed && note.IsNoteHittable())
+                {
+                    TriggerJudgmentMarker(note, "LaneCheckNoteHit");
+                }
+            }
+        }
+
+        private static void TriggerJudgmentMarker(NoteObject instance, string source)
         {
             if (instance == null || instance.gameController == null) return;
+            if (instance.isProcessed) return;
+
+            float maxHitWindow = instance.gameController.hitWindowRangeInMS;
+            if (maxHitWindow <= 0) maxHitWindow = 100.0f;
+
+            float calculatedTimeDiffMs = instance.timeDiff;
+
+            // 게임 원본 timeDiff가 0인 경우 AudioSample로 직접 오차 ms 계산
+            if (Math.Abs(calculatedTimeDiffMs) < 0.001f && instance.gameController.audioCom != null)
+            {
+                float currentSample = (float)instance.gameController.audioCom.timeSamples;
+                float endSample = instance.moveEndSample;
+                int sampleRate = instance.gameController.playingKoreo != null ? instance.gameController.playingKoreo.SampleRate : 44100;
+
+                if (sampleRate > 0 && endSample > 0)
+                {
+                    float sampleDiff = endSample - currentSample; // >0: Early (일찍 침), <0: Late (늦게 침)
+                    calculatedTimeDiffMs = (sampleDiff / sampleRate) * 1000.0f;
+                }
+            }
+
+            MelonLogger.Msg($"[HitMarker Debug ({source})] NoteIdx={instance.Note_Index} | nativeDiff={instance.timeDiff:F2}ms | calcDiff={calculatedTimeDiffMs:F2}ms | maxWindow={maxHitWindow}ms");
 
             if (JudgmentBarController.Instance != null)
             {
-                float timeDiff = instance.timeDiff;
-                float hitWindow = instance.gameController.hitWindowRangeInMS;
-                if (hitWindow <= 0) hitWindow = 100.0f;
-
-                JudgmentBarController.Instance.OnNoteHit(timeDiff, hitWindow);
+                JudgmentBarController.Instance.OnNoteHit(calculatedTimeDiffMs, maxHitWindow);
             }
         }
 
@@ -88,14 +121,12 @@ namespace DEFLATE_custom_chart.Hooks
 
                 if (ModConfig.Instance.NoteSpeedChaosPerLane)
                 {
-                    // 레인 단위 카오스 배속 (같은 레인 노트끼리는 동일 속도 유지)
                     int laneSeed = (int)__instance.noteType;
                     var rand = new System.Random(laneSeed + 100);
                     speedMultiplier = (float)(rand.NextDouble() * (maxSpeed - minSpeed) + minSpeed);
                 }
                 else
                 {
-                    // 노트 완전 카오스 배속
                     var rand = new System.Random(__instance.Note_Index + (int)__instance.noteType * 1000);
                     speedMultiplier = (float)(rand.NextDouble() * (maxSpeed - minSpeed) + minSpeed);
                 }
@@ -139,7 +170,6 @@ namespace DEFLATE_custom_chart.Hooks
                     timeRemaining = (endSample - currentSample) / (float)sampleRate;
                 }
 
-                // Damping Factor (판정선 도달 시 흔들림 잦아듦)
                 float dampingFactor = 1.0f;
                 if (ModConfig.Instance.NoteSwayDamping)
                 {
@@ -153,7 +183,6 @@ namespace DEFLATE_custom_chart.Hooks
                 float amplitude = ModConfig.Instance.NoteSwayAmplitude;
                 float speed = ModConfig.Instance.NoteSwaySpeed;
 
-                // Sine Wave 흔들림 오프셋 계산
                 float swayOffset = Mathf.Sin(progress * Mathf.PI * 2.0f * speed * 5.0f) * amplitude * dampingFactor;
 
                 Vector3 pos = __instance.transform.localPosition;
