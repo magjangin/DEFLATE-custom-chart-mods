@@ -174,21 +174,19 @@ namespace DEFLATE_custom_chart.Hooks
                 if (__instance == null || __instance.tracks == null) return;
                 MelonLogger.Msg($"[★ MainTrackList.Start 감지 ★] 총 곡 수: {__instance.tracks.Count}개");
 
-                var customCover = HwaAssetManager.LoadCoverSprite();
-                if (customCover == null) return;
-
-                // 주입된 사본(테스트 곡) 블록에만 커스텀 PNG 커버 적용 (원본 WindShifter는 건드리지 않음)
-                if (string.IsNullOrEmpty(HwaAssetManager.TargetTrackID)) return;
-
+                // 주입된 커스텀 곡 사본 블록에만 각자의 PNG 커버 적용 (원본 곡들은 건드리지 않음)
                 foreach (var trackBlock in __instance.tracks)
                 {
                     if (trackBlock == null) continue;
-                    if (string.Equals(trackBlock.uniqueID, HwaAssetManager.TargetTrackID, StringComparison.OrdinalIgnoreCase))
-                    {
-                        trackBlock.TrackCover = customCover;
-                        MelonLogger.Msg($"  [★ MainTrackListBlock 데이터 커버 교체 성공 (사본 전용) ★] 제목: '{trackBlock.TrackTitle}' | 커버: '{customCover.name}'");
-                        break;
-                    }
+
+                    var entry = CustomSongLibrary.FindByTrackID(trackBlock.uniqueID);
+                    if (entry == null) continue;
+
+                    var customCover = entry.LoadCoverSprite();
+                    if (customCover == null) continue;
+
+                    trackBlock.TrackCover = customCover;
+                    MelonLogger.Msg($"  [★ MainTrackListBlock 데이터 커버 교체 성공 (사본 전용) ★] 앨범: '{entry.Meta.Album}' | 제목: '{trackBlock.TrackTitle}' | 커버: '{customCover.name}'");
                 }
             }
         }

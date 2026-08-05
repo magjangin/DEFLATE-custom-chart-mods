@@ -2,65 +2,80 @@ using System;
 using System.Collections;
 using System.IO;
 using MelonLoader;
-using MelonLoader.Utils;
 using UnityEngine;
-using UnityEngine.Networking;
 using UnityEngine.UI;
 using UnityEngine.Video;
 
 namespace DEFLATE_custom_chart.Core
 {
+    /// <summary>
+    /// 커스텀 에셋 접근용 파사드(Facade).
+    ///
+    /// 실제 곡 데이터는 <see cref="CustomSongLibrary"/>가 앨범/곡 폴더 단위(<see cref="CustomSongEntry"/>)로 들고 있고,
+    /// 이 클래스는 "지금 선택된 곡(Active)"의 에셋을 각 훅에 그대로 노출해주는 얇은 레이어입니다.
+    /// (곡이 하나뿐이던 시절의 훅 코드가 그대로 동작하도록 API 형태를 유지합니다.)
+    /// </summary>
     public static class HwaAssetManager
     {
-        public static string HwaDirectoryPath => Path.Combine(MelonEnvironment.GameRootDirectory, "hwa");
+        public static string HwaDirectoryPath => CustomSongLibrary.HwaDirectoryPath;
 
-        // 캐시 변수
-        public static string BgmFilePath { get; private set; }
-        public static string BgaFilePath { get; private set; }
-        public static string BgaFileUrl { get; private set; }
-        public static string CoverFilePath { get; private set; }
-        public static string BmsFilePath { get; private set; }
-        public static DEFLATE_custom_chart.Core.Bms.BmsChart LoadedBmsChart { get; private set; }
-
-        public static AudioClip CustomBgmClip { get; private set; }
-        public static Sprite CustomCoverSprite { get; private set; }
-
-        private static bool _isBgmPreloading = false;
-        private static bool _isInitialized = false;
+        /// <summary>현재 선택된 커스텀 곡. 원본 곡을 고른 상태면 null.</summary>
+        public static CustomSongEntry Active => CustomSongLibrary.Active;
 
         // =========================================================================
-        // 커스텀 에셋 주입 대상 트랙 식별 (사본 전용 주입을 위한 상태)
+        // 현재 곡 에셋 (Active 위임)
         // =========================================================================
 
-        /// <summary>주입된 사본(테스트 곡)의 고유 ID. 이 ID를 가진 트랙에만 hwa/ 커스텀 에셋을 적용합니다.</summary>
-        public static string TargetTrackID { get; set; }
+        public static string BgmFilePath => Active?.BgmFilePath;
+        public static string BgaFilePath => Active?.BgaFilePath;
+        public static string BgaFileUrl => Active?.BgaFileUrl;
+        public static string CoverFilePath => Active?.CoverFilePath;
+        public static string InfoFilePath => Active?.InfoFilePath;
+        public static string BmsFilePath => Active?.BmsFilePath;
+        public static Bms.BmsChart LoadedBmsChart => Active?.Chart;
 
-        /// <summary>현재 선택/재생 중인 트랙이 TargetTrackID와 일치하는지 여부. 원본 곡에는 false를 유지시켜야 합니다.</summary>
-        public static bool IsTargetTrackActive { get; set; }
+        public static AudioClip CustomBgmClip => Active?.BgmClip;
+        public static Sprite CustomCoverSprite => Active?.CoverSprite;
 
-        /// <summary>사본(테스트 곡)이 원본에서 그대로 복사해온 오디오/비디오 리소스 Key. 곡 목록 프리뷰에서 정확히 이 Key로 온 요청만 오버라이드하기 위한 이중 확인용입니다.</summary>
-        public static string TargetAudioKey { get; set; }
-        public static string TargetVideoKey { get; set; }
+        /// <summary>현재 선택된 곡의 메타데이터. 커스텀 곡이 선택된 상태가 아니면 (다른 곡의 정보가 새어나가지 않도록) 기본값 객체를 돌려줍니다.</summary>
+        public static HwaMetaInfo CurrentMeta => Active?.Meta ?? _defaultMeta;
+        private static readonly HwaMetaInfo _defaultMeta = new HwaMetaInfo();
+
+        // =========================================================================
+        // 커스텀 에셋 주입 대상 트랙 식별
+        // =========================================================================
+
+        /// <summary>현재 선택된 커스텀 곡 사본의 고유 ID (없으면 null).</summary>
+        public static string TargetTrackID => Active?.InjectedTrackID;
+
+        /// <summary>사본이 원본에서 복사해온 오디오/비디오 Key. 곡 목록 프리뷰 오버라이드 이중 확인용.</summary>
+        public static string TargetAudioKey => Active?.AudioKey;
+        public static string TargetVideoKey => Active?.VideoKey;
+
+        /// <summary>현재 선택/재생 중인 트랙이 커스텀 곡인지 여부. 원본 곡에서는 false여야 합니다.</summary>
+        public static bool IsTargetTrackActive
+        {
+            get => Active != null;
+            set { if (!value) CustomSongLibrary.SetActive(null, null); }
+        }
 
         /// <summary>곡 목록(프리뷰) 씬에 있는지 여부. 로딩 씬 진입 시 false로 전환되어, 프리뷰 전용 BGM 오버라이드 훅이
         /// 로딩/인게임 씬의 실제 오디오 로드 요청을 잘못 가로채 원본 로직을 스킵시키는(크래시 원인) 것을 막습니다.</summary>
         public static bool IsInSongSelectContext { get; set; } = true;
 
+        /// <summary>선택된 곡 ID/제목으로 커스텀 곡을 판정하고 Active를 갱신합니다.</summary>
         public static bool SetActiveTrack(string activeTrackID, string activeTitle = null)
         {
-            bool isActiveByID = !string.IsNullOrEmpty(TargetTrackID) && !string.IsNullOrEmpty(activeTrackID) && string.Equals(TargetTrackID, activeTrackID, StringComparison.OrdinalIgnoreCase);
-            bool isActiveByTitle = CurrentMeta != null && !string.IsNullOrEmpty(CurrentMeta.Title) && string.Equals(CurrentMeta.Title, activeTitle, StringComparison.OrdinalIgnoreCase);
-
-            IsTargetTrackActive = isActiveByID || isActiveByTitle;
-            return IsTargetTrackActive;
+            return CustomSongLibrary.SetActive(activeTrackID, activeTitle) != null;
         }
 
         public static bool IsTargetAudioPreview(string audioKey)
         {
+            var active = Active;
             return IsInSongSelectContext &&
-                IsTargetTrackActive &&
-                !string.IsNullOrEmpty(TargetAudioKey) &&
-                string.Equals(TargetAudioKey, audioKey, StringComparison.OrdinalIgnoreCase);
+                active != null &&
+                !string.IsNullOrEmpty(active.AudioKey) &&
+                string.Equals(active.AudioKey, audioKey, StringComparison.OrdinalIgnoreCase);
         }
 
         public class HwaMetaInfo
@@ -77,184 +92,15 @@ namespace DEFLATE_custom_chart.Core
             public int HardLevel { get; set; } = 8;
         }
 
-        public static HwaMetaInfo CurrentMeta { get; private set; } = new HwaMetaInfo();
-        public static string InfoFilePath { get; private set; }
-
         public static void Initialize()
         {
-            if (!Directory.Exists(HwaDirectoryPath))
-            {
-                try
-                {
-                    Directory.CreateDirectory(HwaDirectoryPath);
-                    MelonLogger.Msg($"[HwaAssetManager] hwa/ 폴더 생성: '{HwaDirectoryPath}'");
-                }
-                catch (Exception ex)
-                {
-                    MelonLogger.Error($"[HwaAssetManager] hwa/ 폴더 생성 실패: {ex.Message}");
-                    return;
-                }
-            }
-
-            ScanHwaDirectory();
-            ParseInfoTxt();
-            ParseBmsChart();
-            LoadCoverSprite();
-            _isInitialized = true;
+            CustomSongLibrary.Initialize();
         }
 
-        public static void ScanHwaDirectory()
+        /// <summary>hwa/ 폴더를 다시 스캔합니다 (곡 추가/삭제 후 재적용용).</summary>
+        public static void Rescan()
         {
-            if (!Directory.Exists(HwaDirectoryPath)) return;
-
-            string[] files = Directory.GetFiles(HwaDirectoryPath, "*.*");
-
-            BgmFilePath = null;
-            BgaFilePath = null;
-            BgaFileUrl = null;
-            CoverFilePath = null;
-            InfoFilePath = null;
-            BmsFilePath = null;
-
-            // BGM 음원 파일 선별 (.ogg 최우선 채택 ➔ music/bgm 키워드 ➔ 최대 용량 오디오 순)
-            string bestBgm = null;
-            long maxBgmSize = 0;
-
-            foreach (var f in files)
-            {
-                string ext = Path.GetExtension(f).ToLowerInvariant();
-                string name = Path.GetFileNameWithoutExtension(f).ToLowerInvariant();
-
-                if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac")
-                {
-                    FileInfo fi = new FileInfo(f);
-
-                    // 1. .ogg 확장자 파일 최우선 채택 (BMS용 단품 .wav 키음들과 명확히 분리)
-                    if (ext == ".ogg")
-                    {
-                        bestBgm = f;
-                        break;
-                    }
-
-                    // 2. music, bgm, song, track 이름 포함 시 2순위 BGM으로 채택
-                    if (name.Contains("music") || name.Contains("bgm") || name.Contains("song") || name.Contains("track") || name.Contains("audio"))
-                    {
-                        bestBgm = f;
-                        break;
-                    }
-
-                    // 3. 파일 용량이 가장 큰 오디오를 BGM 후보로 추적
-                    if (fi.Length > maxBgmSize)
-                    {
-                        maxBgmSize = fi.Length;
-                        bestBgm = f;
-                    }
-                }
-            }
-            BgmFilePath = bestBgm;
-
-            foreach (var f in files)
-            {
-                string ext = Path.GetExtension(f).ToLowerInvariant();
-                string name = Path.GetFileName(f).ToLowerInvariant();
-
-                if (BgaFilePath == null && ext == ".mp4")
-                {
-                    BgaFilePath = f;
-                    BgaFileUrl = "file:///" + f.Replace('\\', '/');
-                }
-                else if (CoverFilePath == null && ext == ".png")
-                {
-                    CoverFilePath = f;
-                }
-                else if (InfoFilePath == null && (name == "info.txt" || ext == ".txt"))
-                {
-                    InfoFilePath = f;
-                }
-                else if (BmsFilePath == null && (ext == ".bms" || ext == ".bme" || ext == ".bml"))
-                {
-                    BmsFilePath = f;
-                }
-            }
-
-            MelonLogger.Msg($"[HwaAssetManager] hwa 폴더 에셋 감지 완료:");
-            MelonLogger.Msg($"  - BGM 파일:   {(BgmFilePath != null ? Path.GetFileName(BgmFilePath) : "없음")}");
-            MelonLogger.Msg($"  - BGA 비디오: {(BgaFilePath != null ? Path.GetFileName(BgaFilePath) : "없음")}");
-            MelonLogger.Msg($"  - PNG 자켓:   {(CoverFilePath != null ? Path.GetFileName(CoverFilePath) : "없음")}");
-            MelonLogger.Msg($"  - Info 텍스트: {(InfoFilePath != null ? Path.GetFileName(InfoFilePath) : "없음")}");
-            MelonLogger.Msg($"  - BMS 차트:   {(BmsFilePath != null ? Path.GetFileName(BmsFilePath) : "없음")}");
-        }
-
-        public static void ParseBmsChart(int targetSampleRate = 44100)
-        {
-            LoadedBmsChart = null;
-
-            if (string.IsNullOrEmpty(BmsFilePath) || !File.Exists(BmsFilePath))
-            {
-                MelonLogger.Msg("[HwaAssetManager] hwa/ 폴더에 .bms 차트 파일이 없습니다.");
-                return;
-            }
-
-            try
-            {
-                var parser = new DEFLATE_custom_chart.Core.Bms.BmsParser();
-                LoadedBmsChart = parser.ParseFile(BmsFilePath, targetSampleRate);
-
-                MelonLogger.Msg($"[HwaAssetManager] ★ BMS 차트 파싱 성공 ★");
-                MelonLogger.Msg($"  - BMS 제목: '{LoadedBmsChart.Header.Title}' | BPM: {LoadedBmsChart.Header.InitialBpm}");
-                MelonLogger.Msg($"  - 총 파싱 노트 수: {LoadedBmsChart.Notes.Count}개");
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Error($"[HwaAssetManager] BMS 차트 파싱 예외 발생: {ex.Message}");
-            }
-        }
-
-        public static void ParseInfoTxt()
-        {
-            CurrentMeta = new HwaMetaInfo();
-
-            if (string.IsNullOrEmpty(InfoFilePath) || !File.Exists(InfoFilePath))
-            {
-                MelonLogger.Msg("[HwaAssetManager] info.txt 파일이 없어 기본 메타데이터를 사용합니다.");
-                return;
-            }
-
-            try
-            {
-                string[] lines = File.ReadAllLines(InfoFilePath);
-                foreach (var line in lines)
-                {
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-
-                    string[] parts = line.Split(new char[] { ':', '=' }, 2);
-                    if (parts.Length < 2) continue;
-
-                    string key = parts[0].Trim().ToLowerInvariant();
-                    string val = parts[1].Trim();
-
-                    if (key.Contains("제목") || key.Contains("title")) CurrentMeta.Title = val;
-                    else if (key.Contains("아티스트") || key.Contains("artist")) CurrentMeta.Artist = val;
-                    else if (key.Contains("앨범") || key.Contains("album")) CurrentMeta.Album = val;
-                    else if (key.Contains("bga") || key.Contains("pv")) CurrentMeta.BgaAuthor = val;
-                    else if (key.Contains("매퍼") || key.Contains("mapper") || key.Contains("제작자") || key.Contains("maker") || key.Contains("charter")) CurrentMeta.ChartAuthor = val;
-                    else if (key.Equals("easy", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int ez)) CurrentMeta.EasyLevel = ez;
-                    else if (key.Equals("normal", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int nm)) CurrentMeta.NormalLevel = nm;
-                    else if (key.Equals("hard", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int hd)) CurrentMeta.HardLevel = hd;
-                }
-
-                MelonLogger.Msg($"[HwaAssetManager] ★ info.txt 파싱 성공 ★");
-                MelonLogger.Msg($"  - 곡 제목:   '{CurrentMeta.Title}'");
-                MelonLogger.Msg($"  - 아티스트:   '{CurrentMeta.Artist}'");
-                MelonLogger.Msg($"  - 앨범:       '{CurrentMeta.Album}'");
-                MelonLogger.Msg($"  - BGA 제작자: '{CurrentMeta.BgaAuthor}'");
-                MelonLogger.Msg($"  - 채보 제작자: '{CurrentMeta.ChartAuthor}'");
-                MelonLogger.Msg($"  - 난이도:     Easy={CurrentMeta.EasyLevel}, Normal={CurrentMeta.NormalLevel}, Hard={CurrentMeta.HardLevel}");
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Error($"[HwaAssetManager] info.txt 파싱 예외 발생: {ex.Message}");
-            }
+            CustomSongLibrary.Scan();
         }
 
         // =========================================================================
@@ -263,28 +109,7 @@ namespace DEFLATE_custom_chart.Core
 
         public static Sprite LoadCoverSprite()
         {
-            if (CustomCoverSprite != null) return CustomCoverSprite;
-            if (string.IsNullOrEmpty(CoverFilePath) || !File.Exists(CoverFilePath)) return null;
-
-            try
-            {
-                byte[] fileData = File.ReadAllBytes(CoverFilePath);
-                Texture2D tex = new Texture2D(2, 2, TextureFormat.RGBA32, true);
-                if (ImageConversion.LoadImage(tex, fileData))
-                {
-                    tex.filterMode = FilterMode.Bilinear;
-                    tex.wrapMode = TextureWrapMode.Clamp;
-                    CustomCoverSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
-                    CustomCoverSprite.name = Path.GetFileNameWithoutExtension(CoverFilePath);
-                    MelonLogger.Msg($"[HwaAssetManager] ★ Custom PNG Cover 로드 성공 (고품질 필터링 적용) ★ ({tex.width}x{tex.height})");
-                }
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Error($"[HwaAssetManager] Custom PNG Cover 로드 오류: {ex.Message}");
-            }
-
-            return CustomCoverSprite;
+            return Active?.LoadCoverSprite();
         }
 
         public static bool ApplyCustomCover(Image targetImage)
@@ -324,61 +149,24 @@ namespace DEFLATE_custom_chart.Core
         }
 
         // =========================================================================
-        // 커스텀 테스트 곡 래퍼 (Custom Test Track Wrapper) 인젝터
-        // =========================================================================
-
-        public static bool InjectCustomTestTrackWrapper(Il2Cppdizzylab.castor.MainTrackListBlock trackBlock)
-        {
-            if (trackBlock == null) return false;
-
-            try
-            {
-                MelonLogger.Msg($"[HwaAssetManager] ★ 테스트 곡 래퍼(Test Track Wrapper) 주입 시작 ★");
-                MelonLogger.Msg($"  - 원본 곡 ID:     '{trackBlock.uniqueID}'");
-                MelonLogger.Msg($"  - 원본 곡 제목:   '{trackBlock.TrackTitle}'");
-
-                // 1. 곡 설명 및 메타데이터 주입
-                trackBlock.TrackTitle = "[HWA CUSTOM] Test Track";
-                trackBlock.TrackAuthor = "Antigravity & Hwa";
-                trackBlock.TrackAlbum = "DEFLATE Modding Archive";
-                trackBlock.Description = "Custom BGM, BGA, and Cover Art Test Track.";
-
-                // 2. PNG 커버 자켓 주입
-                var customCover = LoadCoverSprite();
-                if (customCover != null)
-                {
-                    trackBlock.TrackCover = customCover;
-                    MelonLogger.Msg($"  - [PNG 커버 주입] '{customCover.name}' ({customCover.texture.width}x{customCover.texture.height})");
-                }
-
-                MelonLogger.Msg($"[HwaAssetManager] ★ 테스트 곡 래퍼 데이터 바인딩 완수! ★");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                MelonLogger.Error($"[HwaAssetManager] 테스트 곡 래퍼 주입 중 예외 발생: {ex.Message}");
-                return false;
-            }
-        }
-
-        // =========================================================================
-        // BGA (.mp4) 에셋 로딩 및 적용
+        // BGA (.mp4) 에셋 적용
         // =========================================================================
 
         public static bool ApplyCustomBga(VideoPlayer videoPlayer, bool autoPlay = true)
         {
-            if (videoPlayer == null || string.IsNullOrEmpty(BgaFileUrl)) return false;
+            string url = BgaFileUrl;
+            if (videoPlayer == null || string.IsNullOrEmpty(url)) return false;
 
             try
             {
                 videoPlayer.source = VideoSource.Url;
-                videoPlayer.url = BgaFileUrl;
+                videoPlayer.url = url;
                 videoPlayer.Prepare();
                 if (autoPlay)
                 {
                     videoPlayer.Play();
                 }
-                MelonLogger.Msg($"[HwaAssetManager] ★ Custom BGA 주입 성공 ★ 오브젝트: '{videoPlayer.name}' | URL: '{BgaFileUrl}'");
+                MelonLogger.Msg($"[HwaAssetManager] ★ Custom BGA 주입 성공 ★ 오브젝트: '{videoPlayer.name}' | URL: '{url}'");
                 return true;
             }
             catch (Exception ex)
@@ -394,71 +182,24 @@ namespace DEFLATE_custom_chart.Core
 
         public static IEnumerator LoadCustomBgmCoroutine(AudioSource targetAudioSource, bool forcePlay = true, Action<AudioClip> onLoaded = null)
         {
-            if (string.IsNullOrEmpty(BgmFilePath) || !File.Exists(BgmFilePath)) yield break;
+            var active = Active;
+            if (active == null) yield break;
 
-            if (CustomBgmClip != null)
+            // 중첩 코루틴 지원 여부에 기대지 않고 내부 이터레이터를 직접 굴려 yield를 그대로 전달한다.
+            var inner = active.LoadBgmCoroutine(targetAudioSource, forcePlay, onLoaded);
+            while (inner.MoveNext())
             {
-                ApplyLoadedBgm(targetAudioSource, forcePlay, onLoaded, fromCache: true);
-                yield break;
+                yield return inner.Current;
             }
-
-            // 이미 다른 곳에서 로딩 중이면 그 결과를 기다렸다가 동일하게 적용/콜백한다.
-            if (_isBgmPreloading)
-            {
-                while (_isBgmPreloading) yield return null;
-                if (CustomBgmClip != null)
-                {
-                    ApplyLoadedBgm(targetAudioSource, forcePlay, onLoaded, fromCache: true);
-                }
-                yield break;
-            }
-
-            _isBgmPreloading = true;
-
-            string uri = "file:///" + BgmFilePath.Replace('\\', '/');
-            UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(uri, AudioType.UNKNOWN);
-            yield return www.SendWebRequest();
-
-            if (www.result == UnityWebRequest.Result.Success)
-            {
-                CustomBgmClip = DownloadHandlerAudioClip.GetContent(www);
-                if (CustomBgmClip != null)
-                {
-                    CustomBgmClip.name = Path.GetFileNameWithoutExtension(BgmFilePath);
-                    ApplyLoadedBgm(targetAudioSource, forcePlay, onLoaded, fromCache: false);
-                }
-            }
-            else
-            {
-                MelonLogger.Error($"[HwaAssetManager] Custom BGM 비동기 로드 실패: {www.error}");
-            }
-
-            www.Dispose();
-            _isBgmPreloading = false;
-        }
-
-        private static void ApplyLoadedBgm(AudioSource targetAudioSource, bool forcePlay, Action<AudioClip> onLoaded, bool fromCache)
-        {
-            if (targetAudioSource != null)
-            {
-                targetAudioSource.Stop();
-                targetAudioSource.clip = CustomBgmClip;
-                targetAudioSource.time = 0f;
-                if (forcePlay) targetAudioSource.Play();
-            }
-
-            string tag = fromCache ? "캐시된 Custom BGM 즉시 적용" : "★ Custom BGM 주입 및 재생 성공 ★";
-            MelonLogger.Msg($"[HwaAssetManager] {tag}: '{CustomBgmClip.name}' ({CustomBgmClip.length:F2}초)");
-
-            onLoaded?.Invoke(CustomBgmClip);
         }
 
         public static void ResetCache()
         {
-            CustomBgmClip = null;
-            CustomCoverSprite = null;
-            _isBgmPreloading = false;
-            _isInitialized = false;
+            foreach (var entry in CustomSongLibrary.Entries)
+            {
+                entry.ResetLoadedAssets();
+            }
+            IsInSongSelectContext = true;
         }
     }
 }

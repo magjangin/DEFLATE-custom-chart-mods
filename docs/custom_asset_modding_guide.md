@@ -7,7 +7,7 @@
 ## 1. 개요 및 폴더 구조
 
 ### 📁 Custom Asset Directory (`hwa/`)
-게임 실행 루트 디렉터리에 위치하며, 모드가 실행될 때 `HwaAssetManager`가 자동으로 디렉터리를 감지하고 에셋을 스캔 및 주입합니다.
+게임 실행 루트 디렉터리에 위치하며, 모드가 실행될 때 `CustomSongLibrary`가 디렉터리를 스캔해 **커스텀 곡 카탈로그**를 만들고, 곡 수만큼 곡 목록에 사본을 주입합니다. `HwaAssetManager`는 그중 **현재 선택된 곡(Active)**의 에셋을 각 훅에 노출하는 파사드입니다.
 
 ```
 DEFLATE/
@@ -15,10 +15,29 @@ DEFLATE/
 ├── Mods/
 │   └── DEFLATE custom chart.dll
 └── hwa/
-    ├── bgm.wav (또는 bgm.mp3, bgm.ogg)   # 인게임 BGM 음원 오버라이드
-    ├── video.mp4                        # 곡 선택/PV/인게임/결과 씬 BGA 비디오
-    └── cover.png                        # 자켓 앨범 커버 이미지 (Bilinear Filter)
+    ├── info.txt / music.ogg / video.mp4 / cover.png ...   # (구방식) 루트 직접 배치 = 곡 1개
+    ├── 홀드 모음/                                          # .wav만 있는 폴더 = 키음 보관함으로 간주, 무시됨
+    ├── 단독 곡 폴더/                                        # 앨범 없는 곡 1개
+    │   ├── info.txt / chart.bms / music.ogg / video.mp4 / cover.png
+    └── 앨범 이름/                                           # 하위에 곡 폴더만 있으면 = 앨범 폴더
+        ├── 곡 A/
+        │   └── info.txt, chart.bms, music.ogg, video.mp4, cover.png
+        └── 곡 B/
+            └── ...
 ```
+
+**폴더 판정 규칙 (`CustomSongEntry.TryCreate` / `CustomSongLibrary.Scan`)**
+
+| 폴더 상태 | 판정 |
+| :--- | :--- |
+| `info.txt` · `.bms/.bme/.bml` · `.png` · `.mp4` 중 하나라도 직접 있음 | **곡 폴더** |
+| 오디오 파일만 있음 (`.wav` 키음 모음 등) | 곡 아님 → 무시 |
+| 에셋 없이 하위 폴더만 있음 | **앨범 폴더** (하위 폴더들을 곡으로 스캔) |
+
+**메타데이터 우선순위**
+- 곡 제목: `info.txt`의 `title/제목` → 곡 폴더 이름 (루트 직접 배치는 폴더 이름을 쓰지 않고 기본값 유지)
+- 앨범명: `info.txt`의 `album/앨범` → 상위 앨범 폴더 이름 → 기본값 `custom albums`
+- 곡 목록 주입 순서: 앨범 폴더명 → 곡 폴더명 오름차순 (게임의 `tracks` 배열은 평면 배열이라 앨범은 **그룹 UI가 아니라 `TrackAlbum` 라벨 + 주입 순서**로만 표현됩니다)
 
 ---
 
