@@ -37,6 +37,27 @@ namespace DEFLATE_custom_chart.Hooks
         }
 
         // =========================================================================
+        // [판정바 히트 마커] 노트 타격 오차 timeDiff 수집 훅
+        // =========================================================================
+        [HarmonyPatch(typeof(NoteObject), nameof(NoteObject.OnHit))]
+        public static class NoteObject_OnHit_Patch
+        {
+            public static void Postfix(NoteObject __instance)
+            {
+                if (__instance == null || __instance.gameController == null) return;
+
+                if (JudgmentBarController.Instance != null)
+                {
+                    float timeDiff = __instance.timeDiff;
+                    float hitWindow = __instance.gameController.hitWindowRangeInMS;
+                    if (hitWindow <= 0) hitWindow = 90.0f;
+
+                    JudgmentBarController.Instance.OnNoteHit(timeDiff, hitWindow);
+                }
+            }
+        }
+
+        // =========================================================================
         // [챌린지] 노트 카오스 배속 (NoteSpeedChaos) 훅
         // =========================================================================
         [HarmonyPatch(typeof(NoteObject), nameof(NoteObject.Initialize))]
