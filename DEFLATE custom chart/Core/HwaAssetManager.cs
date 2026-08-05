@@ -237,7 +237,7 @@ namespace DEFLATE_custom_chart.Core
                     else if (key.Contains("아티스트") || key.Contains("artist")) CurrentMeta.Artist = val;
                     else if (key.Contains("앨범") || key.Contains("album")) CurrentMeta.Album = val;
                     else if (key.Contains("bga") || key.Contains("pv")) CurrentMeta.BgaAuthor = val;
-                    else if (key.Contains("제작자") || key.Contains("maker") || key.Contains("charter")) CurrentMeta.ChartAuthor = val;
+                    else if (key.Contains("매퍼") || key.Contains("mapper") || key.Contains("제작자") || key.Contains("maker") || key.Contains("charter")) CurrentMeta.ChartAuthor = val;
                     else if (key.Equals("easy", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int ez)) CurrentMeta.EasyLevel = ez;
                     else if (key.Equals("normal", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int nm)) CurrentMeta.NormalLevel = nm;
                     else if (key.Equals("hard", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int hd)) CurrentMeta.HardLevel = hd;
