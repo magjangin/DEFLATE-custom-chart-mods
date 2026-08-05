@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using MelonLoader;
+using Il2CppInterop.Runtime.Attributes;
+using Il2CppInterop.Runtime.Injection;
 using UnityEngine;
 using UnityEngine.UI;
 using DEFLATE_custom_chart.Core;
@@ -9,10 +11,16 @@ namespace DEFLATE_custom_chart.Core
 {
     /// <summary>
     /// 실시간 5구간 판정바 (Judgment Bar / Early-Late Indicator) 렌더러
+    /// Il2Cpp 도메인 호환을 위해 RegisterTypeInIl2Cpp 및 (IntPtr ptr) 생성자 적용
     /// </summary>
+    [RegisterTypeInIl2Cpp]
     public class JudgmentBarController : MonoBehaviour
     {
+        public JudgmentBarController(IntPtr ptr) : base(ptr) { }
+
         public static JudgmentBarController Instance { get; private set; }
+
+        private static bool _isTypeRegistered = false;
 
         private GameObject _barContainer;
         private RectTransform _barRectTransform;
@@ -21,9 +29,28 @@ namespace DEFLATE_custom_chart.Core
         private const float BarLength = 200.0f; // 판정바 전체 길이
         private const float BarWidth = 14.0f;   // 판정바 두께
 
+        public static void RegisterType()
+        {
+            if (!_isTypeRegistered)
+            {
+                try
+                {
+                    ClassInjector.RegisterTypeInIl2Cpp<JudgmentBarController>();
+                    _isTypeRegistered = true;
+                    MelonLogger.Msg("[JudgmentBarController] Il2Cpp Type Registration Success!");
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Error($"[JudgmentBarController] Il2Cpp Type Registration Failed: {ex.Message}");
+                }
+            }
+        }
+
         public static void EnsureInstance(Transform parentTransform)
         {
             if (!ModConfig.Instance.EnableJudgmentBar) return;
+
+            RegisterType();
 
             if (Instance == null || Instance.gameObject == null)
             {
@@ -34,6 +61,7 @@ namespace DEFLATE_custom_chart.Core
             }
         }
 
+        [HideFromIl2Cpp]
         private void InitUI(Transform parentTransform)
         {
             _barContainer = new GameObject("JudgmentBarContainer");
@@ -66,6 +94,7 @@ namespace DEFLATE_custom_chart.Core
             MelonLogger.Msg($"[JudgmentBar] 실시간 판정바 UI 로드 완료 (Vertical={isVertical}, Side='{side}', Capsule={isCapsule})");
         }
 
+        [HideFromIl2Cpp]
         private void SetBarPosition(string side, bool isVertical)
         {
             _barRectTransform.anchorMin = new Vector2(0.5f, 0.5f);
@@ -99,10 +128,10 @@ namespace DEFLATE_custom_chart.Core
             _barRectTransform.anchoredPosition = new Vector2(posX, posY);
         }
 
+        [HideFromIl2Cpp]
         private void CreateBoxSegments(bool isVertical, bool isCapsule)
         {
             // 5개 박스 구간 비율 (-1.0 ~ +1.0)
-            // Far Late (-1.0 ~ -0.5), Late (-0.5 ~ -0.18), PERFECT (-0.18 ~ +0.18), Early (+0.18 ~ +0.5), Far Early (+0.5 ~ +1.0)
             var segments = new[]
             {
                 new { Min = -1.0f, Max = -0.50f, Color = new Color(0.9f, 0.2f, 0.2f, 0.75f) }, // Far Late (Red)
@@ -140,6 +169,7 @@ namespace DEFLATE_custom_chart.Core
             }
         }
 
+        [HideFromIl2Cpp]
         private void CreateCenterLine(bool isVertical)
         {
             var lineObj = new GameObject("CenterLine");
@@ -171,7 +201,7 @@ namespace DEFLATE_custom_chart.Core
         {
             if (!ModConfig.Instance.EnableJudgmentBar || _barContainer == null) return;
 
-            if (maxHitWindowMs <= 0) maxHitWindowMs = 90.0f; // 기본 판정 윈도우 ms
+            if (maxHitWindowMs <= 0) maxHitWindowMs = 90.0f;
 
             float norm = Mathf.Clamp(timeDiffMs / maxHitWindowMs, -1.0f, 1.0f);
             bool isVertical = ModConfig.Instance.JudgmentBarVertical;
@@ -198,10 +228,10 @@ namespace DEFLATE_custom_chart.Core
                 rect.anchoredPosition = new Vector2(offsetPos, 0);
             }
 
-            // 서서히 사라지는 페이드 아웃 애니메이션
             MelonCoroutines.Start(FadeOutMarker(img, markerObj));
         }
 
+        [HideFromIl2Cpp]
         private System.Collections.IEnumerator FadeOutMarker(Image img, GameObject obj)
         {
             float duration = 0.45f;

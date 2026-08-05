@@ -36,6 +36,9 @@ namespace DEFLATE_custom_chart.Core
 
             // hwa/ 에셋 매니저 초기화 및 3종 에셋(BGM, BGA, Cover) 스캔
             HwaAssetManager.Initialize();
+
+            // Il2Cpp 커스텀 컴포넌트 타입 등록
+            JudgmentBarController.RegisterType();
         }
     }
 }
