@@ -19,6 +19,8 @@ namespace DEFLATE_custom_chart.Core
         public static string BgaFilePath { get; private set; }
         public static string BgaFileUrl { get; private set; }
         public static string CoverFilePath { get; private set; }
+        public static string BmsFilePath { get; private set; }
+        public static DEFLATE_custom_chart.Core.Bms.BmsChart LoadedBmsChart { get; private set; }
 
         public static AudioClip CustomBgmClip { get; private set; }
         public static Sprite CustomCoverSprite { get; private set; }
@@ -96,6 +98,7 @@ namespace DEFLATE_custom_chart.Core
 
             ScanHwaDirectory();
             ParseInfoTxt();
+            ParseBmsChart();
             LoadCoverSprite();
             _isInitialized = true;
         }
@@ -111,6 +114,7 @@ namespace DEFLATE_custom_chart.Core
             BgaFileUrl = null;
             CoverFilePath = null;
             InfoFilePath = null;
+            BmsFilePath = null;
 
             foreach (var f in files)
             {
@@ -134,12 +138,43 @@ namespace DEFLATE_custom_chart.Core
                 {
                     InfoFilePath = f;
                 }
+                else if (BmsFilePath == null && (ext == ".bms" || ext == ".bme" || ext == ".bml"))
+                {
+                    BmsFilePath = f;
+                }
             }
 
             MelonLogger.Msg($"[HwaAssetManager] hwa 폴더 에셋 감지 완료:");
             MelonLogger.Msg($"  - BGM 파일:   {(BgmFilePath != null ? Path.GetFileName(BgmFilePath) : "없음")}");
             MelonLogger.Msg($"  - BGA 비디오: {(BgaFilePath != null ? Path.GetFileName(BgaFilePath) : "없음")}");
             MelonLogger.Msg($"  - PNG 자켓:   {(CoverFilePath != null ? Path.GetFileName(CoverFilePath) : "없음")}");
+            MelonLogger.Msg($"  - Info 텍스트: {(InfoFilePath != null ? Path.GetFileName(InfoFilePath) : "없음")}");
+            MelonLogger.Msg($"  - BMS 차트:   {(BmsFilePath != null ? Path.GetFileName(BmsFilePath) : "없음")}");
+        }
+
+        public static void ParseBmsChart(int targetSampleRate = 44100)
+        {
+            LoadedBmsChart = null;
+
+            if (string.IsNullOrEmpty(BmsFilePath) || !File.Exists(BmsFilePath))
+            {
+                MelonLogger.Msg("[HwaAssetManager] hwa/ 폴더에 .bms 차트 파일이 없습니다.");
+                return;
+            }
+
+            try
+            {
+                var parser = new DEFLATE_custom_chart.Core.Bms.BmsParser();
+                LoadedBmsChart = parser.ParseFile(BmsFilePath, targetSampleRate);
+
+                MelonLogger.Msg($"[HwaAssetManager] ★ BMS 차트 파싱 성공 ★");
+                MelonLogger.Msg($"  - BMS 제목: '{LoadedBmsChart.Header.Title}' | BPM: {LoadedBmsChart.Header.InitialBpm}");
+                MelonLogger.Msg($"  - 총 파싱 노트 수: {LoadedBmsChart.Notes.Count}개");
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Error($"[HwaAssetManager] BMS 차트 파싱 예외 발생: {ex.Message}");
+            }
         }
 
         public static void ParseInfoTxt()

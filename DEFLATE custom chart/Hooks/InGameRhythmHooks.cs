@@ -145,8 +145,22 @@ namespace DEFLATE_custom_chart.Hooks
                     if (__instance.processedDropSamples != null) __instance.processedDropSamples.Clear();
                     __instance.nextDropEventIdx = 0;
 
-                    // 2. Koreography 원본 차트 트랙 중 hihat_3 이외 트랙의 mEventList 클리어
-                    if (koreo.Tracks != null)
+                    // 2. BMS 14번 채널(드롭 전용) 노트가 파싱되어 있다면 dropEventSamples에 주입
+                    var bmsChart = HwaAssetManager.LoadedBmsChart;
+                    if (bmsChart != null && bmsChart.Notes.Count > 0 && __instance.dropEventSamples != null)
+                    {
+                        foreach (var n in bmsChart.Notes)
+                        {
+                            if (n.Channel == "14" || n.Channel == "54")
+                            {
+                                __instance.dropEventSamples.Add(n.SamplePosition);
+                            }
+                        }
+                        MelonLogger.Msg($"  - [BMS 14번 채널] 커스텀 드롭(Drop) 노트 샘플 {__instance.dropEventSamples.Count}개 dropEventSamples 주입 완료!");
+                    }
+
+                    // 3. Koreography 원본 차트 트랙 중 hihat_3 이외 트랙의 mEventList 클리어
+                    if (koreo.Tracks != null && bmsChart == null)
                     {
                         for (int i = 0; i < koreo.Tracks.Count; i++)
                         {
@@ -160,7 +174,7 @@ namespace DEFLATE_custom_chart.Hooks
                         }
                     }
 
-                    MelonLogger.Msg("[★ 잔여 dropEventSamples 및 원본 차트 에셋 잔여 노트 완전 소탕 완료 ★]");
+                    MelonLogger.Msg("[★ 잔여 dropEventSamples 및 원본 차트 에셋 잔여 노트 완전 정리 완료 ★]");
                 }
 
                 MelonLogger.Msg("----------------------------------------------------------------------------------------------------");
@@ -217,50 +231,101 @@ namespace DEFLATE_custom_chart.Hooks
                 }
 
                 var koreo = __instance.playingKoreo;
-                int globalFirstStart = int.MaxValue;
-
-                var tracks = koreo.Tracks;
-                for (int i = 0; i < tracks.Count; i++)
-                {
-                    var trk = tracks[i];
-                    if (trk == null || trk.EventID == "beat" || trk.mEventList == null) continue;
-
-                    for (int j = 0; j < trk.mEventList.Count; j++)
-                    {
-                        var ev = trk.mEventList[j];
-                        if (ev != null && ev.StartSample > 0 && ev.StartSample < globalFirstStart)
-                        {
-                            globalFirstStart = ev.StartSample;
-                        }
-                    }
-                }
-
                 int before = lane.laneEvents != null ? lane.laneEvents.Count : -1;
+                var bmsChart = HwaAssetManager.LoadedBmsChart;
 
-                bool isTargetLane = string.Equals(trackID, "hihat_3", StringComparison.OrdinalIgnoreCase)
-                    || string.Equals(lane.laneType.ToString(), "HiHat_3", StringComparison.OrdinalIgnoreCase);
-
-                if (isTargetLane && globalFirstStart != int.MaxValue)
+                if (bmsChart != null && bmsChart.Notes.Count > 0)
                 {
-                    int longNoteDuration = (int)(koreo.SampleRate * 1.5f);
-                    int intervalSamples = koreo.SampleRate * 5;
-
+                    // =========================================================
+                    // 1. 사용자 지정 규격 BMS ➔ DEFLATE 레인 노트 변환 주입
+                    // 채널 매핑: 16 -> hihat_1, 11 -> hihat_2, 12 -> hihat_3, 13 -> hihat_4, 14 -> drop
+                    // =========================================================
                     lane.laneEvents?.Clear();
-                    for (int copy = 0; copy < 10; copy++)
-                    {
-                        int start = globalFirstStart + intervalSamples * copy;
-                        var newEvt = new KoreographyEvent();
-                        newEvt.StartSample = start;
-                        newEvt.EndSample = start + longNoteDuration;
-                        lane.laneEvents.Add(newEvt);
-                    }
 
-                    MelonLogger.Msg($"[★ hihat_3 롱노트 10연발 주입 ★] trackID='{trackID}' (LaneType={lane.laneType}) | StartSample={globalFirstStart}, 롱노트 길이={longNoteDuration}샘플(1.5초), 간격={intervalSamples}샘플(5초) | {before}개 -> {lane.laneEvents?.Count ?? -1}개");
+                    string tid = trackID != null ? trackID.ToLowerInvariant() : "";
+                    string ltype = lane.laneType.ToString().ToLowerInvariant();
+
+                    string targetChannel = null;
+                    if (tid.Contains("hihat_1") || ltype.Contains("hihat_1")) targetChannel = "16";
+                    else if (tid.Contains("hihat_2") || ltype.Contains("hihat_2")) targetChannel = "11";
+                    else if (tid.Contains("hihat_3") || ltype.Contains("hihat_3")) targetChannel = "12";
+                    else if (tid.Contains("hihat_4") || ltype.Contains("hihat_4")) targetChannel = "13";
+                    else if (tid.Contains("drop") || ltype.Contains("drop")) targetChannel = "14";
+
+                    if (targetChannel != null)
+                    {
+                        int addedCount = 0;
+                        foreach (var bmsNote in bmsChart.Notes)
+                        {
+                            // 주 채널(16, 11, 12, 13, 14) 및 롱노트 채널(56, 51, 52, 53, 54) 검사
+                            string longChannel = "5" + targetChannel.Substring(1);
+                            if (bmsNote.Channel == targetChannel || bmsNote.Channel == longChannel)
+                            {
+                                int startSample = bmsNote.SamplePosition;
+                                int endSample = bmsNote.IsLongNote ? bmsNote.LongNoteEndSamplePosition : startSample + (int)(koreo.SampleRate * 0.1f);
+
+                                var newEvt = new KoreographyEvent();
+                                newEvt.StartSample = startSample;
+                                newEvt.EndSample = endSample;
+                                lane.laneEvents.Add(newEvt);
+                                addedCount++;
+                            }
+                        }
+                        MelonLogger.Msg($"[★ HWA BMS 노트 주입 ★] 레인: '{trackID}'(Channel {targetChannel}) | {before}개 ➔ {addedCount}개 주입 완료");
+                    }
+                    else
+                    {
+                        MelonLogger.Msg($"[BMS 레인 비움] 레인: '{trackID}' | 지정 매핑 없음 ➔ 0개");
+                    }
                 }
                 else
                 {
+                    // =========================================================
+                    // 2. BMS 파일이 없을 경우: 테스트 롱노트 10연발 주입
+                    // =========================================================
+                    int globalFirstStart = int.MaxValue;
+                    if (koreo.Tracks != null)
+                    {
+                        for (int i = 0; i < koreo.Tracks.Count; i++)
+                        {
+                            var trk = koreo.Tracks[i];
+                            if (trk == null || trk.EventID == "beat" || trk.mEventList == null) continue;
+                            for (int j = 0; j < trk.mEventList.Count; j++)
+                            {
+                                var ev = trk.mEventList[j];
+                                if (ev != null && ev.StartSample > 0 && ev.StartSample < globalFirstStart)
+                                {
+                                    globalFirstStart = ev.StartSample;
+                                }
+                            }
+                        }
+                    }
+
+                    bool isTargetLane = string.Equals(trackID, "hihat_3", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(lane.laneType.ToString(), "HiHat_3", StringComparison.OrdinalIgnoreCase);
+
                     lane.laneEvents?.Clear();
-                    MelonLogger.Msg($"[노트 주입] trackID='{trackID}' (LaneType={lane.laneType}) | 대상 레인 아님, 비움 | {before}개 -> 0개");
+
+                    if (isTargetLane && globalFirstStart != int.MaxValue)
+                    {
+                        int longNoteDuration = (int)(koreo.SampleRate * 1.5f);
+                        int intervalSamples = koreo.SampleRate * 5;
+
+                        for (int copy = 0; copy < 10; copy++)
+                        {
+                            int start = globalFirstStart + intervalSamples * copy;
+                            var newEvt = new KoreographyEvent();
+                            newEvt.StartSample = start;
+                            newEvt.EndSample = start + longNoteDuration;
+                            lane.laneEvents.Add(newEvt);
+                        }
+
+                        MelonLogger.Msg($"[★ hihat_3 커스텀 롱노트 10연발 주입 ★] 레인: '{trackID}' | StartSample={globalFirstStart}, 1.5초 롱노트 | {before}개 -> {lane.laneEvents?.Count ?? 0}개");
+                    }
+                    else
+                    {
+                        MelonLogger.Msg($"[커스텀 테스트 주입] 레인: '{trackID}' | 비움 (0개)");
+                    }
                 }
             }
         }
