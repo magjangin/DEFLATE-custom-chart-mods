@@ -17,6 +17,21 @@ namespace DEFLATE_custom_chart.Core.Bms
         public float Total { get; set; } = 100.0f;
 
         /// <summary>
+        /// 노트 ID 글자 수 (기본 2: 00~ZZ, 확장 3: 000~ZZZ)
+        /// </summary>
+        public int NoteValueWidth { get; set; } = 2;
+
+        /// <summary>
+        /// 롱노트 타입 (#LNTYPE 1 등)
+        /// </summary>
+        public int LnType { get; set; } = 1;
+
+        /// <summary>
+        /// 롱노트 종단 오브젝트 ID (#LNOBJ xx)
+        /// </summary>
+        public string LnObj { get; set; } = string.Empty;
+
+        /// <summary>
         /// WAV 정의 (#WAVxx)
         /// </summary>
         public Dictionary<string, string> WavTable { get; } = new Dictionary<string, string>();
@@ -47,11 +62,22 @@ namespace DEFLATE_custom_chart.Core.Bms
     }
 
     /// <summary>
+    /// 변속(BPM 변경) 이벤트 정보
+    /// </summary>
+    public class BmsBpmEvent
+    {
+        public double Tick { get; set; }
+        public float Bpm { get; set; }
+        public double TimeSeconds { get; set; }
+    }
+
+    /// <summary>
     /// 파싱이 완료된 BMS 차트 데이터
     /// </summary>
     public class BmsChart
     {
         public BmsHeader Header { get; set; } = new BmsHeader();
+        public List<BmsBpmEvent> BpmEvents { get; set; } = new List<BmsBpmEvent>();
         public List<BmsNote> Notes { get; set; } = new List<BmsNote>();
     }
 }
