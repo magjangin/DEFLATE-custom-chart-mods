@@ -134,6 +134,9 @@ namespace DEFLATE_custom_chart.Hooks
             {
                 if (lane == null) return;
 
+                // 테스트 곡(사본) 외의 원본 곡들은 노트 배치를 원본 그대로 유지한다.
+                if (!HwaAssetManager.IsTargetTrackActive) return;
+
                 if (!NoteManipulationEnabled)
                 {
                     int count = lane.laneEvents != null ? lane.laneEvents.Count : -1;
