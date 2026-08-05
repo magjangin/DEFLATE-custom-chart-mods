@@ -11,7 +11,7 @@ namespace DEFLATE_custom_chart.Core
 {
     /// <summary>
     /// 실시간 5구간 판정바 (Judgment Bar / Early-Late Indicator) 렌더러
-    /// 어두운 고대비 배경 패널 & Early/Late 마커 색상 명확화 적용판
+    /// 최근 8개 타격 오차 궤적(Hit History Markers) 잔상 유지 적용판
     /// </summary>
     [RegisterTypeInIl2Cpp]
     public class JudgmentBarController : MonoBehaviour
@@ -27,6 +27,16 @@ namespace DEFLATE_custom_chart.Core
 
         private const float BarLength = 380.0f; // 판정바 전체 길이
         private const float BarWidth = 26.0f;   // 판정바 두께
+        private const int MaxHitHistory = 8;    // 유지할 최근 타격 틱 궤적 개수
+
+        private readonly List<MarkerItem> _activeMarkers = new List<MarkerItem>();
+
+        private class MarkerItem
+        {
+            public GameObject Obj;
+            public Image Img;
+            public float CreatedTime;
+        }
 
         public static void RegisterType()
         {
@@ -103,17 +113,11 @@ namespace DEFLATE_custom_chart.Core
             }
 
             SetBarPosition(side, isVertical);
-
-            // 1. 어두운 블랙 패널 배경 생성 (가시성 대폭 향상)
             CreateDarkBackgroundPanel(isVertical);
-
-            // 2. 5구간 색상 세그먼트 생성
             CreateBoxSegments(isVertical, isCapsule);
-
-            // 3. 중앙 0ms 기준선 생성
             CreateCenterLine(isVertical);
 
-            MelonLogger.Msg($"[JudgmentBar] ★ 어두운 배경 패널 포함 5구간 판정바 UI 렌더링 활성화 ★ (Length={BarLength}, Width={BarWidth}, Side='{side}')");
+            MelonLogger.Msg($"[JudgmentBar] ★ 궤적 유지형 대형 판정바 UI 활성화 ★ (Length={BarLength}, Width={BarWidth}, History={MaxHitHistory})");
         }
 
         [HideFromIl2Cpp]
@@ -156,14 +160,14 @@ namespace DEFLATE_custom_chart.Core
             bgObj.transform.SetParent(_barContainer.transform, false);
 
             var img = bgObj.AddComponent<Image>();
-            img.color = new Color(0.03f, 0.03f, 0.04f, 0.92f); // 묵직하고 선명한 어두운 블랙 패널
+            img.color = new Color(0.03f, 0.03f, 0.04f, 0.94f); // 묵직하고 선명한 블랙 패널
 
             var rect = bgObj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0.5f, 0.5f);
             rect.anchorMax = new Vector2(0.5f, 0.5f);
             rect.anchoredPosition = Vector2.zero;
 
-            float pad = 16.0f; // 판정바 주변 여유 외곽 테두리
+            float pad = 20.0f; // 판정바 주변 패딩
             if (isVertical)
             {
                 rect.sizeDelta = new Vector2(BarWidth + pad, BarLength + pad);
@@ -221,7 +225,6 @@ namespace DEFLATE_custom_chart.Core
             lineObj.transform.SetParent(_barContainer.transform, false);
 
             var img = lineObj.AddComponent<Image>();
-            // 중앙선(0ms)은 뚜렷한 다크 가이드라인으로 배치
             img.color = new Color(0.08f, 0.08f, 0.08f, 0.95f);
 
             var rect = lineObj.GetComponent<RectTransform>();
@@ -230,18 +233,18 @@ namespace DEFLATE_custom_chart.Core
 
             if (isVertical)
             {
-                rect.sizeDelta = new Vector2(BarWidth + 10.0f, 4.0f);
+                rect.sizeDelta = new Vector2(BarWidth + 12.0f, 4.0f);
                 rect.anchoredPosition = Vector2.zero;
             }
             else
             {
-                rect.sizeDelta = new Vector2(4.0f, BarWidth + 10.0f);
+                rect.sizeDelta = new Vector2(4.0f, BarWidth + 12.0f);
                 rect.anchoredPosition = Vector2.zero;
             }
         }
 
         /// <summary>
-        /// 노트 타격 시 오차(timeDiff ms)를 전달받아 EARLY(파란색) / LATE(노란색) 마커 틱을 명확히 구분하여 표시합니다.
+        /// 노트 타격 시 타격 오차 ms 위치에 선명한 마커 틱을 남기고, 최근 8개 타격 궤적을 뚜렷이 유지합니다.
         /// </summary>
         public void OnNoteHit(float timeDiffMs, float maxHitWindowMs)
         {
@@ -251,7 +254,6 @@ namespace DEFLATE_custom_chart.Core
 
             float norm = Mathf.Clamp(timeDiffMs / maxHitWindowMs, -1.0f, 1.0f);
             bool isVertical = ModConfig.Instance.JudgmentBarVertical;
-
             float offsetPos = norm * (BarLength * 0.5f);
 
             var markerObj = new GameObject("HitMarker");
@@ -259,22 +261,25 @@ namespace DEFLATE_custom_chart.Core
 
             var img = markerObj.AddComponent<Image>();
 
-            // 마커 색상 구분 명확화:
-            // 1. PERFECT (|norm| <= 0.18): 눈부신 순백색
-            // 2. EARLY (norm > 0.18): 선명한 네온 푸른색 / 시안
-            // 3. LATE (norm < -0.18): 선명한 형광 옐로우 / 오렌지
+            // 마커 색상 구분:
+            // PERFECT (|norm| <= 0.18): 눈부신 순백 플래시 (#FFFFFF)
+            // EARLY (norm > 0.18 / 조기 타격): 선명한 네온 푸른색/시안 (#00F2FF)
+            // LATE (norm < -0.18 / 지연 타격): 선명한 형광 노란색 (#FFD900)
+            Color baseColor;
             if (Math.Abs(norm) <= 0.18f)
             {
-                img.color = new Color(1.0f, 1.0f, 1.0f, 1.0f); // PERFECT: White
+                baseColor = new Color(1.0f, 1.0f, 1.0f, 1.0f); // PERFECT: White
             }
             else if (norm > 0)
             {
-                img.color = new Color(0.0f, 0.95f, 1.0f, 1.0f); // EARLY: Neon Blue/Cyan
+                baseColor = new Color(0.0f, 0.95f, 1.0f, 1.0f); // EARLY: Neon Blue
             }
             else
             {
-                img.color = new Color(1.0f, 0.85f, 0.0f, 1.0f); // LATE: Neon Yellow
+                baseColor = new Color(1.0f, 0.85f, 0.0f, 1.0f); // LATE: Neon Yellow
             }
+
+            img.color = baseColor;
 
             var rect = markerObj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0.5f, 0.5f);
@@ -282,39 +287,54 @@ namespace DEFLATE_custom_chart.Core
 
             if (isVertical)
             {
-                rect.sizeDelta = new Vector2(BarWidth + 18.0f, 6.0f);
+                rect.sizeDelta = new Vector2(BarWidth + 20.0f, 6.0f);
                 rect.anchoredPosition = new Vector2(0, offsetPos);
             }
             else
             {
-                rect.sizeDelta = new Vector2(6.0f, BarWidth + 18.0f);
+                rect.sizeDelta = new Vector2(6.0f, BarWidth + 20.0f);
                 rect.anchoredPosition = new Vector2(offsetPos, 0);
             }
 
-            MelonCoroutines.Start(FadeOutMarker(img, markerObj));
+            // 활성 마커 리스트에 추가 및 알파 궤적 업데이트
+            var item = new MarkerItem { Obj = markerObj, Img = img, CreatedTime = Time.time };
+            _activeMarkers.Add(item);
+
+            // 최대 궤적 개수 초과 시 가장 오래된 틱 파괴
+            while (_activeMarkers.Count > MaxHitHistory)
+            {
+                var old = _activeMarkers[0];
+                _activeMarkers.RemoveAt(0);
+                if (old.Obj != null) Destroy(old.Obj);
+            }
+
+            // 최근 마커일수록 선명하게 단계별 알파 궤적 적용
+            float[] alphas = new float[] { 1.0f, 0.88f, 0.75f, 0.62f, 0.50f, 0.38f, 0.25f, 0.15f };
+            int count = _activeMarkers.Count;
+            for (int i = 0; i < count; i++)
+            {
+                int indexFromLatest = count - 1 - i;
+                float a = indexFromLatest < alphas.Length ? alphas[indexFromLatest] : 0.1f;
+                var currentItem = _activeMarkers[i];
+                if (currentItem.Img != null)
+                {
+                    Color c = currentItem.Img.color;
+                    currentItem.Img.color = new Color(c.r, c.g, c.b, a);
+                }
+            }
+
+            MelonCoroutines.Start(AutoCleanMarker(item));
         }
 
         [HideFromIl2Cpp]
-        private System.Collections.IEnumerator FadeOutMarker(Image img, GameObject obj)
+        private System.Collections.IEnumerator AutoCleanMarker(MarkerItem item)
         {
-            float duration = 0.65f;
-            float elapsed = 0.0f;
-            Color startColor = img.color;
-
-            while (elapsed < duration)
+            // 타격 후 일정 시간(1.8초) 동안 입력이 없으면 자연 소멸
+            yield return new WaitForSeconds(1.8f);
+            if (item != null && _activeMarkers.Contains(item))
             {
-                elapsed += Time.deltaTime;
-                float alpha = Mathf.Lerp(startColor.a, 0.0f, elapsed / duration);
-                if (img != null)
-                {
-                    img.color = new Color(startColor.r, startColor.g, startColor.b, alpha);
-                }
-                yield return null;
-            }
-
-            if (obj != null)
-            {
-                Destroy(obj);
+                _activeMarkers.Remove(item);
+                if (item.Obj != null) Destroy(item.Obj);
             }
         }
     }
