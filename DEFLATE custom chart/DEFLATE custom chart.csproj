@@ -1,0 +1,77 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <RootNamespace>DEFLATE_custom_chart</RootNamespace>
+    <AssemblyName>DEFLATE custom chart</AssemblyName>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="MelonLoader">
+      <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\net6\MelonLoader.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppInterop.Runtime">
+      <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\net6\Il2CppInterop.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\net6\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2Cppmscorlib">
+      <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\Il2CppAssemblies\Il2Cppmscorlib.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\Il2CppAssemblies\Assembly-CSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Il2CppSonicBloom.Koreo">
+      <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\Il2CppAssemblies\Il2CppSonicBloom.Koreo.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\Il2CppAssemblies\UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\Il2CppAssemblies\UnityEngine.AudioModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\Il2CppAssemblies\UnityEngine.UI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.VideoModule">
+      <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\Il2CppAssemblies\UnityEngine.VideoModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestModule">
+      <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\Il2CppAssemblies\UnityEngine.UnityWebRequestModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestAudioModule">
+      <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\Il2CppAssemblies\UnityEngine.UnityWebRequestAudioModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.ImageConversionModule">
+      <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\Il2CppAssemblies\UnityEngine.ImageConversionModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>H:\steam\steamapps\common\DEFLATE\MelonLoader\Il2CppAssemblies\Unity.TextMeshPro.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+
+  <PropertyGroup>
+    <ModsDir>H:\steam\steamapps\common\DEFLATE\Mods\</ModsDir>
+  </PropertyGroup>
+
+  <Target Name="DeployToMods" AfterTargets="Build">
+    <Copy SourceFiles="$(TargetDir)$(AssemblyName).dll" DestinationFolder="$(ModsDir)" SkipUnchangedFiles="false" />
+  </Target>
+</Project>
