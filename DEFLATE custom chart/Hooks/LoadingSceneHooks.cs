@@ -25,14 +25,14 @@ namespace DEFLATE_custom_chart.Hooks
 
             gd.NowTrackTitle = meta.Title;
             gd.NowTrackAurthor = meta.Artist;
-            gd.NowTrackPVAuthor = meta.BgaAuthor;
+            gd.NowTrackPVAuthor = !string.IsNullOrEmpty(meta.ChartAuthor) ? $"{meta.BgaAuthor} / Chart: {meta.ChartAuthor}" : meta.BgaAuthor;
             gd.NowTracLabel = meta.Album;
             gd.NowTrackLevel = targetStar.ToString();
             if (customCover != null) gd.NowTrackCover = customCover;
 
             if (instance.NowTrackTitle != null) instance.NowTrackTitle.text = meta.Title;
             if (instance.NowTrackAurthor != null) instance.NowTrackAurthor.text = meta.Artist;
-            if (instance.NowTrackPVAuthor != null) instance.NowTrackPVAuthor.text = meta.BgaAuthor;
+            if (instance.NowTrackPVAuthor != null) instance.NowTrackPVAuthor.text = gd.NowTrackPVAuthor;
             if (instance.NowTracLabel != null) instance.NowTracLabel.text = meta.Album;
             if (instance.NowTrackDifficulty != null) instance.NowTrackDifficulty.text = targetStar.ToString();
             if (instance.diffStarsCtrl != null) instance.diffStarsCtrl.GenerateStarImages(targetStar);
@@ -43,7 +43,7 @@ namespace DEFLATE_custom_chart.Hooks
                 if (instance.NowTrackCover_bg != null) instance.NowTrackCover_bg.sprite = customCover;
             }
 
-            MelonLogger.Msg($"[로딩 씬 커스텀 UI 주입] 제목: '{meta.Title}' | 난이도: {gd.nowDifficulty}(★{targetStar}) | BGA: '{meta.BgaAuthor}' | 앨범: '{meta.Album}'");
+            MelonLogger.Msg($"[로딩 씬 커스텀 UI 주입] 제목: '{meta.Title}' | 아티스트: '{meta.Artist}' | 매퍼: '{meta.ChartAuthor}' | BGA: '{meta.BgaAuthor}' | 난이도: {gd.nowDifficulty}(★{targetStar}) | 앨범: '{meta.Album}'");
         }
 
         [HarmonyPatch(typeof(LoadingGamePlay), nameof(LoadingGamePlay.Start))]
@@ -67,11 +67,13 @@ namespace DEFLATE_custom_chart.Hooks
                 if (__instance == null || __instance.gameData == null) return;
                 var gd = __instance.gameData;
 
+                var meta = HwaAssetManager.CurrentMeta ?? new HwaAssetManager.HwaMetaInfo();
                 MelonLogger.Msg("==================================================");
                 MelonLogger.Msg($"[로딩 씬 진입 감지] TargetActive: {HwaAssetManager.IsTargetTrackActive}");
                 MelonLogger.Msg($"  - 곡 제목:      '{gd.NowTrackTitle}'");
                 MelonLogger.Msg($"  - 곡 아티스트:   '{gd.NowTrackAurthor}'");
-                MelonLogger.Msg($"  - PV/BGA 제작자: '{gd.NowTrackPVAuthor}'");
+                MelonLogger.Msg($"  - 채보 매퍼:    '{meta.ChartAuthor}'");
+                MelonLogger.Msg($"  - PV/BGA 제작자: '{meta.BgaAuthor}'");
                 MelonLogger.Msg($"  - 곡 ID:        '{gd.NowTrackID}'");
                 MelonLogger.Msg("==================================================");
             }
