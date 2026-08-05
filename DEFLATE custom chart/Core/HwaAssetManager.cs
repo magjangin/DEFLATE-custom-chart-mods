@@ -116,7 +116,7 @@ namespace DEFLATE_custom_chart.Core
             InfoFilePath = null;
             BmsFilePath = null;
 
-            // BGM 음원 파일 선별 (music.ogg, bgm.mp3 등 대표 곡 파일 최우선 채택)
+            // BGM 음원 파일 선별 (.ogg 최우선 채택 ➔ music/bgm 키워드 ➔ 최대 용량 오디오 순)
             string bestBgm = null;
             long maxBgmSize = 0;
 
@@ -128,14 +128,22 @@ namespace DEFLATE_custom_chart.Core
                 if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac")
                 {
                     FileInfo fi = new FileInfo(f);
-                    // 1. music, bgm, song, track 이름 포함 시 즉시 최우선 BGM으로 채택
+
+                    // 1. .ogg 확장자 파일 최우선 채택 (BMS용 단품 .wav 키음들과 명확히 분리)
+                    if (ext == ".ogg")
+                    {
+                        bestBgm = f;
+                        break;
+                    }
+
+                    // 2. music, bgm, song, track 이름 포함 시 2순위 BGM으로 채택
                     if (name.Contains("music") || name.Contains("bgm") || name.Contains("song") || name.Contains("track") || name.Contains("audio"))
                     {
                         bestBgm = f;
                         break;
                     }
 
-                    // 2. 이름에 특수키 키워드가 없을 경우 파일 용량이 가장 큰 오디오를 BGM 후보로 추적 (단품 키음 179KB 제거)
+                    // 3. 파일 용량이 가장 큰 오디오를 BGM 후보로 추적
                     if (fi.Length > maxBgmSize)
                     {
                         maxBgmSize = fi.Length;
