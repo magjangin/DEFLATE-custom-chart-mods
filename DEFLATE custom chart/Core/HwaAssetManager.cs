@@ -116,16 +116,41 @@ namespace DEFLATE_custom_chart.Core
             InfoFilePath = null;
             BmsFilePath = null;
 
+            // BGM 음원 파일 선별 (music.ogg, bgm.mp3 등 대표 곡 파일 최우선 채택)
+            string bestBgm = null;
+            long maxBgmSize = 0;
+
+            foreach (var f in files)
+            {
+                string ext = Path.GetExtension(f).ToLowerInvariant();
+                string name = Path.GetFileNameWithoutExtension(f).ToLowerInvariant();
+
+                if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac")
+                {
+                    FileInfo fi = new FileInfo(f);
+                    // 1. music, bgm, song, track 이름 포함 시 즉시 최우선 BGM으로 채택
+                    if (name.Contains("music") || name.Contains("bgm") || name.Contains("song") || name.Contains("track") || name.Contains("audio"))
+                    {
+                        bestBgm = f;
+                        break;
+                    }
+
+                    // 2. 이름에 특수키 키워드가 없을 경우 파일 용량이 가장 큰 오디오를 BGM 후보로 추적 (단품 키음 179KB 제거)
+                    if (fi.Length > maxBgmSize)
+                    {
+                        maxBgmSize = fi.Length;
+                        bestBgm = f;
+                    }
+                }
+            }
+            BgmFilePath = bestBgm;
+
             foreach (var f in files)
             {
                 string ext = Path.GetExtension(f).ToLowerInvariant();
                 string name = Path.GetFileName(f).ToLowerInvariant();
 
-                if (BgmFilePath == null && (ext == ".wav" || ext == ".mp3" || ext == ".ogg"))
-                {
-                    BgmFilePath = f;
-                }
-                else if (BgaFilePath == null && ext == ".mp4")
+                if (BgaFilePath == null && ext == ".mp4")
                 {
                     BgaFilePath = f;
                     BgaFileUrl = "file:///" + f.Replace('\\', '/');
