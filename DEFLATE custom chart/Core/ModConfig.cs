@@ -16,7 +16,7 @@ namespace DEFLATE_custom_chart.Core
         public bool BlockSave { get; set; } = true;
 
         // 2. 판정바 & 키뷰어 설정
-        public bool EnableJudgmentBar { get; set; } = true;
+        public bool EnableJudgmentBar { get; set; } = false;
         public bool JudgmentBarVertical { get; set; } = true;
         public bool EnableKeyViewer { get; set; } = true;
         public bool JudgmentBarCapsule { get; set; } = false;

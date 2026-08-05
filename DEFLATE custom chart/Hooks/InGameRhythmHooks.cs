@@ -75,8 +75,8 @@ namespace DEFLATE_custom_chart.Hooks
                 MelonLogger.Msg($"  - WindowSizeInUnits:       {__instance.WindowSizeInUnits}");
                 MelonLogger.Msg("==================================================");
 
-                // 실시간 5구간 판정바 생성 및 초기화
-                JudgmentBarController.EnsureInstance(__instance.transform);
+                // 실시간 5구간 판정바 비활성화 (요청 시 비활성 처리)
+                // JudgmentBarController.EnsureInstance(__instance.transform);
             }
         }
 
