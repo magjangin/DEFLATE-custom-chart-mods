@@ -37,7 +37,46 @@ namespace DEFLATE_custom_chart.Hooks
         }
 
         // =========================================================================
-        // [판정바 히트 마커 & 디버그] 노트 타격 오차 측정 훅
+        // [핵심 훅] RhythmGameController.RegisterTimingOffset (실제 노트 타격 오차 ms 전달)
+        // =========================================================================
+        [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.RegisterTimingOffset))]
+        public static class RhythmGameController_RegisterTimingOffset_Patch
+        {
+            public static void Postfix(RhythmGameController __instance, float offset)
+            {
+                if (__instance == null) return;
+                float hitWindow = __instance.hitWindowRangeInMS;
+                if (hitWindow <= 0) hitWindow = 100.0f;
+
+                MelonLogger.Msg($"[★ RegisterTimingOffset 훅 ★] 타격 오차 timingOffset={offset:F2}ms | hitWindow={hitWindow}ms");
+
+                if (JudgmentBarController.Instance != null)
+                {
+                    JudgmentBarController.Instance.OnNoteHit(offset, hitWindow);
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.prefectSomeNote))]
+        public static class RhythmGameController_prefectSomeNote_Patch
+        {
+            public static void Postfix(RhythmGameController __instance, int laneType)
+            {
+                MelonLogger.Msg($"[★ prefectSomeNote 훅 ★] 레인: {laneType}");
+            }
+        }
+
+        [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.goodSomeNote))]
+        public static class RhythmGameController_goodSomeNote_Patch
+        {
+            public static void Postfix(RhythmGameController __instance, int laneType)
+            {
+                MelonLogger.Msg($"[★ goodSomeNote 훅 ★] 레인: {laneType}");
+            }
+        }
+
+        // =========================================================================
+        // [판정바 히트 마커 & 디버그] 노트 타격 오차 측정 보조 훅
         // =========================================================================
         [HarmonyPatch(typeof(NoteObject), nameof(NoteObject.CalculateHitAccuracy))]
         public static class NoteObject_CalculateHitAccuracy_Patch
@@ -57,21 +96,6 @@ namespace DEFLATE_custom_chart.Hooks
             }
         }
 
-        [HarmonyPatch(typeof(LaneController), nameof(LaneController.CheckNoteHit))]
-        public static class LaneController_CheckNoteHit_Patch
-        {
-            public static void Prefix(LaneController __instance)
-            {
-                if (__instance == null || __instance.trackedNotes == null || __instance.trackedNotes.Count == 0) return;
-                
-                var note = __instance.trackedNotes.Peek();
-                if (note != null && !note.isProcessed && note.IsNoteHittable())
-                {
-                    TriggerJudgmentMarker(note, "LaneCheckNoteHit");
-                }
-            }
-        }
-
         private static void TriggerJudgmentMarker(NoteObject instance, string source)
         {
             if (instance == null || instance.gameController == null) return;
@@ -82,7 +106,6 @@ namespace DEFLATE_custom_chart.Hooks
 
             float calculatedTimeDiffMs = instance.timeDiff;
 
-            // 게임 원본 timeDiff가 0인 경우 AudioSample로 직접 오차 ms 계산
             if (Math.Abs(calculatedTimeDiffMs) < 0.001f && instance.gameController.audioCom != null)
             {
                 float currentSample = (float)instance.gameController.audioCom.timeSamples;
@@ -91,17 +114,12 @@ namespace DEFLATE_custom_chart.Hooks
 
                 if (sampleRate > 0 && endSample > 0)
                 {
-                    float sampleDiff = endSample - currentSample; // >0: Early (일찍 침), <0: Late (늦게 침)
+                    float sampleDiff = endSample - currentSample;
                     calculatedTimeDiffMs = (sampleDiff / sampleRate) * 1000.0f;
                 }
             }
 
             MelonLogger.Msg($"[HitMarker Debug ({source})] NoteIdx={instance.Note_Index} | nativeDiff={instance.timeDiff:F2}ms | calcDiff={calculatedTimeDiffMs:F2}ms | maxWindow={maxHitWindow}ms");
-
-            if (JudgmentBarController.Instance != null)
-            {
-                JudgmentBarController.Instance.OnNoteHit(calculatedTimeDiffMs, maxHitWindow);
-            }
         }
 
         // =========================================================================
