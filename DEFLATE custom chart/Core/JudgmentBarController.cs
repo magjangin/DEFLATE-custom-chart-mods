@@ -220,6 +220,9 @@ namespace DEFLATE_custom_chart.Core
             float norm = Mathf.Clamp(timeDiffMs / maxHitWindowMs, -1.0f, 1.0f);
             bool isVertical = ModConfig.Instance.JudgmentBarVertical;
 
+            float offsetPos = norm * (BarLength * 0.5f);
+            MelonLogger.Msg($"[JudgmentBar HitMarker] 타격 오차: {timeDiffMs:F2}ms | 비율: {norm:F2} | 마커 위치 오프셋: {offsetPos:F1}px");
+
             var markerObj = new GameObject("HitMarker");
             markerObj.transform.SetParent(_barContainer.transform, false);
 
@@ -230,15 +233,14 @@ namespace DEFLATE_custom_chart.Core
             rect.anchorMin = new Vector2(0.5f, 0.5f);
             rect.anchorMax = new Vector2(0.5f, 0.5f);
 
-            float offsetPos = norm * (BarLength * 0.5f);
             if (isVertical)
             {
-                rect.sizeDelta = new Vector2(BarWidth + 6.0f, 4.0f);
+                rect.sizeDelta = new Vector2(BarWidth + 10.0f, 5.0f);
                 rect.anchoredPosition = new Vector2(0, offsetPos);
             }
             else
             {
-                rect.sizeDelta = new Vector2(4.0f, BarWidth + 6.0f);
+                rect.sizeDelta = new Vector2(5.0f, BarWidth + 10.0f);
                 rect.anchoredPosition = new Vector2(offsetPos, 0);
             }
 

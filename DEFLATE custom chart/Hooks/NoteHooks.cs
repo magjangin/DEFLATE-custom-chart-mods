@@ -37,10 +37,10 @@ namespace DEFLATE_custom_chart.Hooks
         }
 
         // =========================================================================
-        // [판정바 히트 마커] 노트 타격 오차 timeDiff 수집 훅
+        // [판정바 히트 마커] 노트 타격 오차 timeDiff 수집 훅 (CalculateHitAccuracy & OnHit)
         // =========================================================================
-        [HarmonyPatch(typeof(NoteObject), nameof(NoteObject.OnHit))]
-        public static class NoteObject_OnHit_Patch
+        [HarmonyPatch(typeof(NoteObject), nameof(NoteObject.CalculateHitAccuracy))]
+        public static class NoteObject_CalculateHitAccuracy_Patch
         {
             public static void Postfix(NoteObject __instance)
             {
@@ -48,8 +48,8 @@ namespace DEFLATE_custom_chart.Hooks
             }
         }
 
-        [HarmonyPatch(typeof(NoteObject), nameof(NoteObject.PlayHitSound))]
-        public static class NoteObject_PlayHitSound_Patch
+        [HarmonyPatch(typeof(NoteObject), nameof(NoteObject.OnHit))]
+        public static class NoteObject_OnHit_Patch
         {
             public static void Postfix(NoteObject __instance)
             {
