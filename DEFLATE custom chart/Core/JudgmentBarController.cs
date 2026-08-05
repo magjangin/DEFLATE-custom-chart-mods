@@ -11,7 +11,7 @@ namespace DEFLATE_custom_chart.Core
 {
     /// <summary>
     /// 실시간 5구간 판정바 (Judgment Bar / Early-Late Indicator) 렌더러
-    /// UGUI Canvas 내부 상위에 자동 배치하여 화면 렌더링 보장
+    /// 가시성 극대화 & 화면 왼쪽 경계 위치 보정 적용판
     /// </summary>
     [RegisterTypeInIl2Cpp]
     public class JudgmentBarController : MonoBehaviour
@@ -25,8 +25,8 @@ namespace DEFLATE_custom_chart.Core
         private GameObject _barContainer;
         private RectTransform _barRectTransform;
 
-        private const float BarLength = 220.0f; // 판정바 전체 길이
-        private const float BarWidth = 16.0f;   // 판정바 두께
+        private const float BarLength = 380.0f; // 판정바 대폭 확대 (220 -> 380px)
+        private const float BarWidth = 26.0f;   // 두께 대폭 확대 (16 -> 26px)
 
         public static void RegisterType()
         {
@@ -51,7 +51,6 @@ namespace DEFLATE_custom_chart.Core
 
             RegisterType();
 
-            // 씬 내부 UGUI Canvas 탐색
             Canvas targetCanvas = null;
             var canvases = UnityEngine.Object.FindObjectsOfType<Canvas>();
             if (canvases != null && canvases.Length > 0)
@@ -107,7 +106,7 @@ namespace DEFLATE_custom_chart.Core
             CreateBoxSegments(isVertical, isCapsule);
             CreateCenterLine(isVertical);
 
-            MelonLogger.Msg($"[JudgmentBar] ★ 실시간 5구간 판정바 UI 렌더링 활성화 ★ (Vertical={isVertical}, Side='{side}', Parent='{this.transform.parent?.name}')");
+            MelonLogger.Msg($"[JudgmentBar] ★ 대형 판정바 UI 렌더링 활성화 ★ (Length={BarLength}, Width={BarWidth}, Side='{side}')");
         }
 
         [HideFromIl2Cpp]
@@ -122,21 +121,22 @@ namespace DEFLATE_custom_chart.Core
             string s = side.Trim().ToLowerInvariant();
             if (s == "left")
             {
-                posX = -450f;
+                posX = -720f; // 화면 왼쪽 경계선 부근
             }
             else if (s == "right")
             {
-                posX = 450f;
+                posX = 720f;  // 화면 오른쪽 경계선 부근
             }
             else
             {
+                // Center 기본값
                 if (isVertical)
                 {
-                    posX = -500f;
+                    posX = -710f; // 화면 왼쪽 시야 경계선 쪽으로 배치
                 }
                 else
                 {
-                    posY = -250f;
+                    posY = -340f; // 화면 하단부 근처
                 }
             }
 
@@ -148,11 +148,11 @@ namespace DEFLATE_custom_chart.Core
         {
             var segments = new[]
             {
-                new { Min = -1.0f, Max = -0.50f, Color = new Color(0.9f, 0.2f, 0.2f, 0.85f) }, // Far Late (Red)
-                new { Min = -0.50f, Max = -0.18f, Color = new Color(0.95f, 0.75f, 0.2f, 0.85f) },// Late Good (Yellow)
-                new { Min = -0.18f, Max = 0.18f, Color = new Color(0.2f, 0.9f, 0.95f, 0.95f) },  // PERFECT (Cyan)
-                new { Min = 0.18f, Max = 0.50f, Color = new Color(0.2f, 0.5f, 0.95f, 0.85f) },  // Early Good (Blue)
-                new { Min = 0.50f, Max = 1.0f, Color = new Color(0.7f, 0.2f, 0.9f, 0.85f) }    // Far Early (Purple)
+                new { Min = -1.0f, Max = -0.50f, Color = new Color(0.85f, 0.15f, 0.15f, 0.90f) }, // Far Late (Red)
+                new { Min = -0.50f, Max = -0.18f, Color = new Color(0.95f, 0.70f, 0.15f, 0.90f) },// Late Good (Yellow)
+                new { Min = -0.18f, Max = 0.18f, Color = new Color(0.1f, 0.85f, 0.95f, 0.95f) },  // PERFECT (Cyan)
+                new { Min = 0.18f, Max = 0.50f, Color = new Color(0.15f, 0.45f, 0.95f, 0.90f) }, // Early Good (Blue)
+                new { Min = 0.50f, Max = 1.0f, Color = new Color(0.65f, 0.15f, 0.85f, 0.90f) }   // Far Early (Purple)
             };
 
             foreach (var seg in segments)
@@ -190,7 +190,8 @@ namespace DEFLATE_custom_chart.Core
             lineObj.transform.SetParent(_barContainer.transform, false);
 
             var img = lineObj.AddComponent<Image>();
-            img.color = Color.white;
+            // 중앙선(0ms)은 어두운 흑색 가이드라인으로 설정하여 하얀색/형광 마커 틱이 선명히 대비되도록 함
+            img.color = new Color(0.08f, 0.08f, 0.08f, 0.95f);
 
             var rect = lineObj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0.5f, 0.5f);
@@ -198,18 +199,18 @@ namespace DEFLATE_custom_chart.Core
 
             if (isVertical)
             {
-                rect.sizeDelta = new Vector2(BarWidth + 8.0f, 3.0f);
+                rect.sizeDelta = new Vector2(BarWidth + 10.0f, 4.0f);
                 rect.anchoredPosition = Vector2.zero;
             }
             else
             {
-                rect.sizeDelta = new Vector2(3.0f, BarWidth + 8.0f);
+                rect.sizeDelta = new Vector2(4.0f, BarWidth + 10.0f);
                 rect.anchoredPosition = Vector2.zero;
             }
         }
 
         /// <summary>
-        /// 노트 타격 시 오차(timeDiff ms)를 전달받아 히트 마커 인디케이터 틱을 표시합니다.
+        /// 노트 타격 시 오차(timeDiff ms)를 전달받아 눈에 띄는 고대비 히트 마커 인디케이터 틱을 표시합니다.
         /// </summary>
         public void OnNoteHit(float timeDiffMs, float maxHitWindowMs)
         {
@@ -221,13 +222,21 @@ namespace DEFLATE_custom_chart.Core
             bool isVertical = ModConfig.Instance.JudgmentBarVertical;
 
             float offsetPos = norm * (BarLength * 0.5f);
-            MelonLogger.Msg($"[JudgmentBar HitMarker] 타격 오차: {timeDiffMs:F2}ms | 비율: {norm:F2} | 마커 위치 오프셋: {offsetPos:F1}px");
 
             var markerObj = new GameObject("HitMarker");
             markerObj.transform.SetParent(_barContainer.transform, false);
 
             var img = markerObj.AddComponent<Image>();
-            img.color = Math.Abs(norm) <= 0.18f ? new Color(1.0f, 1.0f, 1.0f, 1.0f) : new Color(1.0f, 0.95f, 0.3f, 1.0f);
+
+            // PERFECT(0ms 부근): 강렬하게 번쩍이는 네온 순백색, 오차 타격: 눈에 잘 띄는 고선도 형광 옐로우
+            if (Math.Abs(norm) <= 0.18f)
+            {
+                img.color = new Color(1.0f, 1.0f, 1.0f, 1.0f); // 순백색
+            }
+            else
+            {
+                img.color = new Color(1.0f, 0.92f, 0.1f, 1.0f); // 선명한 형광 옐로우
+            }
 
             var rect = markerObj.GetComponent<RectTransform>();
             rect.anchorMin = new Vector2(0.5f, 0.5f);
@@ -235,12 +244,13 @@ namespace DEFLATE_custom_chart.Core
 
             if (isVertical)
             {
-                rect.sizeDelta = new Vector2(BarWidth + 10.0f, 5.0f);
+                // 판정바 두께 밖으로 길게 돌출시켜 눈에 선명하게 띔
+                rect.sizeDelta = new Vector2(BarWidth + 16.0f, 6.0f);
                 rect.anchoredPosition = new Vector2(0, offsetPos);
             }
             else
             {
-                rect.sizeDelta = new Vector2(5.0f, BarWidth + 10.0f);
+                rect.sizeDelta = new Vector2(6.0f, BarWidth + 16.0f);
                 rect.anchoredPosition = new Vector2(offsetPos, 0);
             }
 
@@ -250,7 +260,7 @@ namespace DEFLATE_custom_chart.Core
         [HideFromIl2Cpp]
         private System.Collections.IEnumerator FadeOutMarker(Image img, GameObject obj)
         {
-            float duration = 0.5f;
+            float duration = 0.65f; // 가시성 확보를 위해 페이드 시간 약간 연장
             float elapsed = 0.0f;
             Color startColor = img.color;
 
