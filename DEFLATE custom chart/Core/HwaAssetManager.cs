@@ -66,7 +66,14 @@ namespace DEFLATE_custom_chart.Core
         /// <summary>선택된 곡 ID/제목으로 커스텀 곡을 판정하고 Active를 갱신합니다.</summary>
         public static bool SetActiveTrack(string activeTrackID, string activeTitle = null)
         {
-            return CustomSongLibrary.SetActive(activeTrackID, activeTitle) != null;
+            var active = CustomSongLibrary.SetActive(activeTrackID, activeTitle);
+            if (active != null)
+            {
+                // 곡 선택 씬에서 커스텀 트랙이 선택되는 즉시 BGM 비동기 스트리밍 사전 로딩(Preload) 개시
+                MelonCoroutines.Start(active.LoadBgmCoroutine(null, false));
+                return true;
+            }
+            return false;
         }
 
         public static bool IsTargetAudioPreview(string audioKey)

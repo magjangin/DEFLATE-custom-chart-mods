@@ -247,6 +247,27 @@ namespace DEFLATE_custom_chart.Core
             return CoverSprite;
         }
 
+        private static AudioType GetAudioType(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath)) return AudioType.UNKNOWN;
+            string ext = Path.GetExtension(filePath).ToLowerInvariant();
+            switch (ext)
+            {
+                case ".ogg":
+                case ".oga":
+                    return AudioType.OGGVORBIS;
+                case ".wav":
+                    return AudioType.WAV;
+                case ".mp3":
+                    return AudioType.MPEG;
+                case ".aif":
+                case ".aiff":
+                    return AudioType.AIFF;
+                default:
+                    return AudioType.UNKNOWN;
+            }
+        }
+
         public IEnumerator LoadBgmCoroutine(AudioSource targetAudioSource, bool forcePlay = true, Action<AudioClip> onLoaded = null)
         {
             if (string.IsNullOrEmpty(BgmFilePath) || !File.Exists(BgmFilePath)) yield break;
@@ -268,7 +289,15 @@ namespace DEFLATE_custom_chart.Core
             _isBgmLoading = true;
 
             string uri = "file:///" + BgmFilePath.Replace('\\', '/');
-            UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(uri, AudioType.UNKNOWN);
+            AudioType audioType = GetAudioType(BgmFilePath);
+            UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(uri, audioType);
+            
+            var dh = www.downloadHandler as DownloadHandlerAudioClip;
+            if (dh != null)
+            {
+                dh.streamAudio = true;
+            }
+
             yield return www.SendWebRequest();
 
             if (www.result == UnityWebRequest.Result.Success)
