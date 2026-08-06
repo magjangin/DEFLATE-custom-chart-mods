@@ -96,5 +96,5 @@ public static class RhythmGameController_InitializeKoreographyTracks_Patch
 ---
 
 > [!TIP]
-> **BMS 파서와 드롭 노트 연동 시 추천 채널 매핑**  
-> BMS의 16번(Scratch) 채널 또는 롱노트 채널(`51`~`58`) 중 턴테이블/드롭 성격의 이벤트를 `dropEventSamples` 배열로 변환하여 주입하면 원본의 드롭 심벌 연출을 커스텀 차트에서도 완벽하게 재현할 수 있습니다.
+> **BMS 파서와 드롭 노트 연동 시 채널 매핑**  
+> 드롭 노트는 **`14`번 채널 전용**입니다 (규격: [`bms_mapping_spec.md`](bms_mapping_spec.md)). `14`번에 찍힌 노트는 `lane_drop` 레인에 주입되는 동시에 `dropEventSamples` 배열에도 등록되어, 원본의 드롭 심벌 연출이 커스텀 차트에서도 그대로 재현됩니다.
