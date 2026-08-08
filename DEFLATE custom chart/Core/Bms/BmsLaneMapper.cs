@@ -55,6 +55,12 @@ namespace DEFLATE_custom_chart.Core.Bms
             return ChannelToLane.TryGetValue(note.Channel, out string lane) ? lane : null;
         }
 
+        /// <summary>이 채널이 레인 노트(16/11/12/13/14) 채널인지 판정합니다. 파서가 노트를 생성할지 걸러낼 때 씁니다.</summary>
+        public static bool IsNoteChannel(string channel)
+        {
+            return !string.IsNullOrEmpty(channel) && ChannelToLane.ContainsKey(channel);
+        }
+
         /// <summary>
         /// 인게임 훅이 받은 Koreography trackID / LaneController.laneType 이름으로 레인 슬롯을 판정합니다.
         /// (예: trackID "hihat_2" 또는 laneType "Kick_Right" ➔ lane_2)

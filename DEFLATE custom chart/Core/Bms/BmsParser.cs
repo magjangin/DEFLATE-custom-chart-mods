@@ -367,19 +367,14 @@ namespace DEFLATE_custom_chart.Core.Bms
 
             foreach (var raw in rawChannels)
             {
-                // 노트 채널 여부 확인 (11~29: 일반/키버튼, 51~69: 롱노트)
-                if (raw.Channel == "02" || raw.Channel == "03" || raw.Channel == "08") continue;
+                // 노트 채널 여부 확인: BmsLaneMapper가 아는 레인 채널(16/11/12/13/14)만 노트로 취급.
+                // 그 외 채널(02/03/08 등 제어 채널 포함)은 여기서 전부 걸러진다.
+                if (!BmsLaneMapper.IsNoteChannel(raw.Channel)) continue;
                 if (string.IsNullOrEmpty(raw.Data) || raw.Data.Length % noteWidth != 0) continue;
 
                 int objectCount = raw.Data.Length / noteWidth;
                 double mStartTick = measureStartTicks.ContainsKey(raw.Measure) ? measureStartTicks[raw.Measure] : raw.Measure * TicksPerMeasure;
                 double mLengthTicks = (measureStartTicks.ContainsKey(raw.Measure + 1) ? measureStartTicks[raw.Measure + 1] : (raw.Measure + 1) * TicksPerMeasure) - mStartTick;
-
-                bool isLnChannel = false;
-                if (int.TryParse(raw.Channel, out int chNum) && chNum >= 51 && chNum <= 69)
-                {
-                    isLnChannel = true;
-                }
 
                 for (int i = 0; i < objectCount; i++)
                 {
@@ -397,15 +392,16 @@ namespace DEFLATE_custom_chart.Core.Bms
                         TimeSeconds = timeSec,
                         SamplePosition = samplePos,
                         Channel = raw.Channel,
-                        NoteValue = val,
-                        IsLongNote = isLnChannel // 51~69 채널은 기본 LN 후보
+                        NoteValue = val
+                        // IsLongNote는 여기서 정하지 않는다. 아래 #LNOBJ 처리와
+                        // 키음("홀드 시작"/"홀드 끝") 매칭 단계에서 확정된다.
                     });
                 }
             }
         }
 
         /// <summary>
-        /// 롱노트(LN 채널 51~69 및 #LNOBJ)의 Head-Tail 짝을 맞춰 롱노트 종단 정보를 갱신합니다.
+        /// #LNOBJ로 지정된 롱노트 종단 오브젝트의 Head-Tail 짝을 맞춰 롱노트 종단 정보를 갱신합니다.
         /// </summary>
         private void PairLongNotes(BmsChart chart, int sampleRate)
         {
@@ -434,28 +430,6 @@ namespace DEFLATE_custom_chart.Core.Bms
                             chart.Notes.Remove(tail);
                         }
                     }
-                }
-            }
-
-            // 2. 51~69 LN 채널 짝맞추기 처리 (Head -> Tail)
-            var lnNotesGrouped = chart.Notes.Where(n => n.IsLongNote && string.IsNullOrEmpty(n.LongNoteEndTick > 0 ? "paired" : null))
-                                            .GroupBy(n => n.Channel);
-
-            foreach (var group in lnNotesGrouped)
-            {
-                var ordered = group.OrderBy(n => n.Tick).ToList();
-                for (int i = 0; i < ordered.Count - 1; i += 2)
-                {
-                    var head = ordered[i];
-                    var tail = ordered[i + 1];
-
-                    head.IsLongNote = true;
-                    head.LongNoteEndTick = tail.Tick;
-                    head.LongNoteEndTimeSeconds = tail.TimeSeconds;
-                    head.LongNoteEndSamplePosition = tail.SamplePosition;
-
-                    // Tail 노트는 Head에 통합되었으므로 리스트에서 제거
-                    chart.Notes.Remove(tail);
                 }
             }
         }
