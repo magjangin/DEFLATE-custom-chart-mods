@@ -3,7 +3,7 @@ using MelonLoader;
 using MelonLoader.Utils;
 using DEFLATE_custom_chart.Core;
 
-[assembly: MelonInfo(typeof(DeflateMod), "DEFLATE Custom Chart & Song Logger Mod", "2.0.0", "Hwa-young-wang")]
+[assembly: MelonInfo(typeof(DeflateMod), "DEFLATE Custom Chart & Song Logger Mod", "1.0.0", "Hwa-young-wang")]
 [assembly: MelonGame("dizzylab", "DEFLATE")]
 
 namespace DEFLATE_custom_chart.Core
@@ -13,7 +13,7 @@ namespace DEFLATE_custom_chart.Core
         public override void OnInitializeMelon()
         {
             MelonLogger.Msg("==================================================");
-            MelonLogger.Msg("  DEFLATE Custom Chart Mod v2.0.0 Loaded!");
+            MelonLogger.Msg("  DEFLATE Custom Chart Mod v1.0.0 Loaded!");
             MelonLogger.Msg("  - Modular Architecture & Selection Interceptor");
             MelonLogger.Msg("==================================================");
 

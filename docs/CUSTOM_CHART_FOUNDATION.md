@@ -1,6 +1,6 @@
 # DEFLATE Custom Chart Foundation Guide
 > **DEFLATE 게임 (dizzylab) MelonLoader Il2Cpp 기반 커스텀 차트 개발 & 내부 아키텍처 기초 문서**  
-> **작성자:** 화영왕 (Hwa-young-wang) | **버전:** v2.0.0
+> **작성자:** 화영왕 (Hwa-young-wang) | **버전:** v1.0.0
 
 ---
 
@@ -319,5 +319,5 @@ public static class MainTrackList_Start_Patch
 
 ## 6. 결론 및 향후 모딩 방향
 
-본 기초 문서는 DEFLATE 모드의 현재 구조(v2.0.0)를 바탕으로 작성되었습니다.
+본 기초 문서는 DEFLATE 모드의 현재 구조(v1.0.0)를 바탕으로 작성되었습니다.
 - **다음 단계:** Addressables 에셋 번들 자체 교체 방식 대신 런타임 메모리 주입(Memory Injection) 방식을 안정화하여, 게임 에셋 훼손 없이 완벽한 오프라인 커스텀 차트 플레이 환경을 구성할 수 있습니다.
