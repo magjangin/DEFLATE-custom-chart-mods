@@ -81,6 +81,19 @@ namespace DEFLATE_custom_chart.Core.Bms
     }
 
     /// <summary>
+    /// 라인바(마디선/박자선) 한 줄. BMS 마디 경계와 4분음표 박자 위치에서 만들어집니다.
+    /// </summary>
+    public class BmsBarLine
+    {
+        public double Tick { get; set; }
+        public double TimeSeconds { get; set; }
+        public int SamplePosition { get; set; }
+
+        /// <summary>마디 시작선이면 true, 마디 안의 박자선이면 false.</summary>
+        public bool IsMeasureStart { get; set; }
+    }
+
+    /// <summary>
     /// 파싱이 완료된 BMS 차트 데이터
     /// </summary>
     public class BmsChart
@@ -88,6 +101,9 @@ namespace DEFLATE_custom_chart.Core.Bms
         public BmsHeader Header { get; set; } = new BmsHeader();
         public List<BmsBpmEvent> BpmEvents { get; set; } = new List<BmsBpmEvent>();
         public List<BmsNote> Notes { get; set; } = new List<BmsNote>();
+
+        /// <summary>인게임 라인바로 주입할 마디선/박자선 (틱 순).</summary>
+        public List<BmsBarLine> BarLines { get; set; } = new List<BmsBarLine>();
 
         /// <summary>키음 이름 기반으로 짝이 맞아 홀드가 된 노트 수.</summary>
         public int HoldPairedCount { get; set; }

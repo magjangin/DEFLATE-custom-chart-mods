@@ -15,6 +15,9 @@ namespace DEFLATE_custom_chart.Core.Bms
         // 1마디 당 표준 틱 수 (예: 4박자 x 960 = 3840 틱)
         public const int TicksPerMeasure = 3840;
 
+        // 4분음표 1박 틱 수 (라인바 박자선 간격)
+        public const int TicksPerBeat = TicksPerMeasure / 4;
+
         /// <summary>
         /// 파일 경로로부터 BMS 데이터를 파싱합니다.
         /// </summary>
@@ -91,6 +94,9 @@ namespace DEFLATE_custom_chart.Core.Bms
 
             // BPM 변경 이벤트 목록 수집 및 틱 순서 정렬
             BuildBpmTimeline(chart, rawChannelData, measureStartTicks, noteWidth);
+
+            // 마디선 / 박자선 위치 계산 (인게임 라인바 주입용)
+            GenerateBarLines(chart, measureStartTicks, targetSampleRate);
 
             // 노트 생성 및 틱/시간(Seconds)/샘플위치 계산
             GenerateNotes(chart, rawChannelData, measureStartTicks, noteWidth, targetSampleRate);
@@ -351,6 +357,46 @@ namespace DEFLATE_custom_chart.Core.Bms
             double deltaTick = tick - currentEvent.Tick;
             double deltaTime = deltaTick * 240.0 / (currentEvent.Bpm * TicksPerMeasure);
             return currentEvent.TimeSeconds + deltaTime;
+        }
+
+        /// <summary>
+        /// 인게임 라인바로 쓸 마디선/박자선을 만듭니다.
+        /// 마디 시작마다 마디선 하나, 그 마디 안에서는 4분음표(960틱)마다 박자선 하나.
+        /// 변박자(#XXX02) 마디는 길이만큼만 박자선이 들어가고, 마지막 마디 뒤에 곡을 닫는 마디선이 하나 더 붙습니다.
+        /// </summary>
+        private void GenerateBarLines(BmsChart chart, Dictionary<int, double> measureStartTicks, int sampleRate)
+        {
+            chart.BarLines.Clear();
+            if (measureStartTicks.Count == 0) return;
+
+            int lastMeasure = measureStartTicks.Keys.Max();
+            for (int m = 0; m <= lastMeasure; m++)
+            {
+                double measureStart = measureStartTicks[m];
+                AddBarLine(chart, measureStart, true, sampleRate);
+                if (m == lastMeasure) break; // 마지막 키는 곡을 닫는 마디선 자리
+
+                double measureEnd = measureStartTicks[m + 1];
+                for (double tick = measureStart + TicksPerBeat; tick < measureEnd - 0.5; tick += TicksPerBeat)
+                {
+                    AddBarLine(chart, tick, false, sampleRate);
+                }
+            }
+        }
+
+        private void AddBarLine(BmsChart chart, double tick, bool isMeasureStart, int sampleRate)
+        {
+            // 길이 0 마디(#XXX02:0 등)로 같은 자리에 선이 겹치면 하나만 남긴다.
+            if (chart.BarLines.Count > 0 && chart.BarLines[chart.BarLines.Count - 1].Tick >= tick) return;
+
+            double timeSec = CalculateTimeAtTick(tick, chart.BpmEvents);
+            chart.BarLines.Add(new BmsBarLine
+            {
+                Tick = tick,
+                TimeSeconds = timeSec,
+                SamplePosition = (int)(timeSec * sampleRate),
+                IsMeasureStart = isMeasureStart
+            });
         }
 
         /// <summary>

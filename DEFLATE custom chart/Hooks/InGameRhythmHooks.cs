@@ -322,6 +322,137 @@ namespace DEFLATE_custom_chart.Hooks
             }
         }
 
+        // =========================================================================
+        // 라인바(마디선) — BMS 마디/박자 위치로 교체
+        // =========================================================================
+
+        /// <summary>
+        /// 커스텀 BMS 곡이면 라인바 이벤트를 BMS 마디선/박자선 위치로 만든 새 리스트를 돌려줍니다. 교체 대상이 아니면 null.
+        ///
+        /// 라인바는 원래 Koreography의 beat 트랙(= 복제 원본 곡의 박자)을 따라가서, 템포가 다른 커스텀 곡에서는 노트와 어긋납니다.
+        /// 원본 이벤트의 페이로드가 마디선/박자선 구분에 쓰일 수 있으므로, 원본에서 가장 드문 페이로드를 마디 시작선에,
+        /// 가장 흔한 페이로드를 박자선에 그대로 재사용합니다 (원본 분포는 로그로 남김).
+        /// </summary>
+        private static Il2CppSystem.Collections.Generic.List<KoreographyEvent> BuildBmsLineBarEvents(LineBarController lane, string trackID, string source)
+        {
+            if (lane == null || !HwaAssetManager.IsTargetTrackActive) return null;
+
+            var bmsChart = HwaAssetManager.LoadedBmsChart;
+            if (bmsChart == null || bmsChart.Notes.Count == 0 || bmsChart.BarLines.Count == 0) return null;
+
+            // 1. 원본 라인바 이벤트 관찰: 페이로드 종류별 개수 / 대표 페이로드 / 이벤트 길이 / 평균 간격
+            var original = lane.laneEvents;
+            int originalCount = original != null ? original.Count : 0;
+            var payloadCounts = new Dictionary<string, int>();
+            var payloadSamples = new Dictionary<string, IPayload>();
+            int span = 0;
+            int firstStart = -1, lastStart = -1;
+
+            for (int i = 0; i < originalCount; i++)
+            {
+                var ev = original[i];
+                if (ev == null) continue;
+
+                if (firstStart < 0)
+                {
+                    firstStart = ev.StartSample;
+                    span = Math.Max(0, ev.EndSample - ev.StartSample);
+                }
+                lastStart = ev.StartSample;
+
+                var payload = ev.Payload;
+                string key = DescribePayload(payload);
+                payloadCounts[key] = payloadCounts.TryGetValue(key, out int c) ? c + 1 : 1;
+                if (!payloadSamples.ContainsKey(key)) payloadSamples[key] = payload;
+            }
+
+            string measureKey = null, beatKey = null;
+            foreach (var kv in payloadCounts)
+            {
+                if (measureKey == null || kv.Value < payloadCounts[measureKey]) measureKey = kv.Key;
+                if (beatKey == null || kv.Value > payloadCounts[beatKey]) beatKey = kv.Key;
+            }
+            IPayload measurePayload = measureKey != null ? payloadSamples[measureKey] : null;
+            IPayload beatPayload = beatKey != null ? payloadSamples[beatKey] : null;
+
+            // 2. BMS 마디선/박자선 ➔ KoreographyEvent
+            var events = new Il2CppSystem.Collections.Generic.List<KoreographyEvent>();
+            int measureLines = 0;
+            foreach (var bar in bmsChart.BarLines)
+            {
+                if (bar.SamplePosition <= 0) continue; // 곡 시작 순간의 선은 이미 판정선 위라 보이지 않는다
+
+                var evt = new KoreographyEvent();
+                evt.StartSample = bar.SamplePosition;
+                evt.EndSample = bar.SamplePosition + span;
+                var payload = bar.IsMeasureStart ? measurePayload : beatPayload;
+                if (payload != null) evt.Payload = payload;
+                events.Add(evt);
+                if (bar.IsMeasureStart) measureLines++;
+            }
+
+            var dist = new List<string>();
+            foreach (var kv in payloadCounts) dist.Add($"{kv.Key}={kv.Value}");
+            int avgInterval = originalCount > 1 ? (lastStart - firstStart) / (originalCount - 1) : 0;
+
+            MelonLogger.Msg($"[★ HWA BMS 라인바 주입 ★] ({source}) trackID='{trackID}' | 원본 {originalCount}개 ➔ BMS {events.Count}개 (마디선 {measureLines} / 박자선 {events.Count - measureLines})");
+            MelonLogger.Msg($"  - 원본 페이로드 분포: [{string.Join(", ", dist)}] | 마디선←'{measureKey}' 박자선←'{beatKey}' | 이벤트 길이 {span}샘플 | 원본 평균 간격 {avgInterval}샘플");
+            return events;
+        }
+
+        private static string DescribePayload(IPayload payload)
+        {
+            if (payload == null) return "없음";
+            var text = payload.TryCast<TextPayload>();
+            if (text != null) return $"Text:{text.TextVal}";
+            var num = payload.TryCast<IntPayload>();
+            if (num != null) return $"Int:{num.mIntVal}";
+            var real = payload.TryCast<FloatPayload>();
+            if (real != null) return $"Float:{real.mFloatVal}";
+            return "기타";
+        }
+
+        [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.LoadLineBarEvents))]
+        public static class RhythmGameController_LoadLineBarEvents_Patch
+        {
+            public static void Postfix(string trackID, LineBarController lane)
+            {
+                var events = BuildBmsLineBarEvents(lane, trackID, "LoadLineBarEvents");
+                if (events == null) return;
+
+                // 로드 직후라 아직 스폰된 라인바가 없으므로 리스트를 통째로 바꾸고 처음부터 소비하게 한다.
+                // (기존 리스트를 Clear()하지 않는 건 그 리스트가 원본 Koreography 트랙과 공유될 가능성을 피하기 위함)
+                lane.laneEvents = events;
+                lane.pendingEventIdx = 0;
+            }
+        }
+
+        // 재시작/재로드 경로에서 원본 beat 트랙으로 라인바가 되돌아가는 것을 막는다.
+        [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.ReplaceLineBarEventsFromTrack))]
+        public static class RhythmGameController_ReplaceLineBarEventsFromTrack_Patch
+        {
+            public static void Postfix(RhythmGameController __instance, string trackID, LineBarController lane)
+            {
+                var events = BuildBmsLineBarEvents(lane, trackID, "ReplaceLineBarEventsFromTrack");
+                if (events == null) return;
+
+                int currentSample = __instance != null && __instance.audioCom != null ? __instance.audioCom.timeSamples : 0;
+                lane.ReplaceEvents(events, currentSample);
+            }
+        }
+
+        [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.ReplaceLineBarEventsFromTrackAtSample))]
+        public static class RhythmGameController_ReplaceLineBarEventsFromTrackAtSample_Patch
+        {
+            public static void Postfix(string trackID, LineBarController lane, int currentSample)
+            {
+                var events = BuildBmsLineBarEvents(lane, trackID, "ReplaceLineBarEventsFromTrackAtSample");
+                if (events == null) return;
+
+                lane.ReplaceEvents(events, currentSample);
+            }
+        }
+
         [HarmonyPatch(typeof(RhythmGameController), "UpdateSongDurationScrollbar")]
         public static class RhythmGameController_UpdateSongDurationScrollbar_Patch
         {
