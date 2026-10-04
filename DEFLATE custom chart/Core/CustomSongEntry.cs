@@ -89,37 +89,37 @@ namespace DEFLATE_custom_chart.Core
             string[] files = Directory.GetFiles(FolderPath, "*.*", SearchOption.TopDirectoryOnly);
 
             // BGM 음원 파일 선별 (.ogg 최우선 채택 ➔ music/bgm 키워드 ➔ 최대 용량 오디오 순)
+            // 파일 정렬 순서와 상관없이 이 우선순위가 지켜지도록 전체 후보를 비교한다.
+            // (.flac은 UnityWebRequestMultimedia가 읽지 못하므로 후보에서 제외)
             string bestBgm = null;
-            long maxBgmSize = 0;
+            bool bestIsOgg = false, bestHasKeyword = false;
+            long bestSize = -1;
 
             foreach (var f in files)
             {
                 string ext = Path.GetExtension(f).ToLowerInvariant();
+                if (ext != ".wav" && ext != ".mp3" && ext != ".ogg") continue;
+
                 string name = Path.GetFileNameWithoutExtension(f).ToLowerInvariant();
 
-                if (ext == ".wav" || ext == ".mp3" || ext == ".ogg" || ext == ".flac")
+                // 1. .ogg 확장자 (BMS용 단품 .wav 키음들과 명확히 분리)
+                bool isOgg = ext == ".ogg";
+                // 2. music, bgm, song, track, audio 이름 포함
+                bool hasKeyword = name.Contains("music") || name.Contains("bgm") || name.Contains("song") || name.Contains("track") || name.Contains("audio");
+                // 3. 파일 용량 (.ogg 키음이 여럿인 폴더에서도 가장 큰 곡 파일이 잡히도록)
+                long size = new FileInfo(f).Length;
+
+                bool better = bestBgm == null
+                    || (isOgg != bestIsOgg ? isOgg
+                    : hasKeyword != bestHasKeyword ? hasKeyword
+                    : size > bestSize);
+
+                if (better)
                 {
-                    // 1. .ogg 확장자 파일 최우선 채택 (BMS용 단품 .wav 키음들과 명확히 분리)
-                    if (ext == ".ogg")
-                    {
-                        bestBgm = f;
-                        break;
-                    }
-
-                    // 2. music, bgm, song, track 이름 포함 시 2순위 BGM으로 채택
-                    if (name.Contains("music") || name.Contains("bgm") || name.Contains("song") || name.Contains("track") || name.Contains("audio"))
-                    {
-                        bestBgm = f;
-                        break;
-                    }
-
-                    // 3. 파일 용량이 가장 큰 오디오를 BGM 후보로 추적
-                    var fi = new FileInfo(f);
-                    if (fi.Length > maxBgmSize)
-                    {
-                        maxBgmSize = fi.Length;
-                        bestBgm = f;
-                    }
+                    bestBgm = f;
+                    bestIsOgg = isOgg;
+                    bestHasKeyword = hasKeyword;
+                    bestSize = size;
                 }
             }
             BgmFilePath = bestBgm;
@@ -138,8 +138,10 @@ namespace DEFLATE_custom_chart.Core
                 {
                     CoverFilePath = f;
                 }
-                else if (InfoFilePath == null && (name == "info.txt" || ext == ".txt"))
+                else if (ext == ".txt" && (InfoFilePath == null || name == "info.txt"))
                 {
+                    // info.txt가 있으면 그것을, 없으면 처음 나온 .txt를 메타데이터 파일로 쓴다
+                    // (정렬상 info.txt보다 앞서는 readme.txt 등이 먼저 잡히는 것 방지).
                     InfoFilePath = f;
                 }
                 else if (BmsFilePath == null && (ext == ".bms" || ext == ".bme" || ext == ".bml"))
@@ -332,19 +334,6 @@ namespace DEFLATE_custom_chart.Core
             MelonLogger.Msg($"[커스텀 곡] {tag}: '{Meta.Title}' ➔ '{BgmClip.name}' ({BgmClip.length:F2}초)");
 
             onLoaded?.Invoke(BgmClip);
-        }
-
-        /// <summary>주어진 곡 ID / 제목이 이 엔트리에 해당하는지 판정합니다.</summary>
-        public bool Matches(string trackID, string title)
-        {
-            if (!string.IsNullOrEmpty(InjectedTrackID) && !string.IsNullOrEmpty(trackID) &&
-                string.Equals(InjectedTrackID, trackID, StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-
-            return !string.IsNullOrEmpty(Meta?.Title) && !string.IsNullOrEmpty(title) &&
-                string.Equals(Meta.Title, title, StringComparison.OrdinalIgnoreCase);
         }
 
         public void ResetLoadedAssets()

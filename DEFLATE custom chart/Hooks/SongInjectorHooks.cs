@@ -154,6 +154,16 @@ namespace DEFLATE_custom_chart.Hooks
 
                 // 4) 사본 래퍼 갱신 및 커스텀 info.txt 메타데이터 / PNG 커버 자켓 주입
                 var cloneWrapper = new CustomTrackWrapper(cloneBlock);
+
+                // ID 재생성에 실패해 원본과 같은 ID가 남으면, 원본 곡까지 커스텀 곡으로 판정되므로 사본을 버린다.
+                if (string.IsNullOrEmpty(cloneWrapper.UniqueID) ||
+                    string.Equals(cloneWrapper.UniqueID, sourceWrapper.UniqueID, StringComparison.OrdinalIgnoreCase))
+                {
+                    MelonLogger.Error($"[곡 목록 주입] '{entry.Meta.Title}' 사본의 ID가 비었거나 원본과 같아 주입을 취소합니다 (ID: '{cloneWrapper.UniqueID}').");
+                    UnityEngine.Object.Destroy(cloneGO);
+                    return null;
+                }
+
                 var meta = entry.Meta;
                 var customCover = entry.LoadCoverSprite();
 

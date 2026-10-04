@@ -146,19 +146,27 @@ namespace DEFLATE_custom_chart.Core
         // 활성 곡 판정
         // =========================================================================
 
-        /// <summary>곡 ID / 제목으로 커스텀 곡을 찾아 Active로 지정합니다. 커스텀 곡이 아니면 Active를 비웁니다.</summary>
+        /// <summary>
+        /// 곡 ID / 제목으로 커스텀 곡을 찾아 Active로 지정합니다. 커스텀 곡이 아니면 Active를 비웁니다.
+        /// ID가 일치하는 곡을 전체에서 먼저 찾고, 없을 때만 제목으로 찾습니다
+        /// (제목이 같은 커스텀 곡이 여럿일 때 앞쪽 곡이 제목만으로 먼저 잡히는 것을 막기 위함).
+        /// </summary>
         public static CustomSongEntry SetActive(string trackID, string title)
         {
+            Active = FindByTrackID(trackID) ?? FindByTitle(title);
+            return Active;
+        }
+
+        private static CustomSongEntry FindByTitle(string title)
+        {
+            if (string.IsNullOrEmpty(title)) return null;
             foreach (var entry in Entries)
             {
-                if (entry.Matches(trackID, title))
+                if (string.Equals(entry.Meta?.Title, title, StringComparison.OrdinalIgnoreCase))
                 {
-                    Active = entry;
                     return entry;
                 }
             }
-
-            Active = null;
             return null;
         }
 

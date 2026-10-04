@@ -15,7 +15,9 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(TrackAssetManager), nameof(TrackAssetManager.LoadAudioClip))]
         public static class TrackAssetManager_LoadAudioClip_Patch
         {
-            public static bool Prefix(ref string key, Action<AudioClip> onSuccess, Action onFail)
+            // 원본 시그니처의 콜백은 Il2CppInterop이 만든 Il2CppSystem.Action 계열이다.
+            // (System.Action으로 받으면 타입이 맞지 않는 객체를 델리게이트로 호출하게 된다)
+            public static bool Prefix(ref string key, Il2CppSystem.Action<AudioClip> onSuccess, Il2CppSystem.Action onFail)
             {
                 MelonLogger.Msg($"[★ 핵심 훅: TrackAssetManager.LoadAudioClip ★] BGM 오디오 클립 로드 요청! Key: '{key}'");
 
@@ -24,7 +26,7 @@ namespace DEFLATE_custom_chart.Hooks
                 if (HwaAssetManager.IsTargetAudioPreview(key) && !string.IsNullOrEmpty(HwaAssetManager.BgmFilePath))
                 {
                     MelonLogger.Msg($"[HwaAssetManager] ★ 곡 목록 프리뷰 Custom BGM 오버라이드 ★ Key: '{key}'");
-                    MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(null, false, onSuccess));
+                    MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(null, false, clip => onSuccess?.Invoke(clip)));
                     return false;
                 }
 
