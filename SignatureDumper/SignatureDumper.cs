@@ -12,6 +12,8 @@ namespace SignatureDumper
         public string Namespace { get; set; }
         public string Name { get; set; }
         public string RawTypeName { get; set; }
+        /// <summary>중첩 타입이면 바깥 타입 체인 (예: "Outer+Inner"), 아니면 null.</summary>
+        public string DeclaringTypeName { get; set; }
         public string FullName { get; set; }
         public string Kind { get; set; } // class, struct, interface, enum, delegate
         public string AccessModifiers { get; set; }
@@ -53,19 +55,23 @@ namespace SignatureDumper
             if (string.IsNullOrEmpty(assemblyPath))
             {
                 string il2cppPath = Path.Combine(_options.GameDirectory, "MelonLoader", "Il2CppAssemblies", "Assembly-CSharp.dll");
-                string managedPath = Path.Combine(_options.GameDirectory, "DEFLATE_Data", "Managed", "Assembly-CSharp.dll");
+                string managedPath = Directory.Exists(_options.GameDirectory)
+                    ? Directory.GetDirectories(_options.GameDirectory, "*_Data")
+                        .Select(dataDir => Path.Combine(dataDir, "Managed", "Assembly-CSharp.dll"))
+                        .FirstOrDefault(File.Exists)
+                    : null;
 
                 if (File.Exists(il2cppPath))
                 {
                     assemblyPath = il2cppPath;
                 }
-                else if (File.Exists(managedPath))
+                else if (managedPath != null)
                 {
                     assemblyPath = managedPath;
                 }
                 else
                 {
-                    throw new FileNotFoundException($"Assembly-CSharp.dll not found in default paths: '{il2cppPath}' or '{managedPath}'");
+                    throw new FileNotFoundException($"Assembly-CSharp.dll not found in default paths: '{il2cppPath}' or '<GameDir>\\*_Data\\Managed\\Assembly-CSharp.dll'");
                 }
             }
 
@@ -77,14 +83,23 @@ namespace SignatureDumper
                 try
                 {
                     var asmName = new AssemblyName(args.Name).Name + ".dll";
-                    var candidatePaths = new[]
+                    var candidatePaths = new List<string>
                     {
                         Path.Combine(searchDir, asmName),
                         Path.Combine(_options.GameDirectory, "MelonLoader", "net6", asmName),
+                        Path.Combine(_options.GameDirectory, "MelonLoader", "net472", asmName),
                         Path.Combine(_options.GameDirectory, "MelonLoader", "net35", asmName),
                         Path.Combine(_options.GameDirectory, "MelonLoader", "Dependencies", asmName),
-                        Path.Combine(_options.GameDirectory, "DEFLATE_Data", "Managed", asmName)
+                        Path.Combine(_options.GameDirectory, "MelonLoader", "Dependencies", "Il2CppAssemblyGenerator", "Cpp2IL", "cpp2il_out", asmName)
                     };
+
+                    if (Directory.Exists(_options.GameDirectory))
+                    {
+                        foreach (var dataDir in Directory.GetDirectories(_options.GameDirectory, "*_Data"))
+                        {
+                            candidatePaths.Add(Path.Combine(dataDir, "Managed", asmName));
+                        }
+                    }
 
                     foreach (var path in candidatePaths)
                     {
@@ -164,8 +179,9 @@ namespace SignatureDumper
             var info = new TypeSignatureInfo
             {
                 Namespace = type.Namespace ?? "<global>",
-                Name = GetTypeName(type),
+                Name = GetTypeName(type, qualifyIl2CppSystem: false),
                 RawTypeName = type.Name,
+                DeclaringTypeName = GetDeclaringChain(type),
                 FullName = type.FullName ?? type.Name
             };
 
@@ -224,7 +240,7 @@ namespace SignatureDumper
                 string val = "";
                 if (field.IsLiteral && !field.IsInitOnly)
                 {
-                    try { val = $" = {field.GetRawConstantValue()}"; } catch { }
+                    try { val = $" = {FormatLiteral(field.GetRawConstantValue())}"; } catch { }
                 }
                 info.Fields.Add($"{mods} {fType} {field.Name}{val};");
             }
@@ -238,6 +254,7 @@ namespace SignatureDumper
                 string getStr = getMethod != null ? (getMethod.IsPublic ? "get; " : $"{GetMethodAccess(getMethod)} get; ") : "";
                 string setStr = setMethod != null ? (setMethod.IsPublic ? "set; " : $"{GetMethodAccess(setMethod)} set; ") : "";
                 string access = getMethod != null ? GetMethodAccess(getMethod) : (setMethod != null ? GetMethodAccess(setMethod) : "public");
+                if ((getMethod ?? setMethod)?.IsStatic == true) access += " static";
 
                 info.Properties.Add($"{access} {pType} {prop.Name} {{ {getStr}{setStr}}}");
             }
@@ -282,19 +299,34 @@ namespace SignatureDumper
 
             if (p.HasDefaultValue)
             {
-                if (p.DefaultValue == null) def = " = null";
-                else if (p.DefaultValue is string s) def = $" = \"{s}\"";
-                else if (p.DefaultValue is bool b) def = $" = {(b ? "true" : "false")}";
-                else def = $" = {p.DefaultValue}";
+                def = $" = {FormatLiteral(p.DefaultValue)}";
             }
 
             return $"{prefix}{typeName} {p.Name}{def}";
         }
 
+        private string FormatLiteral(object value)
+        {
+            switch (value)
+            {
+                case null: return "null";
+                case string s: return $"\"{EscapeJson(s)}\"";
+                case char c: return $"'{EscapeJson(c.ToString())}'";
+                case bool b: return b ? "true" : "false";
+                case IFormattable f: return f.ToString(null, System.Globalization.CultureInfo.InvariantCulture);
+                default: return value.ToString();
+            }
+        }
+
         private string GetFieldModifiers(FieldInfo f)
         {
-            string access = f.IsPublic ? "public" : (f.IsPrivate ? "private" : (f.IsFamily ? "protected" : "internal"));
-            if (f.IsLiteral) return $"public const";
+            string access = f.IsPublic ? "public"
+                : f.IsPrivate ? "private"
+                : f.IsFamily ? "protected"
+                : f.IsFamilyOrAssembly ? "protected internal"
+                : f.IsFamilyAndAssembly ? "private protected"
+                : "internal";
+            if (f.IsLiteral) return $"{access} const";
             if (f.IsStatic && f.IsInitOnly) return $"{access} static readonly";
             if (f.IsStatic) return $"{access} static";
             if (f.IsInitOnly) return $"{access} readonly";
@@ -308,6 +340,7 @@ namespace SignatureDumper
             if (m.IsFamily) return "protected";
             if (m.IsAssembly) return "internal";
             if (m.IsFamilyOrAssembly) return "protected internal";
+            if (m.IsFamilyAndAssembly) return "private protected";
             return "internal";
         }
 
@@ -315,12 +348,32 @@ namespace SignatureDumper
         {
             var parts = new List<string>();
             if (m.IsStatic) parts.Add("static");
-            if (m.IsAbstract) parts.Add("abstract");
+
+            // 베이스 클래스 메서드를 재정의한 경우 virtual이 아니라 override로 표기
+            bool isOverride = m is MethodInfo mi && mi.IsVirtual &&
+                mi.GetBaseDefinition().DeclaringType != mi.DeclaringType;
+
+            if (m.IsAbstract) parts.Add(isOverride ? "abstract override" : "abstract");
+            else if (isOverride) parts.Add(m.IsFinal ? "sealed override" : "override");
             else if (m.IsVirtual && !m.IsFinal) parts.Add("virtual");
             return parts.Count > 0 ? " " + string.Join(" ", parts) : "";
         }
 
-        private string GetTypeName(Type t)
+        private string GetDeclaringChain(Type t)
+        {
+            if (!t.IsNested) return null;
+            var chain = new List<string>();
+            for (var d = t.DeclaringType; d != null; d = d.DeclaringType)
+            {
+                chain.Insert(0, d.Name);
+            }
+            return string.Join("+", chain);
+        }
+
+        private string GetTypeName(Type t) => GetTypeName(t, qualifyIl2CppSystem: true);
+
+        /// <param name="qualifyIl2CppSystem">false면 선언부(타입 자신의 이름)용으로 네임스페이스를 붙이지 않는다.</param>
+        private string GetTypeName(Type t, bool qualifyIl2CppSystem)
         {
             if (t == null) return "void";
             if (t == typeof(void)) return "void";
@@ -334,14 +387,24 @@ namespace SignatureDumper
             if (t == typeof(string)) return "string";
             if (t == typeof(object)) return "object";
 
+            if (t.IsGenericParameter) return t.Name;
+            if (t.IsByRef) return GetTypeName(t.GetElementType());
+            if (t.IsArray) return $"{GetTypeName(t.GetElementType())}[{new string(',', t.GetArrayRank() - 1)}]";
+
+            // Il2CppInterop은 mscorlib 타입을 Il2CppSystem.* 로 옮겨 생성한다.
+            // 이름만 쓰면 System.Collections.Generic.List / System.Action 과 구분이 안 되므로 네임스페이스까지 남긴다.
+            string prefix = qualifyIl2CppSystem && t.Namespace != null && t.Namespace.StartsWith("Il2CppSystem", StringComparison.Ordinal)
+                ? t.Namespace + "."
+                : "";
+
             if (t.IsGenericType)
             {
                 string genericName = t.Name.Split('`')[0];
                 var typeArgs = string.Join(", ", t.GetGenericArguments().Select(GetTypeName));
-                return $"{genericName}<{typeArgs}>";
+                return $"{prefix}{genericName}<{typeArgs}>";
             }
 
-            return t.Name;
+            return prefix + t.Name;
         }
 
         private void WriteIndividualFiles(string decompileDir, List<TypeSignatureInfo> infos)
@@ -358,7 +421,10 @@ namespace SignatureDumper
                 string targetDir = Path.Combine(decompileDir, nsPath);
                 Directory.CreateDirectory(targetDir);
 
-                string safeFileName = SanitizeFileName(info.RawTypeName ?? info.Name) + ".cs";
+                // 중첩 타입은 바깥 타입 이름을 붙인다 (예: 클래스마다 있는 __c 가 한 파일에 덮어써지는 것 방지)
+                string baseName = info.RawTypeName ?? info.Name;
+                if (!string.IsNullOrEmpty(info.DeclaringTypeName)) baseName = $"{info.DeclaringTypeName}+{baseName}";
+                string safeFileName = SanitizeFileName(baseName) + ".cs";
                 string filePath = Path.Combine(targetDir, safeFileName);
 
                 using (var writer = new StreamWriter(filePath, false, Encoding.UTF8))
@@ -371,6 +437,11 @@ namespace SignatureDumper
                     string nsHeader = info.Namespace == "<global>" || string.IsNullOrEmpty(info.Namespace) ? "Global" : info.Namespace;
                     writer.WriteLine($"namespace {nsHeader}");
                     writer.WriteLine("{");
+
+                    if (!string.IsNullOrEmpty(info.DeclaringTypeName))
+                    {
+                        writer.WriteLine($"    // Nested in: {info.DeclaringTypeName}");
+                    }
 
                     string baseClause = "";
                     var bases = new List<string>();
