@@ -30,7 +30,7 @@ DEFLATE/
 
 | 폴더 상태 | 판정 |
 | :--- | :--- |
-| `info.txt` · `.bms/.bme/.bml` · `.png` · `.mp4` 중 하나라도 직접 있음 | **곡 폴더** |
+| `info.txt`(또는 다른 `.txt`) · `.bms/.bme/.bml` · `.png` · `.mp4` 중 하나라도 직접 있음 | **곡 폴더** |
 | 오디오 파일만 있음 (`.wav` 키음 모음 등) | 곡 아님 → 무시 |
 | 에셋 없이 하위 폴더만 있음 | **앨범 폴더** (하위 폴더들을 곡으로 스캔) |
 
@@ -41,9 +41,20 @@ DEFLATE/
 
 ---
 
-## 2. 핵심 에셋 관리자 아키텍처 (`HwaAssetManager.cs`)
+## 2. 핵심 에셋 관리자 아키텍처
 
-모든 에셋 스캔, 메모리 로딩, 텍스처 변환, 스프라이트 캐싱, `VideoPlayer` URL 바인딩, `AudioSource` 비동기 스트리밍 재생 로직이 **`HwaAssetManager.cs`**에 캡슐화되어 있습니다.
+에셋 로직은 세 클래스로 나뉘어 있습니다.
+
+| 클래스 | 역할 |
+| :--- | :--- |
+| `CustomSongLibrary` | `hwa/` 폴더 스캔, 커스텀 곡 카탈로그(`Entries`), 현재 선택된 곡(`Active`) 판정 |
+| `CustomSongEntry` | 곡 폴더 하나: 파일 분류(BGM/BGA/커버/info/BMS), info.txt·BMS 파싱, PNG 커버 스프라이트 로딩, BGM `UnityWebRequest` 비동기 로딩과 캐싱 |
+| `HwaAssetManager` | `Active` 곡의 에셋을 훅에 노출하는 파사드 + `VideoPlayer` URL 바인딩(`ApplyCustomBga`), UI 자켓 교체(`ApplyCustomCover*`) |
+
+**곡 폴더 안의 파일 고르기 (`CustomSongEntry.ScanFiles`)**
+- BGM: `.ogg` › 이름에 `music`/`bgm`/`song`/`track`/`audio`가 들어간 파일 › 용량이 큰 파일 순 (지원 확장자 `.ogg`/`.wav`/`.mp3`)
+- BGA: 처음 나오는 `.mp4` / 커버: 처음 나오는 `.png` / 차트: 처음 나오는 `.bms`·`.bme`·`.bml`
+- 메타데이터: `info.txt` 우선, 없으면 처음 나오는 `.txt`
 
 ### 🖼️ PNG Cover Sprite Caching & Filtering
 - `ImageConversion.LoadImage`를 통해 PNG 바이트 데이터를 `Texture2D`로 읽어옵니다.
@@ -80,13 +91,16 @@ player.Play();
 ### 2) 로딩 씬 (Loading Scene)
 - **타겟 클래스**: `LoadingGamePlay`
 - **주입 메커니즘**:
-  - `LoadingGamePlay.Start` 시점 및 비동기 데이터 수신 코루틴인 `WaitForGameDataAndUpdateUI` 완료 직후(`Postfix`) `NowTrackCover`, `NowTrackCover_bg`, `gameData.NowTrackCover`에 커스텀 PNG를 재적용하여 비동기 타이밍으로 인한 원본 복원 현상을 차단합니다.
+  - `LoadingGamePlay.Start`, `InitializeAndPlayAnimations`, `HandleEmptyFields` 세 지점의 `Postfix`에서 모두 같은 주입(`ApplyLoadingUiMetadata`)을 실행해, 뒤늦게 원본 값으로 되돌아가는 현상을 막습니다.
+  - 주입 대상: `gameData`(제목/아티스트/BGA 제작자/앨범/난이도/커버)와 로딩 UI(`NowTrackTitle`, `NowTrackAurthor`, `NowTrackPVAuthor`, `NowTracLabel`, `NowTrackScore`(매퍼 표기), `NowTrackDifficulty`, 별 개수, `NowTrackCover`, `NowTrackCover_bg`).
+  - `LoadingGamePlay.Start`에서 커스텀 BGM 사전 로딩도 시작합니다.
 
 ### 3) 인게임 씬 (In-Game HUD & Controller)
-- **타겟 클래스**: `HUDControl`, `RhythmGameController`, `CoverArtController`
+- **타겟 클래스**: `RhythmGameController`, `CoverArtController` (`HUDControl`은 `RefreshSongMetaUI` 로그만 남기고 값은 바꾸지 않음)
 - **주입 메커니즘**:
-  - `HUDControl.Awake` 단 1회 시점에 `cachedCover` 및 `songCoverImage.sprite`를 세팅하여 스팸 갱신과 프레임 드랍 노이즈를 완전 제거합니다.
-  - `RhythmGameController.TriggerAudioStartIfReady` 시점에 커스텀 BGM 스트리밍 및 강제 오디오 전환을 보장합니다.
+  - `RhythmGameController.Start` Postfix에서 미리 로드된 커스텀 BGM 클립, 커스텀 BGA, `coverArtController` 하위 `Image`의 커버를 먼저 할당합니다.
+  - `CoverArtController.Initialize` Postfix에서 커버 이미지 계층(`ApplyCustomCoverToHierarchy`)을 다시 교체합니다.
+  - `RhythmGameController.TriggerAudioStartIfReady` 시점에 커스텀 BGM 클립 할당을 보장합니다 (아직 로딩 중이면 음소거 후 로드되면 재생).
   - `RhythmGameController.LoadVideo` 및 `PlayVideoWithOffset` 시점에 BGA 비디오 URL을 연동합니다.
 
 ### 4) 결과 화면 (Result Scene)
@@ -102,6 +116,6 @@ player.Play();
 | :--- | :--- | :--- |
 | **BGA 비디오 미출력/검은 화면** | `VideoPlayer.source`가 `VideoClip`인 상태에서 `url`만 설정함 | `player.source = VideoSource.Url;` 설정 후 `Prepare()` → `Play()` 호출 |
 | **PNG 이미지 자글거림/계단현상** | `Texture2D` 기본 로딩 필터가 `FilterMode.Point`임 | `tex.filterMode = FilterMode.Bilinear; tex.wrapMode = TextureWrapMode.Clamp;` 적용 |
-| **인게임/로딩 씬 커버 복원 현상** | 게임 내 비동기 코루틴이 후속으로 원본 `GameData` 커버를 재할당함 | `WaitForGameDataAndUpdateUI` 코루틴 직후 및 `HUDControl.Awake` 단 1회 세팅 훅 추가 |
+| **인게임/로딩 씬 커버 복원 현상** | 게임 내 비동기 처리가 후속으로 원본 `GameData` 커버를 재할당함 | 로딩 씬은 `Start` / `InitializeAndPlayAnimations` / `HandleEmptyFields` Postfix에서 재적용, 인게임은 `RhythmGameController.Start` / `CoverArtController.Initialize` Postfix에서 재적용 |
 | **곡 리스트 전체 커버 교체 문제** | `SetSelected` 혹은 전역 `TrackCover` Getter에 무차별 훅을 걺 | `MainTrackList.tracks` 타겟 데이터 객체의 `MainTrackListBlock.TrackCover` 핀포인트 주입으로 변경 |
 | **HUD 갱신 시 이미지 떨림/프레임 드랍** | `RefreshSongMetaUI` 등 매 프레임 실행 루프에서 스프라이트 재할당 | `if (targetImage.sprite == sprite) return;` 중복 세팅 방지 검사 적용 |

@@ -51,7 +51,7 @@ flowchart LR
 
 ## 4. 커스텀 차트 주입 & 잔여 노트 소탕(Purge) 가이드
 
-커스텀 차트(BMS 또는 특정 테스트 레인 차트)를 주입할 때 기존 원본 곡의 드롭 노트를 완전히 소탕하려면 아래와 같이 이중 클리어 패치를 적용합니다.
+커스텀 차트를 주입할 때 기존 원본 곡의 드롭 노트를 소탕하고 BMS 드롭 노트로 바꾸는 패치입니다 (`InGameRhythmHooks.cs`의 실제 코드 요약). 레인 노트는 그보다 먼저 `LoadKoreographyEvents` Postfix에서 교체되고, 이 Postfix는 `InitializeKoreographyTracks`가 끝난 뒤에 실행됩니다.
 
 ```csharp
 [HarmonyPatch(typeof(RhythmGameController), "InitializeKoreographyTracks")]
@@ -59,29 +59,35 @@ public static class RhythmGameController_InitializeKoreographyTracks_Patch
 {
     public static void Postfix(RhythmGameController __instance)
     {
-        if (__instance == null) return;
+        if (__instance == null || __instance.playingKoreo == null) return;
+        var koreo = __instance.playingKoreo;
 
         if (HwaAssetManager.IsTargetTrackActive)
         {
-            // 1. 드롭 심벌 전용 독립 배열 완전 초기화
-            if (__instance.dropEventSamples != null) 
-                __instance.dropEventSamples.Clear();
-                
-            if (__instance.processedDropSamples != null) 
-                __instance.processedDropSamples.Clear();
-                
+            // 1. 드롭 심벌 전용 독립 배열 초기화
+            if (__instance.dropEventSamples != null) __instance.dropEventSamples.Clear();
+            if (__instance.processedDropSamples != null) __instance.processedDropSamples.Clear();
             __instance.nextDropEventIdx = 0;
 
-            // 2. Koreography 원본 차트 트랙 정리
-            var koreo = __instance.playingKoreo;
-            if (koreo != null && koreo.Tracks != null)
+            // 2. BMS 14번 채널(드롭 레인) 노트를 dropEventSamples에 다시 채움
+            var bmsChart = HwaAssetManager.LoadedBmsChart;
+            if (bmsChart != null && bmsChart.Notes.Count > 0 && __instance.dropEventSamples != null)
+            {
+                foreach (var n in bmsChart.Notes)
+                {
+                    if (BmsLaneMapper.ResolveNoteLane(n) == BmsLaneMapper.Drop)
+                        __instance.dropEventSamples.Add(n.SamplePosition);
+                }
+            }
+
+            // 3. BMS가 없는 곡만: 원본 Koreography 트랙 중 hihat_3 외 이벤트를 비움
+            //    (원본 에셋의 mEventList를 직접 수정하므로 BMS 곡에서는 하지 않는다)
+            if (koreo.Tracks != null && bmsChart == null)
             {
                 for (int i = 0; i < koreo.Tracks.Count; i++)
                 {
                     var trk = koreo.Tracks[i];
                     if (trk == null || trk.mEventList == null) continue;
-                    
-                    // 지정된 타겟 레인 이외의 트랙 이벤트 완전 비우기
                     if (!string.Equals(trk.EventID, "hihat_3", StringComparison.OrdinalIgnoreCase))
                     {
                         trk.mEventList.Clear();

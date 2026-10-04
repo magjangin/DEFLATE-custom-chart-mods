@@ -31,7 +31,7 @@ namespace DEFLATE_custom_chart.Core
                 MelonLogger.Msg($"[DeflateMod] 'savecustomkey' folder created at: {saveCustomKeyPath}");
             }
 
-            // savecustomkey/mod_config.txt 설정 로드 및 자동 생성
+            // savecustomkey/config.txt 설정 로드 및 자동 생성
             ModConfig.Initialize();
 
             // hwa/ 에셋 매니저 초기화 및 3종 에셋(BGM, BGA, Cover) 스캔

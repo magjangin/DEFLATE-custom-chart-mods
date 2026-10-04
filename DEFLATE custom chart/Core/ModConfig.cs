@@ -175,7 +175,7 @@ namespace DEFLATE_custom_chart.Core
                     "# 흔들림 폭 (픽셀). 너무 크면 레인 밖으로 나가 잘릴 수 있습니다.",
                     $"NoteSwayAmplitude={Instance.NoteSwayAmplitude.ToString(CultureInfo.InvariantCulture)}",
                     "",
-                    "# 흔들림 속도 (초당 왕복 횟수)",
+                    "# 흔들림 속도. 노트 하나가 판정선까지 내려오는 동안 (값 × 5)번 왕복합니다.",
                     $"NoteSwaySpeed={Instance.NoteSwaySpeed.ToString(CultureInfo.InvariantCulture)}",
                     "",
                     "# 판정선에 가까워지면 흔들림을 잦아들게 함 (1 = 켜짐, 0 = 꺼짐)",

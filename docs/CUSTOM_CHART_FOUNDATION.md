@@ -17,8 +17,8 @@ Mod의 핵심 목표는 다음 세 가지입니다:
 
 ## 2. 내부 데이터 아키텍처 & 파이프라인
 
-### 2.1 곡 메타데이터 구조 (`MainTrackList` & `TrackData`)
-DEFLATE는 `MainTrackList` 컴포넌트 내에 전체 곡 데이터 배열 (`TrackData[] tracks`)을 관리합니다.
+### 2.1 곡 메타데이터 구조 (`MainTrackList` & `MainTrackListBlock`)
+DEFLATE는 `MainTrackList` 컴포넌트 내에 전체 곡 데이터 배열 (`MainTrackListBlock[] tracks`, Il2Cpp 쪽 타입은 `Il2CppReferenceArray<MainTrackListBlock>`)을 관리합니다. 곡 하나 = `MainTrackListBlock` 컴포넌트 하나입니다.
 
 | 필드 / 프로퍼티 | 타입 | 설명 |
 | :--- | :--- | :--- |
@@ -69,7 +69,8 @@ DEFLATE는 Unity 전용 리듬게임 미들웨어인 **SonicBloom Koreography**�
 - **`Koreography`**: 차트의 최상위 클래스
   - `SampleRate`: 오디오 샘플 레이트 (예: `44100` Hz)
   - `Tracks`: `List<KoreographyTrack>` (각 트랙은 레인 또는 특정 이벤트 채널 담당) — **로드된 원본 차트 데이터**이며, 런타임에 `LaneController.laneEvents`를 아무리 비우거나 갈아끼워도 이쪽은 그대로 유지된다(실측 확인됨).
-  - ⚠️ 주의: "`laneEvents`가 진짜 노트 데이터니까 거기만 건드리면 된다"는 식으로 **프로퍼티 자체를 정답으로 오해하기 쉽다.** 실제 핵심은 프로퍼티가 아니라 **타이밍**이다 — 자세한 내용은 4.4.1 참고.
+    - 예외: 이 모드는 **BMS가 없는 커스텀 곡**일 때 `InitializeKoreographyTracks` Postfix에서 `hihat_3` 외 트랙의 `mEventList`를 직접 비운다 ([drop_note_analysis.md](drop_note_analysis.md) 4절). BMS가 있는 곡은 원본 트랙을 건드리지 않는다.
+  - ⚠️ 주의: "`laneEvents`가 진짜 노트 데이터니까 거기만 건드리면 된다"는 식으로 **프로퍼티 자체를 정답으로 오해하기 쉽다.** 실제 핵심은 프로퍼티가 아니라 **타이밍**이다 — 자세한 내용은 4.5.1 참고.
 - **`KoreographyTrack`**:
   - `EventID`: 트랙 식별자
   - `mEventList`: `List<KoreographyEvent>`
@@ -108,10 +109,20 @@ BMS 또는 표준 MIDI/Tick 기반 커스텀 차트를 Koreography 이벤트로 
 
 $$\text{Time (seconds)} = \frac{\text{tick} \times 240}{\text{bpm} \times \text{resolution}}$$
 
-*(기본 resolution = 480 또는 960 tick per beat 기준이며, 4/4 박자 1마디 = 1920 ticks일 경우)*
+여기서 `240`은 4/4 한 마디(4박 × 60초)이므로 **resolution은 "1마디당 틱 수"**입니다. 이 모드의 `BmsParser`는 `TicksPerMeasure = 3840`(1박 = 960틱)을 씁니다:
+
+$$\text{Time (seconds)} = \frac{\text{tick} \times 240}{\text{bpm} \times 3840}$$
+
+*(resolution을 "1박당 틱 수"(예: 960)로 넣으면 4배 틀린 값이 나옵니다. 1박 기준으로 쓰려면 `tick × 60 / (bpm × 960)`)*
+
+BPM이 바뀌는 곡은 직전 BPM 이벤트까지의 누적 시간에 위 공식을 이어 붙입니다 (`BmsParser.CalculateTimeAtTick`):
+
+$$\text{Time} = \text{prevTime} + \frac{(\text{tick} - \text{prevTick}) \times 240}{\text{bpm} \times 3840}$$
 
 오디오 샘플 연동 변환 공식:
-$$\text{StartSample} = \left( \frac{\text{tick} \times 240}{\text{bpm} \times \text{resolution}} \right) \times \text{SampleRate}$$
+$$\text{StartSample} = \text{Time (seconds)} \times \text{SampleRate}$$
+
+*(현재 `BmsParser`는 `SampleRate = 44100`으로 고정해 `SamplePosition`을 계산합니다.)*
 
 ---
 
@@ -120,27 +131,40 @@ $$\text{StartSample} = \left( \frac{\text{tick} \times 240}{\text{bpm} \times \t
 본 레포지토리 모드(`DEFLATE_custom_chart`)는 다음과 같은 훅 클래스들로 모듈화되어 구성되어 있습니다:
 
 ### 4.1 `SongListHooks.cs` (곡 목록 및 패널 모니터링)
-- `MainTrackList.Start` (Postfix): 수록된 모든 트랙 카탈로그 정보를 스캔하여 제목, 아티스트, 각 에셋 Key 로그 출력.
-- `MainTrackList.GoToTrack` / `TrackListBlockCtrl.SetSelected`: 곡 탐색 커서 모니터링.
-- `MainTrackList.GotoSceneData` (Prefix): 플레이 버튼 클릭 시 최종 결정된 곡 ID 로그 확인.
+- `MainTrackList.Start` (Postfix): 수록된 모든 트랙 카탈로그 정보를 스캔하여 제목, 아티스트, 각 에셋 Key 로그 출력. 곡 목록 프리뷰 컨텍스트(`IsInSongSelectContext`)를 다시 켬.
+- `MainTrackList.GoToTrack` / `TrackListBlockCtrl.OnPointerClick`: 곡 탐색 커서/클릭 로그.
+- `TrackListBlockCtrl.SetSelected` (Postfix): 선택된 블록의 ID로 활성 커스텀 곡(`Active`)을 갱신하고, 커스텀 곡이면 목록 UI 자켓을 교체.
+- `MainTrackList.GotoSceneData` (Prefix): 플레이 확정 시 커스텀 곡이면 `gameData`의 제목/아티스트/BGA 제작자/앨범/커버를 커스텀 값으로 미리 주입.
+- `DiffCtrl.UpdateStarDisplay` / `SelectNextDifficulty` / `SelectPreviousDifficulty` (Postfix): 커스텀 곡의 난이도 별 개수(info.txt의 easy/normal/hard)를 UI에 반영.
 
-### 4.2 `LoadingSceneHooks.cs` (로딩 및 씬 전환)
-- `LoadingGamePlay.Start` (Postfix): 플레이 시작 전 `gameData` 검증. Target Koreo, Audio Key, PV Key 확인.
-- `LoadingManager.LoadScene` (Prefix): 전환되는 씬 이름 인터셉트.
+### 4.2 `SongInjectorHooks.cs` (커스텀 곡 사본 주입)
+- `MainTrackList.Start` (Postfix): `WindShifter` 트랙을 복제해 `hwa/` 커스텀 곡 수만큼 `MainTrackListBlock` 사본을 만들고 `tracks` 배열을 확장. 사본마다 `RegenerateID()`로 새 ID를 받고(원본과 같으면 사본을 버림), 메타데이터/커버/난이도 별을 입힘.
 
-### 4.3 `AssetManagerHooks.cs` (에셋 관리자 인터셉터)
-- `TrackAssetManager.LoadAudioClip` (Prefix): BGM 클립 로드 요청 key 인터셉트.
-- `TrackAssetManager.LoadVideoClip` / `LoadVideoURL` (Prefix): BGA 비디오 클립 로드 요청 key 인터셉트.
-- `Bank_PV_Ctrl.PlayPVVideo` / `LoadVideoAndAudio`: PV 메뉴 에셋 로딩 모니터링.
+### 4.3 `LoadingSceneHooks.cs` (로딩 및 씬 전환)
+- `LoadingGamePlay.Start` (Postfix): 곡 목록 프리뷰 컨텍스트를 끄고, 커스텀 곡이면 로딩 UI 메타데이터 주입 + BGM 사전 로딩 시작.
+- `LoadingGamePlay.InitializeAndPlayAnimations` / `HandleEmptyFields` (Postfix): 로딩 UI가 원본 값으로 되돌아가지 않도록 커스텀 메타데이터(제목/아티스트/매퍼/앨범/난이도/커버)를 다시 적용.
+- `LoadingManager.LoadScene` (Prefix): 전환되는 씬 이름 로그.
 
-### 4.4 `InGameRhythmHooks.cs` (인게임 리듬 게임 제어)
-- `RhythmGameController.Start`: 인게임 진입 확인 및 Auto Mode, Note Speed, Track ID 출력.
-- `RhythmGameController.InitializeKoreographyTracks` (Postfix): `playingKoreo`에 접근하여 트랙 수/총 노트 수 로그 출력.
-  > ⚠️ **실측 확인:** 이 메서드의 **Prefix 시점에는 `__instance.playingKoreo`가 아직 `null`**이다. `playingKoreo`는 `InitializeKoreographyTracks` 메서드 내부에서 세팅되므로, Prefix에서 `playingKoreo`를 읽거나 트랙을 미리 조작하려는 시도는 전부 조용히 실패한다(예외 없이 null 체크에 걸려 리턴됨). 노트 데이터를 만지려면 4.4.1의 `LoadKoreographyEvents`를 노려야 한다.
-- `RhythmGameController.UpdateSongDurationScrollbar`: 진행률 스크롤바 갱신 모니터링.
-- `RhythmGameController.LoadVideo` / `PlayVideoWithOffset`: BGA 비디오 플레이어 지정 URL 및 Offset 제어.
+### 4.4 `AssetManagerHooks.cs` (에셋 관리자 인터셉터)
+- `TrackAssetManager.LoadAudioClip` (Prefix): 곡 목록 프리뷰에서 커스텀 곡의 오디오 Key가 요청되면 원본 로드를 건너뛰고 커스텀 BGM을 콜백으로 넘김.
+- `TrackAssetManager.LoadVideoClip` / `LoadVideoURL` (Prefix): BGA 비디오 로드 요청 key 로그.
+- `Bank_PV_Ctrl.PlayPVVideo` / `LoadVideoAndAudio`, `SimpleRandomVideo.LoadVideoSmart` / `LoadVideo` (Prefix): 커스텀 곡이면 커스텀 BGA로 교체.
+- `VideoPlayer.Play` / `Prepare` (Prefix, 전역): 커스텀 곡이 활성 상태면 모든 VideoPlayer의 소스를 커스텀 BGA URL로 강제.
+- `MainTrackList.Start` (Postfix, `Priority.Last`): 사본 블록의 `TrackCover`를 각자의 커스텀 PNG로 교체.
+- `Panel_Result.GetPreviewClip` / `Awake` / `ApplyText`: 결과 화면 미리듣기 BGM, 자켓, BGA를 커스텀 에셋으로 교체.
 
-#### 4.4.1 `RhythmGameController.LoadKoreographyEvents` — ✅ 실전 검증된 노트 주입 "타이밍"
+### 4.5 `InGameRhythmHooks.cs` (인게임 리듬 게임 제어)
+- `RhythmGameController.Start` (Postfix): 인게임 진입 로그, 활성 커스텀 곡 갱신, `AutoPlay` 설정 시 오토 모드 강제, 커스텀 BGM/BGA/커버 사전 할당.
+- `RhythmGameController.InitializeKoreographyTracks` (Postfix): 트랙 수/총 노트 수 로그. 커스텀 곡이면 `dropEventSamples`를 비우고 BMS 14번 채널 드롭 노트를 다시 채움 (BMS가 없는 곡은 `hihat_3` 외 원본 트랙 이벤트를 비움).
+  > ⚠️ **실측 확인:** 이 메서드의 **Prefix 시점에는 `__instance.playingKoreo`가 아직 `null`**이다. `playingKoreo`는 `InitializeKoreographyTracks` 메서드 내부에서 세팅되므로, Prefix에서 `playingKoreo`를 읽거나 트랙을 미리 조작하려는 시도는 전부 조용히 실패한다(예외 없이 null 체크에 걸려 리턴됨). 노트 데이터를 만지려면 4.5.1의 `LoadKoreographyEvents`를 노려야 한다.
+- `RhythmGameController.LoadKoreographyEvents` (Postfix): 레인 노트를 BMS 노트로 교체 (4.5.1).
+- `RhythmGameController.LoadLineBarEvents` / `ReplaceLineBarEventsFromTrack` / `ReplaceLineBarEventsFromTrackAtSample` (Postfix): 라인바를 BMS 마디선/박자선으로 교체.
+- `RhythmGameController.TriggerAudioStartIfReady` (Prefix): BGM 재생 직전에 커스텀 BGM 클립 할당 (아직 로딩 중이면 음소거 후 로드되면 재생).
+- `RhythmGameController.LoadVideo` (Prefix) / `PlayVideoWithOffset` (Prefix) / `OnVideoStarted` (Postfix): BGA 비디오 URL을 커스텀 BGA로 교체, 재생 로그.
+- `CoverArtController.Initialize` (Postfix): 인게임 커버 이미지 계층을 커스텀 PNG로 교체.
+- `RhythmGameController.ChangeDrumMode` / `ChangeDrumModeScore` / `UpdateSongDurationScrollbar`: 드럼 모드 전환, 재생 진행률(10초마다) 로그.
+
+#### 4.5.1 `RhythmGameController.LoadKoreographyEvents` — ✅ 실전 검증된 노트 주입 "타이밍"
 
 > ❗ **정정:** 처음엔 "`LaneController.laneEvents`가 실제 플레이되는 노트 리스트니까 그 프로퍼티 자체가 조작 지점"이라고 정리했는데, 이건 절반만 맞는 얘기다. `laneEvents`는 게임 곳곳(`Update`, `CheckSpawnNext`, `pendingEventIdx` 진행 등)에서 계속 읽고 쓰이는 **살아있는 런타임 상태**라서, 아무 시점에나 건드린다고 되는 게 아니다. 진짜 핵심은 **"언제 건드리느냐"**다 — `koreo.Tracks[].mEventList`(원본, 항상 유효)가 `laneEvents`(런타임 사본)로 **옮겨지는 그 순간**을 정확히 잡아야 하고, 그 순간이 바로 아래 `LoadKoreographyEvents`다. 프로퍼티 이름이 아니라 **호출 타이밍**을 찾은 게 이번에 검증된 내용이다.
 
@@ -148,54 +172,42 @@ $$\text{StartSample} = \left( \frac{\text{tick} \times 240}{\text{bpm} \times \t
 
 - Postfix에서 `lane.laneEvents`를 비우면(`Clear()`) 그 레인은 노트 없이 정상 플레이된다 (크래시/예외 없음, BGM·BGA·판정 로직 전부 정상 동작).
 - `koreo.Tracks[].mEventList`(원본)는 이 시점에도 항상 온전하므로, 여기서 원본 데이터를 참고해 원하는 노트만 골라 `lane.laneEvents`에 다시 채워 넣으면 된다.
-- `laneEvents`는 이 코드베이스의 디컴파일 헤더 기준 순수 `System.Collections.Generic.List<KoreographyEvent>`로 노출되어 있어 `Clear()` / `Add()`가 그대로 동작한다.
-- `beat`(라인바) 트랙은 `LaneController`가 아닌 `LineBarController`가 처리하므로 이 훅으로는 안 잡힌다. `activeLineBars`는 별개로 계속 표시됨.
+- `laneEvents`의 실제 타입은 `Il2CppSystem.Collections.Generic.List<KoreographyEvent>`다 (Il2CppInterop은 mscorlib 타입을 `Il2CppSystem.*`으로 생성한다. 예전 디컴파일 덤프는 네임스페이스를 지운 채 `List<KoreographyEvent>`로 출력해서 `System.Collections.Generic.List`처럼 보였다). `Clear()` / `Add()`는 그대로 동작하고, 리스트를 통째로 바꿀 때는 `new Il2CppSystem.Collections.Generic.List<KoreographyEvent>()`를 넣어야 한다 (라인바 교체 코드 참고).
+- `beat`(라인바) 트랙은 `LaneController`가 아닌 `LineBarController`가 처리하므로 이 훅으로는 안 잡힌다. 라인바는 `LoadLineBarEvents` 훅에서 따로 교체한다.
+
+현재 모드의 BMS 주입 부분 (요약):
 
 ```csharp
-// 검증됨: DEFLATE custom chart/Hooks/InGameRhythmHooks.cs
-[HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.LoadKoreographyEvents))]
-public static class RhythmGameController_LoadKoreographyEvents_Patch
+// DEFLATE custom chart/Hooks/InGameRhythmHooks.cs — RhythmGameController_LoadKoreographyEvents_Patch.Postfix 중 BMS 분기
+var bmsChart = HwaAssetManager.LoadedBmsChart;
+if (bmsChart != null && bmsChart.Notes.Count > 0)
 {
-    public static void Postfix(RhythmGameController __instance, string trackID, LaneController lane)
+    lane.laneEvents?.Clear();
+
+    // trackID("hihat_2") 또는 laneType("Kick_Right") ➔ 레인 슬롯("lane_2")
+    string targetLane = BmsLaneMapper.ResolveLaneId(trackID, lane.laneType.ToString());
+    if (targetLane != null)
     {
-        if (lane == null) return;
-        if (__instance == null || __instance.playingKoreo == null || __instance.playingKoreo.Tracks == null)
+        foreach (var bmsNote in bmsChart.Notes)
         {
-            lane.laneEvents?.Clear();
-            return;
+            // BMS 채널 ➔ 레인 슬롯 (16/11/12/13 ➔ lane_1~4, 14 ➔ drop)
+            if (!string.Equals(BmsLaneMapper.ResolveNoteLane(bmsNote), targetLane, StringComparison.OrdinalIgnoreCase)) continue;
+
+            int startSample = bmsNote.SamplePosition;
+            int endSample = bmsNote.IsLongNote
+                ? bmsNote.LongNoteEndSamplePosition                      // 홀드: 짝이 맞은 Tail 위치
+                : startSample + (int)(koreo.SampleRate * 0.1f);          // 단타: 0.1초 길이
+
+            var newEvt = new KoreographyEvent();
+            newEvt.StartSample = startSample;
+            newEvt.EndSample = endSample;
+            lane.laneEvents.Add(newEvt);
         }
-
-        var koreo = __instance.playingKoreo;
-
-        // 예: 곡 전체(9개 게임플레이 레인)에서 StartSample > 0인 가장 빠른 노트를 찾아
-        // 그 레인에만 5초 간격 3연발로 다시 채워 넣고, 나머지 레인은 비운다.
-        string globalFirstTrackID = null;
-        int globalFirstStart = int.MaxValue, globalFirstEnd = 0;
-
-        foreach (var trk in koreo.Tracks)
-        {
-            if (trk == null || trk.EventID == "beat" || trk.mEventList == null) continue;
-            foreach (var ev in trk.mEventList)
-            {
-                if (ev != null && ev.StartSample > 0 && ev.StartSample < globalFirstStart)
-                {
-                    globalFirstStart = ev.StartSample;
-                    globalFirstEnd = ev.EndSample;
-                    globalFirstTrackID = trk.EventID;
-                }
-            }
-        }
-
-        lane.laneEvents?.Clear();
-        if (trackID == globalFirstTrackID && globalFirstTrackID != null)
-        {
-            int duration = globalFirstEnd - globalFirstStart;
-            int intervalSamples = koreo.SampleRate * 5; // 5초 간격
     }
 }
 ```
 
-#### 4.4.2 롱노트(Hold Note / Long Note) 런타임 생성 원리 및 검증 — ✅ 실전 검증 완료
+#### 4.5.2 롱노트(Hold Note / Long Note) 런타임 생성 원리 및 검증 — ✅ 실전 검증 완료
 
 Koreography 엔진 기반의 DEFLATE에서 일반 단타(숏노트)와 롱노트(Hold Note)를 구분하는 핵심 프로퍼티는 `KoreographyEvent`의 **`StartSample`과 `EndSample` 오디오 샘플 차이(`Duration = EndSample - StartSample`)**입니다.
 
@@ -204,37 +216,42 @@ Koreography 엔진 기반의 DEFLATE에서 일반 단타(숏노트)와 롱노트
   - 오디오 샘플 레이트가 `SampleRate = 44,100Hz` 일 때 **1.5초 지속되는 롱노트**를 생성하려면 `longNoteDuration = (int)(koreo.SampleRate * 1.5f)` = `66,150` 샘플을 지정합니다.
   - 즉, `new KoreographyEvent { StartSample = start, EndSample = start + longNoteDuration }` 형태로 생성하여 `lane.laneEvents`에 추가하면, 런타임 `LaneController` 및 `NoteObject`가 이를 자동으로 인식하여 롱노트 렌더링(Hold Visual Ribbon) 및 롱노트 홀드 판정 로직을 실행합니다.
 
+아래는 이 검증에 쓴 코드로, 지금은 **BMS 파일이 없는 커스텀 곡**의 대체 경로로 `InGameRhythmHooks.cs`에 남아 있습니다 (곡 전체에서 `StartSample > 0`인 가장 빠른 노트 위치 `globalFirstStart`부터 5초 간격으로 10개).
+
 ```csharp
-// 실전 검증 완료: 특정 레인(예: hihat_3)에 1.5초 롱노트 3연발 런타임 주입
+// 실전 검증 완료: 특정 레인(hihat_3)에 1.5초 롱노트 10연발 런타임 주입 (BMS가 없는 곡의 대체 경로)
 bool isTargetLane = string.Equals(trackID, "hihat_3", StringComparison.OrdinalIgnoreCase)
     || string.Equals(lane.laneType.ToString(), "HiHat_3", StringComparison.OrdinalIgnoreCase);
+
+lane.laneEvents?.Clear();
 
 if (isTargetLane && globalFirstStart != int.MaxValue)
 {
     int longNoteDuration = (int)(koreo.SampleRate * 1.5f); // 1.5초 길이 롱노트
     int intervalSamples = koreo.SampleRate * 5;             // 5초 간격
 
-    lane.laneEvents?.Clear();
-    for (int copy = 0; copy < 3; copy++)
+    for (int copy = 0; copy < 10; copy++)
     {
         int start = globalFirstStart + intervalSamples * copy;
-        lane.laneEvents.Add(new KoreographyEvent
-        {
-            StartSample = start,
-            EndSample = start + longNoteDuration
-        });
+        var newEvt = new KoreographyEvent();
+        newEvt.StartSample = start;
+        newEvt.EndSample = start + longNoteDuration;
+        lane.laneEvents.Add(newEvt);
     }
-}
-else
-{
-    lane.laneEvents?.Clear();
 }
 ```
 
-### 4.5 `NoteHooks.cs`
-- `RhythmGameController.RecalculateAllNoteCount`: 총 노트 수 재계산 시점 추적.
+### 4.6 `NoteHooks.cs`
+- `RhythmGameController.RecalculateAllNoteCount` (Postfix): 총 노트 수 재계산 시점 추적.
+- `GameData.SaveGameData` (Prefix): `BlockSave=1`이면 세이브 호출 자체를 건너뜀 (원곡 포함, `GameData` 전체가 저장되지 않음).
+- `NoteObject.Initialize` (Postfix): `NoteSpeedChaos=1`이면 `moveStartSample`을 당기거나 미뤄 노트별/레인별 낙하 속도를 바꿈 (판정 시점 `moveEndSample`은 그대로).
+- `NoteObject.UpdateNotePosition` (Postfix): `NoteSway=1`이면 노트 x 위치에 사인파 흔들림을 더함 (낙하 진행률 기준, 노트 하나당 `NoteSwaySpeed × 5`번 왕복).
 
-> `LaneController.AddEventToLane(KoreographyEvent evt)`도 존재하지만 **개별 노트 하나씩** 받는 시그니처라 노트 여러 개를 넣으려면 반복 호출이 필요하다. 차트 전체를 한 번에 갈아끼우는 용도로는 4.4.1의 `LoadKoreographyEvents` 쪽이 더 적합하다(검증 완료). `AddEventToLane`은 실시간으로 노트 하나를 즉석 추가하고 싶을 때 정도만 고려.
+> `LaneController.AddEventToLane(KoreographyEvent evt)`도 존재하지만 **개별 노트 하나씩** 받는 시그니처라 노트 여러 개를 넣으려면 반복 호출이 필요하다. 차트 전체를 한 번에 갈아끼우는 용도로는 4.5.1의 `LoadKoreographyEvents` 쪽이 더 적합하다(검증 완료). `AddEventToLane`은 실시간으로 노트 하나를 즉석 추가하고 싶을 때 정도만 고려.
+
+### 4.7 `HUDHooks.cs` / `KeyIndicatorHooks.cs`
+- `HUDControl.RefreshSongMetaUI` (Postfix): 인게임 HUD의 커버/제목이 바뀔 때만 로그 (값은 바꾸지 않음).
+- `Key_indicator.Start` (Prefix): 곡 시작 키 가이드 UI를 끄고 원본 `Start`를 막음 (모든 곡, 설정 없음).
 
 ---
 
@@ -281,18 +298,24 @@ public static class MainTrackList_Start_Patch
 }
 ```
 
-### 단계 1: 커스텀 에셋 준비
-- **오디오:** WAV / OGG 파일 (SampleRate: 44100Hz 또는 48000Hz 권장)
-- **차트:** BMS / JSON 형태의 타임스탬프 데이터를 `KoreographyEvent` 배열로 변환
+> 위 코드는 원리 설명용 최소 예제입니다. 실제 구현(`SongInjectorHooks`)은 다음이 다릅니다:
+> - **Postfix**에서 실행하고, 복제 원본은 `tracks[0]`이 아니라 제목/ID에 `WindShifter`가 들어간 트랙입니다.
+> - `hwa/`에서 스캔된 커스텀 곡 **수만큼** 사본을 만들고, 원본과 같은 부모(`sourceBlock.transform.parent`) 아래에 둡니다.
+> - ID는 하드코딩하지 않고 `RegenerateID()`로 새로 받습니다. 차트/오디오/비디오 Key는 원본(WindShifter) 값을 그대로 씁니다.
 
-### 단계 2: 에셋 Key 인터셉트
-`TrackAssetManager.LoadAudioClip`의 Prefix 훅에서 `ref string key` 값을 감지하여 타겟 곡의 Key일 경우 로컬 커스텀 `AudioClip`을 반환하거나 키를 리다이렉트합니다.
+### 단계 1: 커스텀 에셋 준비
+- **오디오:** OGG / WAV / MP3 파일
+- **차트:** BMS 파일 (`.bms`/`.bme`/`.bml`) — 채널/키음 규격은 [bms_mapping_spec.md](bms_mapping_spec.md). `BmsParser`가 노트를 틱 ➔ 초 ➔ 샘플 위치로 바꾸고, 인게임 훅이 `KoreographyEvent`로 만들어 넣습니다.
+
+### 단계 2: 오디오 교체
+- 곡 목록 프리뷰: `TrackAssetManager.LoadAudioClip` Prefix에서 커스텀 곡의 오디오 Key가 요청되면 원본 로드를 건너뛰고 커스텀 BGM `AudioClip`을 콜백으로 넘깁니다.
+- 인게임: `RhythmGameController.Start` / `TriggerAudioStartIfReady`에서 `audioCom.clip`을 커스텀 BGM으로 바꿉니다.
 
 ### 단계 3: 곡 메타데이터 변조
-`MainTrackList.Start` Postfix에서 `tracks` 배열 내 특정 곡의 `TrackTitle`, `TrackAuthor`, `EZ_TrackKore_Key` 등을 커스텀 데이터로 수정합니다.
+`MainTrackList.Start` Postfix에서 만든 **사본 블록**의 `TrackTitle`, `TrackAuthor`, `TrackAlbum`, `TrackCover`, 난이도 별 등을 info.txt 값으로 바꾸고, 플레이 확정 시(`GotoSceneData`)와 로딩 씬에서 `gameData`에도 같은 값을 넣습니다.
 
 ### 단계 4: 노트 이벤트 런타임 주입 (검증됨)
-`RhythmGameController.LoadKoreographyEvents(trackID, lane)` 훅(Postfix)에서 `trackID`에 맞는 커스텀 `KoreographyEvent` 목록을 `new KoreographyEvent { StartSample = ..., EndSample = ... }`로 생성해 `lane.laneEvents`에 채워 넣습니다. (4.4.1 참고 — `InitializeKoreographyTracks` Prefix에서는 `playingKoreo`가 아직 null이라 이 방식은 동작하지 않음.)
+`RhythmGameController.LoadKoreographyEvents(trackID, lane)` 훅(Postfix)에서 `trackID`에 맞는 커스텀 `KoreographyEvent` 목록을 `new KoreographyEvent { StartSample = ..., EndSample = ... }`로 생성해 `lane.laneEvents`에 채워 넣습니다. (4.5.1 참고 — `InitializeKoreographyTracks` Prefix에서는 `playingKoreo`가 아직 null이라 이 방식은 동작하지 않음.)
 
 ---
 

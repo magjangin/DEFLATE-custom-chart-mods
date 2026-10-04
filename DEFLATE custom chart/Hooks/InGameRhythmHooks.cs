@@ -146,7 +146,7 @@ namespace DEFLATE_custom_chart.Hooks
                     if (__instance.processedDropSamples != null) __instance.processedDropSamples.Clear();
                     __instance.nextDropEventIdx = 0;
 
-                    // 2. 드롭 레인으로 라우팅되는 BMS 노트(14/54 채널 또는 drop 키음)를 dropEventSamples에 주입
+                    // 2. 드롭 레인으로 라우팅되는 BMS 노트(14번 채널)를 dropEventSamples에 주입
                     var bmsChart = HwaAssetManager.LoadedBmsChart;
                     if (bmsChart != null && bmsChart.Notes.Count > 0 && __instance.dropEventSamples != null)
                     {
