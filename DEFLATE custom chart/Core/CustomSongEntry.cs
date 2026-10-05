@@ -177,10 +177,15 @@ namespace DEFLATE_custom_chart.Core
                         string val = parts[1].Trim();
                         if (string.IsNullOrEmpty(val)) continue;
 
+                        // BGA 키를 아티스트/매퍼보다 먼저 본다. ("BGA 아티스트"가 아티스트로, "영상 제작자"가 매퍼로 들어가는 것 방지)
+                        bool isBgaKey = key.Contains("bga") || key.Contains("pv") ||
+                            ((key.Contains("영상") || key.Contains("video")) &&
+                             (key.Contains("제작") || key.Contains("author") || key.Contains("maker")));
+
                         if (key.Contains("제목") || key.Contains("title")) { Meta.Title = val; titleFromFile = true; }
+                        else if (isBgaKey) Meta.BgaAuthor = val;
                         else if (key.Contains("아티스트") || key.Contains("artist")) Meta.Artist = val;
                         else if (key.Contains("앨범") || key.Contains("album")) { Meta.Album = val; albumFromFile = true; }
-                        else if (key.Contains("bga") || key.Contains("pv")) Meta.BgaAuthor = val;
                         else if (key.Contains("매퍼") || key.Contains("mapper") || key.Contains("제작자") || key.Contains("maker") || key.Contains("charter")) Meta.ChartAuthor = val;
                         else if (key.Equals("easy", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int ez)) Meta.EasyLevel = ez;
                         else if (key.Equals("normal", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int nm)) Meta.NormalLevel = nm;
@@ -212,6 +217,10 @@ namespace DEFLATE_custom_chart.Core
                 Chart = parser.ParseFile(BmsFilePath, targetSampleRate);
                 MelonLogger.Msg($"  - [BMS 파싱] '{Meta.Title}' ➔ '{Chart.Header.Title}' | BPM {Chart.Header.InitialBpm} | 노트 {Chart.Notes.Count}개");
                 MelonLogger.Msg($"    홀드 매칭: {Chart.HoldPairedCount}개 성사 | 짝 없는 시작 {Chart.HoldOrphanHeadCount}개(단타 강등) | 짝 없는 끝 {Chart.HoldOrphanTailCount}개(제거)");
+                foreach (var warning in Chart.Warnings)
+                {
+                    MelonLogger.Warning($"    [BMS 경고] '{FolderName}' {warning}");
+                }
             }
             catch (Exception ex)
             {
@@ -270,9 +279,14 @@ namespace DEFLATE_custom_chart.Core
             }
         }
 
-        public IEnumerator LoadBgmCoroutine(AudioSource targetAudioSource, bool forcePlay = true, Action<AudioClip> onLoaded = null)
+        /// <param name="onFailed">BGM 파일이 없거나 로드에 실패해 <paramref name="onLoaded"/>가 불리지 않을 때 대신 호출됩니다.</param>
+        public IEnumerator LoadBgmCoroutine(AudioSource targetAudioSource, bool forcePlay = true, Action<AudioClip> onLoaded = null, Action onFailed = null)
         {
-            if (string.IsNullOrEmpty(BgmFilePath) || !File.Exists(BgmFilePath)) yield break;
+            if (string.IsNullOrEmpty(BgmFilePath) || !File.Exists(BgmFilePath))
+            {
+                onFailed?.Invoke();
+                yield break;
+            }
 
             if (BgmClip != null)
             {
@@ -285,6 +299,7 @@ namespace DEFLATE_custom_chart.Core
             {
                 while (_isBgmLoading) yield return null;
                 if (BgmClip != null) ApplyLoadedBgm(targetAudioSource, forcePlay, onLoaded, fromCache: true);
+                else onFailed?.Invoke();
                 yield break;
             }
 
@@ -302,6 +317,7 @@ namespace DEFLATE_custom_chart.Core
 
             yield return www.SendWebRequest();
 
+            bool loaded = false;
             if (www.result == UnityWebRequest.Result.Success)
             {
                 BgmClip = DownloadHandlerAudioClip.GetContent(www);
@@ -309,6 +325,11 @@ namespace DEFLATE_custom_chart.Core
                 {
                     BgmClip.name = Path.GetFileNameWithoutExtension(BgmFilePath);
                     ApplyLoadedBgm(targetAudioSource, forcePlay, onLoaded, fromCache: false);
+                    loaded = true;
+                }
+                else
+                {
+                    MelonLogger.Error($"[커스텀 곡] BGM 클립 변환 실패 ('{Meta.Title}'): 요청은 성공했지만 AudioClip이 비어 있습니다.");
                 }
             }
             else
@@ -318,6 +339,8 @@ namespace DEFLATE_custom_chart.Core
 
             www.Dispose();
             _isBgmLoading = false;
+
+            if (!loaded) onFailed?.Invoke();
         }
 
         private void ApplyLoadedBgm(AudioSource targetAudioSource, bool forcePlay, Action<AudioClip> onLoaded, bool fromCache)

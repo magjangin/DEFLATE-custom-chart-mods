@@ -113,5 +113,8 @@ namespace DEFLATE_custom_chart.Core.Bms
 
         /// <summary>"홀드 끝"인데 짝이 없어 제거된 노트 수.</summary>
         public int HoldOrphanTailCount { get; set; }
+
+        /// <summary>파싱 중 건너뛴 줄 등 차트 제작자가 알아야 할 경고 (로그 출력용).</summary>
+        public List<string> Warnings { get; } = new List<string>();
     }
 }

@@ -187,13 +187,18 @@ namespace DEFLATE_custom_chart.Core
         // BGM (.wav, .mp3, .ogg) 에셋 코루틴 로딩 및 적용
         // =========================================================================
 
-        public static IEnumerator LoadCustomBgmCoroutine(AudioSource targetAudioSource, bool forcePlay = true, Action<AudioClip> onLoaded = null)
+        /// <param name="onFailed">선택된 커스텀 곡이 없거나 BGM 로드에 실패했을 때 호출됩니다.</param>
+        public static IEnumerator LoadCustomBgmCoroutine(AudioSource targetAudioSource, bool forcePlay = true, Action<AudioClip> onLoaded = null, Action onFailed = null)
         {
             var active = Active;
-            if (active == null) yield break;
+            if (active == null)
+            {
+                onFailed?.Invoke();
+                yield break;
+            }
 
             // 중첩 코루틴 지원 여부에 기대지 않고 내부 이터레이터를 직접 굴려 yield를 그대로 전달한다.
-            var inner = active.LoadBgmCoroutine(targetAudioSource, forcePlay, onLoaded);
+            var inner = active.LoadBgmCoroutine(targetAudioSource, forcePlay, onLoaded, onFailed);
             while (inner.MoveNext())
             {
                 yield return inner.Current;

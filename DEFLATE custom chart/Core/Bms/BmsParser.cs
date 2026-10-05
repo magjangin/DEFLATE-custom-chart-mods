@@ -140,8 +140,9 @@ namespace DEFLATE_custom_chart.Core.Bms
             {
                 chart.Header.Genre = ExtractHeaderValue(line, "#GENRE");
             }
-            else if (line.StartsWith("#BPM ", StringComparison.OrdinalIgnoreCase))
+            else if (line.StartsWith("#BPM", StringComparison.OrdinalIgnoreCase) && line.Length > 4 && char.IsWhiteSpace(line[4]))
             {
+                // "#BPM 150" / "#BPM\t150" (공백·탭 모두) ➔ 초기 BPM
                 if (float.TryParse(ExtractHeaderValue(line, "#BPM"), NumberStyles.Any, CultureInfo.InvariantCulture, out float bpm))
                 {
                     chart.Header.InitialBpm = bpm;
@@ -178,8 +179,9 @@ namespace DEFLATE_custom_chart.Core.Bms
                 string wavFile = line.Substring(4 + noteWidth).Trim();
                 chart.Header.WavTable[wavKey] = wavFile;
             }
-            else if (line.StartsWith("#BPM", StringComparison.OrdinalIgnoreCase) && line.Length >= (4 + noteWidth) && line[4] != ' ')
+            else if (line.StartsWith("#BPM", StringComparison.OrdinalIgnoreCase) && line.Length >= (4 + noteWidth) && !char.IsWhiteSpace(line[4]))
             {
+                // "#BPMxx 150" ➔ 확장 BPM 테이블 (08 채널용)
                 string bpmKey = line.Substring(4, noteWidth).ToUpperInvariant();
                 string bpmStr = line.Substring(4 + noteWidth).Trim();
                 if (float.TryParse(bpmStr, NumberStyles.Any, CultureInfo.InvariantCulture, out float exBpm))
@@ -220,6 +222,15 @@ namespace DEFLATE_custom_chart.Core.Bms
         {
             if (line.Length <= prefix.Length) return string.Empty;
             return line.Substring(prefix.Length).Trim();
+        }
+
+        /// <summary>
+        /// 데이터 길이가 오브젝트 폭의 배수가 아니면 오브젝트 위치를 나눌 수 없으므로 그 줄 전체를 건너뛴다.
+        /// 조용히 노트가 사라지지 않도록 경고를 남긴다.
+        /// </summary>
+        private void WarnMisalignedData(BmsChart chart, RawMeasureChannel raw, int noteWidth)
+        {
+            chart.Warnings.Add($"#{raw.Measure:D3}{raw.Channel}: 데이터 길이 {raw.Data.Length}가 오브젝트 폭 {noteWidth}의 배수가 아니라 이 줄을 건너뜀");
         }
 
         /// <summary>
@@ -268,7 +279,12 @@ namespace DEFLATE_custom_chart.Core.Bms
             foreach (var raw in rawChannels)
             {
                 if (raw.Channel != "03" && raw.Channel != "08") continue;
-                if (string.IsNullOrEmpty(raw.Data) || raw.Data.Length % noteWidth != 0) continue;
+                if (string.IsNullOrEmpty(raw.Data)) continue;
+                if (raw.Data.Length % noteWidth != 0)
+                {
+                    WarnMisalignedData(chart, raw, noteWidth);
+                    continue;
+                }
 
                 int objectCount = raw.Data.Length / noteWidth;
                 double mStartTick = measureStartTicks.ContainsKey(raw.Measure) ? measureStartTicks[raw.Measure] : raw.Measure * TicksPerMeasure;
@@ -416,7 +432,12 @@ namespace DEFLATE_custom_chart.Core.Bms
                 // 노트 채널 여부 확인: BmsLaneMapper가 아는 레인 채널(16/11/12/13/14)만 노트로 취급.
                 // 그 외 채널(02/03/08 등 제어 채널 포함)은 여기서 전부 걸러진다.
                 if (!BmsLaneMapper.IsNoteChannel(raw.Channel)) continue;
-                if (string.IsNullOrEmpty(raw.Data) || raw.Data.Length % noteWidth != 0) continue;
+                if (string.IsNullOrEmpty(raw.Data)) continue;
+                if (raw.Data.Length % noteWidth != 0)
+                {
+                    WarnMisalignedData(chart, raw, noteWidth);
+                    continue;
+                }
 
                 int objectCount = raw.Data.Length / noteWidth;
                 double mStartTick = measureStartTicks.ContainsKey(raw.Measure) ? measureStartTicks[raw.Measure] : raw.Measure * TicksPerMeasure;

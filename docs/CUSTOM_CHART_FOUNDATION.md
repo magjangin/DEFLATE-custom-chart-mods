@@ -138,7 +138,7 @@ $$\text{StartSample} = \text{Time (seconds)} \times \text{SampleRate}$$
 - `DiffCtrl.UpdateStarDisplay` / `SelectNextDifficulty` / `SelectPreviousDifficulty` (Postfix): 커스텀 곡의 난이도 별 개수(info.txt의 easy/normal/hard)를 UI에 반영.
 
 ### 4.2 `SongInjectorHooks.cs` (커스텀 곡 사본 주입)
-- `MainTrackList.Start` (Postfix): `WindShifter` 트랙을 복제해 `hwa/` 커스텀 곡 수만큼 `MainTrackListBlock` 사본을 만들고 `tracks` 배열을 확장. 사본마다 `RegenerateID()`로 새 ID를 받고(원본과 같으면 사본을 버림), 메타데이터/커버/난이도 별을 입힘.
+- `MainTrackList.Start` (Postfix): `WindShifter` 트랙을 복제해 `hwa/` 커스텀 곡 수만큼 `MainTrackListBlock` 사본을 만들고 `tracks` 배열을 확장. 사본마다 `RegenerateID()`로 새 ID를 받고(원본과 같으면 사본을 버림), 메타데이터/커버/난이도 별을 입힘. 사본 GameObject 이름에는 `_Custom_`이 붙고, `tracks`에 이미 같은 곡의 사본이 있으면 새로 만들지 않고 재사용함 (원곡은 제목+앨범이 같아도 재사용 대상이 아님).
 
 ### 4.3 `LoadingSceneHooks.cs` (로딩 및 씬 전환)
 - `LoadingGamePlay.Start` (Postfix): 곡 목록 프리뷰 컨텍스트를 끄고, 커스텀 곡이면 로딩 UI 메타데이터 주입 + BGM 사전 로딩 시작.
@@ -146,7 +146,7 @@ $$\text{StartSample} = \text{Time (seconds)} \times \text{SampleRate}$$
 - `LoadingManager.LoadScene` (Prefix): 전환되는 씬 이름 로그.
 
 ### 4.4 `AssetManagerHooks.cs` (에셋 관리자 인터셉터)
-- `TrackAssetManager.LoadAudioClip` (Prefix): 곡 목록 프리뷰에서 커스텀 곡의 오디오 Key가 요청되면 원본 로드를 건너뛰고 커스텀 BGM을 콜백으로 넘김.
+- `TrackAssetManager.LoadAudioClip` (Prefix): 곡 목록 프리뷰에서 커스텀 곡의 오디오 Key가 요청되면 원본 로드를 건너뛰고 커스텀 BGM을 `onSuccess`로 넘김. 로드에 실패하면 `onFail`을 호출.
 - `TrackAssetManager.LoadVideoClip` / `LoadVideoURL` (Prefix): BGA 비디오 로드 요청 key 로그.
 - `Bank_PV_Ctrl.PlayPVVideo` / `LoadVideoAndAudio`, `SimpleRandomVideo.LoadVideoSmart` / `LoadVideo` (Prefix): 커스텀 곡이면 커스텀 BGA로 교체.
 - `VideoPlayer.Play` / `Prepare` (Prefix, 전역): 커스텀 곡이 활성 상태면 모든 VideoPlayer의 소스를 커스텀 BGA URL로 강제.

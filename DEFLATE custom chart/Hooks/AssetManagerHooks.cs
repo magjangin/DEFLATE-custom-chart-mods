@@ -26,7 +26,10 @@ namespace DEFLATE_custom_chart.Hooks
                 if (HwaAssetManager.IsTargetAudioPreview(key) && !string.IsNullOrEmpty(HwaAssetManager.BgmFilePath))
                 {
                     MelonLogger.Msg($"[HwaAssetManager] ★ 곡 목록 프리뷰 Custom BGM 오버라이드 ★ Key: '{key}'");
-                    MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(null, false, clip => onSuccess?.Invoke(clip)));
+                    // 원본 로드를 건너뛰므로, 실패하면 onFail을 불러 게임이 계속 기다리지 않게 한다.
+                    MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(null, false,
+                        clip => onSuccess?.Invoke(clip),
+                        () => onFail?.Invoke()));
                     return false;
                 }
 

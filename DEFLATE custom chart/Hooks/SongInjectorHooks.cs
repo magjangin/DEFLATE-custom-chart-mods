@@ -19,6 +19,9 @@ namespace DEFLATE_custom_chart.Hooks
     {
         private const string TargetKeyword = "WindShifter";
 
+        /// <summary>사본 GameObject 이름에 붙는 표식. 원곡 블록과 사본 블록을 구분하는 데 쓴다.</summary>
+        private const string CloneNameMarker = "_Custom_";
+
         [HarmonyPatch(typeof(MainTrackList), nameof(MainTrackList.Start))]
         public static class MainTrackList_Start_InjectCopy_Patch
         {
@@ -38,6 +41,9 @@ namespace DEFLATE_custom_chart.Hooks
                 foreach (var existing in __instance.tracks)
                 {
                     if (existing == null) continue;
+
+                    // 이 모드가 만든 사본만 재사용 대상이다. 원곡은 제목+앨범이 커스텀 곡과 같아도 건너뛴다.
+                    if (!existing.gameObject.name.Contains(CloneNameMarker)) continue;
 
                     var existingWrapper = new CustomTrackWrapper(existing);
                     var matched = CustomSongLibrary.FindByTitleAndAlbum(existingWrapper.Title, existingWrapper.AlbumName);
@@ -123,11 +129,12 @@ namespace DEFLATE_custom_chart.Hooks
         /// <summary>원본 블록을 복제해 커스텀 곡 하나의 메타데이터/커버를 입힌 새 MainTrackListBlock을 만듭니다.</summary>
         private static MainTrackListBlock CreateTrackBlock(MainTrackListBlock sourceBlock, CustomTrackWrapper sourceWrapper, CustomSongEntry entry)
         {
+            GameObject cloneGO = null;
             try
             {
                 // 1) 원본 GameObject 복제
-                var cloneGO = UnityEngine.Object.Instantiate(sourceBlock.gameObject, sourceBlock.transform.parent);
-                cloneGO.name = $"{sourceBlock.gameObject.name}_Custom_{entry.FolderName}";
+                cloneGO = UnityEngine.Object.Instantiate(sourceBlock.gameObject, sourceBlock.transform.parent);
+                cloneGO.name = $"{sourceBlock.gameObject.name}{CloneNameMarker}{entry.FolderName}";
 
                 var cloneBlock = Il2CppReflectionHelper.SafeCast<MainTrackListBlock>(cloneGO.GetComponent<MainTrackListBlock>());
                 if (cloneBlock == null)
@@ -194,6 +201,8 @@ namespace DEFLATE_custom_chart.Hooks
             catch (Exception ex)
             {
                 MelonLogger.Error($"[곡 목록 주입] '{entry.Meta.Title}' 사본 생성 중 예외: {ex.Message}");
+                // 반쯤 만들어진 사본이 곡 목록 UI에 남지 않도록 지운다.
+                if (cloneGO != null) UnityEngine.Object.Destroy(cloneGO);
                 return null;
             }
         }
