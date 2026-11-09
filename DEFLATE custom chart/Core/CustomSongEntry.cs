@@ -294,51 +294,76 @@ namespace DEFLATE_custom_chart.Core
                 yield break;
             }
 
-            // 이미 다른 곳에서 로딩 중이면 그 결과를 기다렸다가 동일하게 적용/콜백한다.
+            // 이미 다른 곳에서 로딩 중이면 그 결과를 기다렸다가 동일하게 적용/콜백한다. (타임아웃 300프레임 가드)
             if (_isBgmLoading)
             {
-                while (_isBgmLoading) yield return null;
+                int waitFrames = 0;
+                while (_isBgmLoading && waitFrames < 300)
+                {
+                    waitFrames++;
+                    yield return null;
+                }
                 if (BgmClip != null) ApplyLoadedBgm(targetAudioSource, forcePlay, onLoaded, fromCache: true);
                 else onFailed?.Invoke();
                 yield break;
             }
 
             _isBgmLoading = true;
+            bool loaded = false;
+            UnityWebRequest www = null;
 
-            string uri = "file:///" + BgmFilePath.Replace('\\', '/');
-            AudioType audioType = GetAudioType(BgmFilePath);
-            UnityWebRequest www = UnityWebRequestMultimedia.GetAudioClip(uri, audioType);
-            
-            var dh = www.downloadHandler as DownloadHandlerAudioClip;
-            if (dh != null)
+            try
             {
-                dh.streamAudio = true;
+                string uri = "file:///" + BgmFilePath.Replace('\\', '/');
+                AudioType audioType = GetAudioType(BgmFilePath);
+                www = UnityWebRequestMultimedia.GetAudioClip(uri, audioType);
+
+                var dh = www.downloadHandler as DownloadHandlerAudioClip;
+                if (dh != null)
+                {
+                    dh.streamAudio = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Error($"[커스텀 곡] BGM UnityWebRequest 생성 실패 ('{Meta.Title}'): {ex.Message}");
+                _isBgmLoading = false;
+                onFailed?.Invoke();
+                yield break;
             }
 
             yield return www.SendWebRequest();
 
-            bool loaded = false;
-            if (www.result == UnityWebRequest.Result.Success)
+            try
             {
-                BgmClip = DownloadHandlerAudioClip.GetContent(www);
-                if (BgmClip != null)
+                if (www.result == UnityWebRequest.Result.Success)
                 {
-                    BgmClip.name = Path.GetFileNameWithoutExtension(BgmFilePath);
-                    ApplyLoadedBgm(targetAudioSource, forcePlay, onLoaded, fromCache: false);
-                    loaded = true;
+                    BgmClip = DownloadHandlerAudioClip.GetContent(www);
+                    if (BgmClip != null)
+                    {
+                        BgmClip.name = Path.GetFileNameWithoutExtension(BgmFilePath);
+                        ApplyLoadedBgm(targetAudioSource, forcePlay, onLoaded, fromCache: false);
+                        loaded = true;
+                    }
+                    else
+                    {
+                        MelonLogger.Error($"[커스텀 곡] BGM 클립 변환 실패 ('{Meta.Title}'): 요청은 성공했지만 AudioClip이 비어 있습니다.");
+                    }
                 }
                 else
                 {
-                    MelonLogger.Error($"[커스텀 곡] BGM 클립 변환 실패 ('{Meta.Title}'): 요청은 성공했지만 AudioClip이 비어 있습니다.");
+                    MelonLogger.Error($"[커스텀 곡] BGM 비동기 로드 실패 ('{Meta.Title}'): {www.error}");
                 }
             }
-            else
+            catch (Exception ex)
             {
-                MelonLogger.Error($"[커스텀 곡] BGM 비동기 로드 실패 ('{Meta.Title}'): {www.error}");
+                MelonLogger.Error($"[커스텀 곡] BGM 후처리 예외 ('{Meta.Title}'): {ex.Message}");
             }
-
-            www.Dispose();
-            _isBgmLoading = false;
+            finally
+            {
+                www?.Dispose();
+                _isBgmLoading = false;
+            }
 
             if (!loaded) onFailed?.Invoke();
         }

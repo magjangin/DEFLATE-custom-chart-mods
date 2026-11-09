@@ -3,11 +3,13 @@
 /DecompiledKoreo/
 
 # Visual Studio / 빌드 산출물
-.vs/
-bin/
-obj/
+**/.vs/
+**/bin/
+**/obj/
 *.user
 *.suo
+*.userosscache
+*.sln.docstates
 
 # OS
 Thumbs.db

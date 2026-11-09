@@ -6,10 +6,11 @@ DEFLATE (`dizzylab.castor`, Unity / Il2Cpp) 리듬게임을 위한 **MelonLoader
 
 - **곡 목록/인게임 로깅**: 전체 수록곡 카탈로그, 커서 이동, 난이도 변경, 플레이 진입 등을 상세 로그로 기록
 - **앨범/곡 폴더 라이브러리 (`CustomSongLibrary`)**: `hwa/` 아래 폴더를 스캔해 여러 커스텀 곡을 앨범 단위로 카탈로그화
-- **곡 복제 주입 (`SongInjectorHooks`)**: 기존 트랙을 `CustomTrackWrapper`로 캐스트·복사해, 커스텀 곡 수만큼 새 `MainTrackListBlock` 인스턴스를 곡 목록에 주입
+- **곡 복제 주입 (`SongInjectorHooks`)**: 기존 트랙을 `CustomTrackWrapper`로 캐스트·복사해, 커스텀 곡 수만큼 새 `MainTrackListBlock` 인스턴스를 곡 목록에 주입 (ID 재생성 실패 시 자동 폴백 고유 ID 부여 및 안전 가드 내장)
 - **BMS 차트 주입 (`BmsParser` / `BmsLaneMapper`)**: 곡 폴더의 BMS를 읽어 레인 노트·홀드·드롭 노트로 바꾸고, 라인바(마디선/박자선)도 BMS 기준으로 다시 만듦 — 규격은 [docs/bms_mapping_spec.md](docs/bms_mapping_spec.md)
 - **커스텀 에셋 오버라이드 (`HwaAssetManager`)**: 선택된 커스텀 곡 폴더의 PNG 자켓·MP4 BGA·BGM 오디오를 주입된 사본에만 적용 (원본 곡은 그대로 유지)
-- **곡 목록 프리뷰까지 연동**: 목록에서 커서를 옮길 때의 PV 자동 미리보기(BGA/BGM)에도 커스텀 에셋 적용
+- **곡 목록 프리뷰까지 연동**: 목록에서 커서를 옮길 때의 PV 자동 미리보기(BGA/BGM)에도 커스텀 에셋 적용 (`IsInSongSelectContext` 가드로 로딩/인게임 간섭 원천 차단)
+- **게임 패치 내성 강화 (`Il2CppReflectionHelper`)**: Il2Cpp 객체 프로퍼티/필드 이름 변경 시 다중 후보군 캐시 리플렉션으로 안전하게 폴백 동작
 - **플레이 옵션 (`savecustomkey/config.txt`)**: 오토 플레이, 저장 차단, 노트 흔들림(NoteSway), 노트 카오스 배속(NoteSpeedChaos)
 - **곡 시작 키 가이드 숨김 (`KeyIndicatorHooks`)**: 곡 시작 시 뜨는 `Key_indicator` UI를 모든 곡에서 항상 숨김 (설정으로 끌 수 없음)
 
@@ -19,8 +20,10 @@ DEFLATE (`dizzylab.castor`, Unity / Il2Cpp) 리듬게임을 위한 **MelonLoader
 DEFLATE custom chart/   # 모드 본체 (MelonLoader Mod, .csproj)
   Core/                 # CustomSongLibrary/CustomSongEntry, HwaAssetManager, ModConfig, BMS 파서 등
   Hooks/                # Harmony 훅 (SongListHooks, AssetManagerHooks, InGameRhythmHooks ...)
-SignatureDumper/         # 게임 Il2Cpp 어셈블리 시그니처 덤프 도구
+SignatureDumper/         # 게임 Il2Cpp 어셈블리 시그니처 덤프 도구 (Reflection 기반 독립 툴)
 docs/                    # 아키텍처/훅 포인트/모딩 가이드 문서
+AGENTS.md                # 멀티 에이전트 및 개발자 프로젝트 인수인계 핸드오버 문서
+CLAUDE.md                # Claude Code 인수인계 링크
 ```
 
 ## 설치 및 사용
@@ -43,7 +46,7 @@ hwa/
   - BGM은 `.ogg` › 이름에 `music`/`bgm`/`song`/`track`/`audio`가 들어간 파일 › 용량이 큰 파일 순으로 고릅니다 (지원: `.ogg`/`.wav`/`.mp3`)
   - 곡 제목은 `info.txt`의 `title`, 없으면 곡 폴더 이름 / 앨범명은 `info.txt`의 `album`, 없으면 앨범 폴더 이름을 씁니다
 3. 첫 실행 시 `savecustomkey/config.txt`가 만들어집니다. 아래 [설정](#설정-savecustomkeyconfigtxt)을 참고하세요.
-4. 자세한 훅 포인트와 트러블슈팅은 [`docs/`](docs/) 문서를 참고하세요.
+4. 자세한 훅 포인트와 트러블슈팅은 [`docs/`](docs/) 및 [`AGENTS.md`](AGENTS.md) 문서를 참고하세요.
 
 ## 설정 (`savecustomkey/config.txt`)
 
@@ -64,6 +67,7 @@ hwa/
 
 ## 문서
 
+- [AGENTS.md](AGENTS.md) — 개발자/에이전트 인수인계 핸드오버 가이드 (버전, Rationale, 실패 사례, 후킹 파이프라인)
 - [docs/CUSTOM_CHART_FOUNDATION.md](docs/CUSTOM_CHART_FOUNDATION.md) — 내부 데이터 구조, 씬 전환 파이프라인, 훅 포인트 전체 목록
 - [docs/bms_mapping_spec.md](docs/bms_mapping_spec.md) — BMS 채널 ↔ 레인 매핑, `#WAV` 키음 테이블, 홀드 매칭 규칙
 - [docs/custom_asset_modding_guide.md](docs/custom_asset_modding_guide.md) — 커스텀 에셋 주입 아키텍처 & 훅 매뉴얼

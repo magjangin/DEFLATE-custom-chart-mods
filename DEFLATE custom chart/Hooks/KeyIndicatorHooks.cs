@@ -14,12 +14,20 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prefix(Key_indicator __instance)
             {
-                if (__instance != null && __instance.gameObject != null)
+                try
                 {
-                    __instance.gameObject.SetActive(false);
+                    if (__instance != null && __instance.gameObject != null)
+                    {
+                        __instance.gameObject.SetActive(false);
+                    }
+                    MelonLogger.Msg("[Key_indicator] 곡 시작 키 가이드 안내 UI 비활성화 완료.");
+                    return false; // 원본 Start 애니메이션 실행 차단
                 }
-                MelonLogger.Msg("[Key_indicator] 곡 시작 키 가이드 안내 UI 비활성화 완료.");
-                return false; // 원본 Start 애니메이션 실행 차단
+                catch (System.Exception ex)
+                {
+                    MelonLogger.Warning($"[Key_indicator] Start Prefix 처리 중 예외: {ex.Message}");
+                    return true;
+                }
             }
         }
     }

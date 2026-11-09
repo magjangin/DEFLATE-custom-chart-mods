@@ -44,7 +44,9 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(NoteObject __instance)
             {
-                if (__instance == null || !ModConfig.Instance.NoteSpeedChaos) return;
+                try
+                {
+                    if (__instance == null || !ModConfig.Instance.NoteSpeedChaos) return;
 
                 float minSpeed = ModConfig.Instance.NoteSpeedChaosMin;
                 float maxSpeed = ModConfig.Instance.NoteSpeedChaosMax;
@@ -72,6 +74,11 @@ namespace DEFLATE_custom_chart.Hooks
                     float newDuration = originalDuration / speedMultiplier;
                     __instance.moveStartSample = hitSample - newDuration;
                 }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[NoteObject.Initialize] Postfix 예외: {ex.Message}");
+                }
             }
         }
 
@@ -83,8 +90,10 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(NoteObject __instance)
             {
-                if (__instance == null || __instance.isProcessed || !ModConfig.Instance.NoteSway) return;
-                if (__instance.gameController == null || __instance.gameController.audioCom == null) return;
+                try
+                {
+                    if (__instance == null || __instance.isProcessed || !ModConfig.Instance.NoteSway) return;
+                    if (__instance.gameController == null || __instance.gameController.audioCom == null) return;
 
                 float startSample = __instance.moveStartSample;
                 float endSample = __instance.moveEndSample;
@@ -120,6 +129,11 @@ namespace DEFLATE_custom_chart.Hooks
                 Vector3 pos = __instance.transform.localPosition;
                 pos.x += swayOffset;
                 __instance.transform.localPosition = pos;
+                }
+                catch
+                {
+                    // UpdateNotePosition은 매 프레임 다량 호출되므로 로그 부하 방지를 위해 조용히 무시
+                }
             }
         }
     }

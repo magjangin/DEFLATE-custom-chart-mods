@@ -22,79 +22,86 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(RhythmGameController __instance)
             {
-                if (__instance == null) return;
-
-                MelonLogger.Msg("==================================================");
-                MelonLogger.Msg("[★ 핵심 훅: RhythmGameController.Start ★] 인게임 리듬게임 씬 진입!");
-                bool isTargetTrack = false;
-                if (__instance.gameData != null)
+                try
                 {
-                    MelonLogger.Msg($"  - 곡 ID:        {__instance.gameData.NowTrackID}");
-                    MelonLogger.Msg($"  - 곡 제목:      {__instance.gameData.NowTrackTitle}");
-                    MelonLogger.Msg($"  - 곡 아티스트:   {__instance.gameData.NowTrackAurthor}");
-                    MelonLogger.Msg($"  - 타겟 차트 Key: {__instance.gameData.targetKorePath}");
+                    if (__instance == null) return;
 
-                    // hwa/ 커스텀 png·bga·bgm 에셋을 사본(테스트 곡)에만 적용하기 위한 활성 트랙 갱신
-                    isTargetTrack = HwaAssetManager.SetActiveTrack(__instance.gameData.NowTrackID, __instance.gameData.NowTrackTitle);
-                    MelonLogger.Msg($"  - 커스텀 에셋 사본 여부: {isTargetTrack}");
-                }
-                if (DEFLATE_custom_chart.Core.ModConfig.Instance.AutoMode)
-                {
-                    __instance.autoMode = true;
-                    MelonLogger.Msg("  [ModConfig] 오토 모드(AutoMode) 강제 활성화!");
-                }
-
-                MelonLogger.Msg($"  - 오토 모드:     {__instance.autoMode}");
-                MelonLogger.Msg($"  - 노트 배속:     {__instance.noteSpeed}");
-
-                if (isTargetTrack)
-                {
-                    // hwa/ Custom BGM (.ogg/.wav/.mp3) 사전 로드된 클립 0ms 즉시 할당 (원곡 소리 튐 차단)
-                    if (__instance.audioCom != null)
+                    MelonLogger.Msg("==================================================");
+                    MelonLogger.Msg("[★ 핵심 훅: RhythmGameController.Start ★] 인게임 리듬게임 씬 진입!");
+                    bool isTargetTrack = false;
+                    if (__instance.gameData != null)
                     {
-                        if (HwaAssetManager.CustomBgmClip != null)
+                        MelonLogger.Msg($"  - 곡 ID:        {__instance.gameData.NowTrackID}");
+                        MelonLogger.Msg($"  - 곡 제목:      {__instance.gameData.NowTrackTitle}");
+                        MelonLogger.Msg($"  - 곡 아티스트:   {__instance.gameData.NowTrackAurthor}");
+                        MelonLogger.Msg($"  - 타겟 차트 Key: {__instance.gameData.targetKorePath}");
+
+                        // hwa/ 커스텀 png·bga·bgm 에셋을 사본(테스트 곡)에만 적용하기 위한 활성 트랙 갱신
+                        isTargetTrack = HwaAssetManager.SetActiveTrack(__instance.gameData.NowTrackID, __instance.gameData.NowTrackTitle);
+                        MelonLogger.Msg($"  - 커스텀 에셋 사본 여부: {isTargetTrack}");
+                    }
+                    if (DEFLATE_custom_chart.Core.ModConfig.Instance.AutoMode)
+                    {
+                        __instance.autoMode = true;
+                        MelonLogger.Msg("  [ModConfig] 오토 모드(AutoMode) 강제 활성화!");
+                    }
+
+                    MelonLogger.Msg($"  - 오토 모드:     {__instance.autoMode}");
+                    MelonLogger.Msg($"  - 노트 배속:     {__instance.noteSpeed}");
+
+                    if (isTargetTrack)
+                    {
+                        // hwa/ Custom BGM (.ogg/.wav/.mp3) 사전 로드된 클립 0ms 즉시 할당 (원곡 소리 튐 차단)
+                        if (__instance.audioCom != null)
                         {
-                            __instance.audioCom.clip = HwaAssetManager.CustomBgmClip;
-                            MelonLogger.Msg($"  - [Start] Custom BGM 사전 클립 즉시 할당 완료: '{HwaAssetManager.CustomBgmClip.name}'");
+                            if (HwaAssetManager.CustomBgmClip != null)
+                            {
+                                __instance.audioCom.clip = HwaAssetManager.CustomBgmClip;
+                                MelonLogger.Msg($"  - [Start] Custom BGM 사전 클립 즉시 할당 완료: '{HwaAssetManager.CustomBgmClip.name}'");
+                            }
+                            else
+                            {
+                                __instance.audioCom.mute = true;
+                                MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(__instance.audioCom, true, (clip) => {
+                                    if (__instance != null && __instance.audioCom != null)
+                                    {
+                                        __instance.audioCom.mute = false;
+                                    }
+                                }));
+                            }
                         }
-                        else
+
+                        // hwa/ Custom BGA (.mp4) 사전 주입 (사본 전용)
+                        if (__instance.videoPlayer != null)
                         {
-                            __instance.audioCom.mute = true;
-                            MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(__instance.audioCom, true, (clip) => {
-                                if (__instance != null && __instance.audioCom != null)
-                                {
-                                    __instance.audioCom.mute = false;
-                                }
-                            }));
+                            HwaAssetManager.ApplyCustomBga(__instance.videoPlayer, false);
+                        }
+
+                        // hwa/ Custom PNG 커버 자켓 사전 주입 (사본 전용)
+                        if (__instance.coverArtController != null)
+                        {
+                            var img = __instance.coverArtController.GetComponentInChildren<UnityEngine.UI.Image>(true);
+                            if (img != null)
+                            {
+                                HwaAssetManager.ApplyCustomCover(img);
+                            }
                         }
                     }
 
-                    // hwa/ Custom BGA (.mp4) 사전 주입 (사본 전용)
-                    if (__instance.videoPlayer != null)
-                    {
-                        HwaAssetManager.ApplyCustomBga(__instance.videoPlayer, false);
-                    }
-
-                    // hwa/ Custom PNG 커버 자켓 사전 주입 (사본 전용)
-                    if (__instance.coverArtController != null)
-                    {
-                        var img = __instance.coverArtController.GetComponentInChildren<UnityEngine.UI.Image>(true);
-                        if (img != null)
-                        {
-                            HwaAssetManager.ApplyCustomCover(img);
-                        }
-                    }
+                    MelonLogger.Msg("--------------------------------------------------");
+                    MelonLogger.Msg($"  - 판정 윈도우(ms):     {__instance.hitWindowRangeInMS}");
+                    MelonLogger.Msg($"  - 판정 윈도우 Hi(ms):  {__instance.hitWindowsRangeInMS_Hi}");
+                    MelonLogger.Msg($"  - 판정 윈도우(샘플):    {__instance.hitWindowRangeInSamples}");
+                    MelonLogger.Msg($"  - 판정 윈도우 Hi(샘플): {__instance.hitWindowRangeInSamples_Hi}");
+                    MelonLogger.Msg($"  - HitWindowSampleWidth:    {__instance.HitWindowSampleWidth}");
+                    MelonLogger.Msg($"  - HitWindowSampleWidth_hi: {__instance.HitWindowSampleWidth_hi}");
+                    MelonLogger.Msg($"  - WindowSizeInUnits:       {__instance.WindowSizeInUnits}");
+                    MelonLogger.Msg("==================================================");
                 }
-
-                MelonLogger.Msg("--------------------------------------------------");
-                MelonLogger.Msg($"  - 판정 윈도우(ms):     {__instance.hitWindowRangeInMS}");
-                MelonLogger.Msg($"  - 판정 윈도우 Hi(ms):  {__instance.hitWindowsRangeInMS_Hi}");
-                MelonLogger.Msg($"  - 판정 윈도우(샘플):    {__instance.hitWindowRangeInSamples}");
-                MelonLogger.Msg($"  - 판정 윈도우 Hi(샘플): {__instance.hitWindowRangeInSamples_Hi}");
-                MelonLogger.Msg($"  - HitWindowSampleWidth:    {__instance.HitWindowSampleWidth}");
-                MelonLogger.Msg($"  - HitWindowSampleWidth_hi: {__instance.HitWindowSampleWidth_hi}");
-                MelonLogger.Msg($"  - WindowSizeInUnits:       {__instance.WindowSizeInUnits}");
-                MelonLogger.Msg("==================================================");
+                catch (Exception ex)
+                {
+                    MelonLogger.Error($"[RhythmGameController.Start] Postfix 처리 중 예외: {ex.Message}\n{ex.StackTrace}");
+                }
             }
         }
 
@@ -123,65 +130,72 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(RhythmGameController __instance)
             {
-                if (__instance == null || __instance.playingKoreo == null) return;
-
-                var koreo = __instance.playingKoreo;
-                int totalEvents = 0;
-                if (koreo.Tracks != null)
+                try
                 {
-                    for (int i = 0; i < koreo.Tracks.Count; i++)
-                    {
-                        var trk = koreo.Tracks[i];
-                        if (trk != null && trk.mEventList != null)
-                        {
-                            totalEvents += trk.mEventList.Count;
-                        }
-                    }
-                }
+                    if (__instance == null || __instance.playingKoreo == null) return;
 
-                if (HwaAssetManager.IsTargetTrackActive)
-                {
-                    // 1. 드롭 심벌 전용 독립 배열 초기화
-                    if (__instance.dropEventSamples != null) __instance.dropEventSamples.Clear();
-                    if (__instance.processedDropSamples != null) __instance.processedDropSamples.Clear();
-                    __instance.nextDropEventIdx = 0;
-
-                    // 2. 드롭 레인으로 라우팅되는 BMS 노트(14번 채널)를 dropEventSamples에 주입
-                    var bmsChart = HwaAssetManager.LoadedBmsChart;
-                    if (bmsChart != null && bmsChart.Notes.Count > 0 && __instance.dropEventSamples != null)
-                    {
-                        foreach (var n in bmsChart.Notes)
-                        {
-                            if (BmsLaneMapper.ResolveNoteLane(n) == BmsLaneMapper.Drop)
-                            {
-                                __instance.dropEventSamples.Add(n.SamplePosition);
-                            }
-                        }
-                        MelonLogger.Msg($"  - [BMS 14번 채널] 커스텀 드롭(Drop) 노트 샘플 {__instance.dropEventSamples.Count}개 dropEventSamples 주입 완료!");
-                    }
-
-                    // 3. Koreography 원본 차트 트랙 중 hihat_3 이외 트랙의 mEventList 클리어
-                    if (koreo.Tracks != null && bmsChart == null)
+                    var koreo = __instance.playingKoreo;
+                    int totalEvents = 0;
+                    if (koreo.Tracks != null)
                     {
                         for (int i = 0; i < koreo.Tracks.Count; i++)
                         {
                             var trk = koreo.Tracks[i];
-                            if (trk == null || trk.mEventList == null) continue;
-                            bool isHiHat3 = string.Equals(trk.EventID, "hihat_3", StringComparison.OrdinalIgnoreCase);
-                            if (!isHiHat3)
+                            if (trk != null && trk.mEventList != null)
                             {
-                                trk.mEventList.Clear();
+                                totalEvents += trk.mEventList.Count;
                             }
                         }
                     }
 
-                    MelonLogger.Msg("[★ 잔여 dropEventSamples 및 원본 차트 에셋 잔여 노트 완전 정리 완료 ★]");
-                }
+                    if (HwaAssetManager.IsTargetTrackActive)
+                    {
+                        // 1. 드롭 심벌 전용 독립 배열 초기화
+                        if (__instance.dropEventSamples != null) __instance.dropEventSamples.Clear();
+                        if (__instance.processedDropSamples != null) __instance.processedDropSamples.Clear();
+                        __instance.nextDropEventIdx = 0;
 
-                MelonLogger.Msg("----------------------------------------------------------------------------------------------------");
-                MelonLogger.Msg($"[★ 핵심 훅: RhythmGameController.InitializeKoreographyTracks ★] 차트(Koreography) 로드 완료!");
-                MelonLogger.Msg($"  - 차트 이름: '{koreo.name}' | 오디오 샘플레이트: {koreo.SampleRate}Hz | 트랙 수: {koreo.Tracks?.Count ?? 0} | 총 노트 이벤트 수: {totalEvents}개");
-                MelonLogger.Msg("----------------------------------------------------------------------------------------------------");
+                        // 2. 드롭 레인으로 라우팅되는 BMS 노트(14번 채널)를 dropEventSamples에 주입
+                        var bmsChart = HwaAssetManager.LoadedBmsChart;
+                        if (bmsChart != null && bmsChart.Notes.Count > 0 && __instance.dropEventSamples != null)
+                        {
+                            foreach (var n in bmsChart.Notes)
+                            {
+                                if (BmsLaneMapper.ResolveNoteLane(n) == BmsLaneMapper.Drop)
+                                {
+                                    __instance.dropEventSamples.Add(n.SamplePosition);
+                                }
+                            }
+                            MelonLogger.Msg($"  - [BMS 14번 채널] 커스텀 드롭(Drop) 노트 샘플 {__instance.dropEventSamples.Count}개 dropEventSamples 주입 완료!");
+                        }
+
+                        // 3. Koreography 원본 차트 트랙 중 hihat_3 이외 트랙의 mEventList 클리어
+                        if (koreo.Tracks != null && bmsChart == null)
+                        {
+                            for (int i = 0; i < koreo.Tracks.Count; i++)
+                            {
+                                var trk = koreo.Tracks[i];
+                                if (trk == null || trk.mEventList == null) continue;
+                                bool isHiHat3 = string.Equals(trk.EventID, "hihat_3", StringComparison.OrdinalIgnoreCase);
+                                if (!isHiHat3)
+                                {
+                                    trk.mEventList.Clear();
+                                }
+                            }
+                        }
+
+                        MelonLogger.Msg("[★ 잔여 dropEventSamples 및 원본 차트 에셋 잔여 노트 완전 정리 완료 ★]");
+                    }
+
+                    MelonLogger.Msg("----------------------------------------------------------------------------------------------------");
+                    MelonLogger.Msg($"[★ 핵심 훅: RhythmGameController.InitializeKoreographyTracks ★] 차트(Koreography) 로드 완료!");
+                    MelonLogger.Msg($"  - 차트 이름: '{koreo.name}' | 오디오 샘플레이트: {koreo.SampleRate}Hz | 트랙 수: {koreo.Tracks?.Count ?? 0} | 총 노트 이벤트 수: {totalEvents}개");
+                    MelonLogger.Msg("----------------------------------------------------------------------------------------------------");
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Error($"[InitializeKoreographyTracks] Postfix 예외: {ex.Message}");
+                }
             }
         }
 
@@ -192,15 +206,17 @@ namespace DEFLATE_custom_chart.Hooks
 
             public static void Postfix(RhythmGameController __instance, string trackID, LaneController lane)
             {
-                if (lane == null) return;
-
-                if (__instance != null && __instance.gameData != null)
+                try
                 {
-                    HwaAssetManager.SetActiveTrack(__instance.gameData.NowTrackID, __instance.gameData.NowTrackTitle);
-                }
+                    if (lane == null) return;
 
-                // 테스트 곡(사본) 외의 원본 곡들은 노트 배치를 원본 그대로 유지한다.
-                if (!HwaAssetManager.IsTargetTrackActive) return;
+                    if (__instance != null && __instance.gameData != null)
+                    {
+                        HwaAssetManager.SetActiveTrack(__instance.gameData.NowTrackID, __instance.gameData.NowTrackTitle);
+                    }
+
+                    // 테스트 곡(사본) 외의 원본 곡들은 노트 배치를 원본 그대로 유지한다.
+                    if (!HwaAssetManager.IsTargetTrackActive) return;
 
                 if (!NoteManipulationEnabled)
                 {
@@ -319,6 +335,11 @@ namespace DEFLATE_custom_chart.Hooks
                         MelonLogger.Msg($"[커스텀 테스트 주입] 레인: '{trackID}' | 비움 (0개)");
                     }
                 }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Error($"[LoadKoreographyEvents] Postfix 처리 중 예외 (trackID='{trackID}'): {ex.Message}\n{ex.StackTrace}");
+                }
             }
         }
 
@@ -335,10 +356,12 @@ namespace DEFLATE_custom_chart.Hooks
         /// </summary>
         private static Il2CppSystem.Collections.Generic.List<KoreographyEvent> BuildBmsLineBarEvents(LineBarController lane, string trackID, string source)
         {
-            if (lane == null || !HwaAssetManager.IsTargetTrackActive) return null;
+            try
+            {
+                if (lane == null || !HwaAssetManager.IsTargetTrackActive) return null;
 
-            var bmsChart = HwaAssetManager.LoadedBmsChart;
-            if (bmsChart == null || bmsChart.Notes.Count == 0 || bmsChart.BarLines.Count == 0) return null;
+                var bmsChart = HwaAssetManager.LoadedBmsChart;
+                if (bmsChart == null || bmsChart.Notes.Count == 0 || bmsChart.BarLines.Count == 0) return null;
 
             // 1. 원본 라인바 이벤트 관찰: 페이로드 종류별 개수 / 대표 페이로드 / 이벤트 길이 / 평균 간격
             var original = lane.laneEvents;
@@ -398,6 +421,12 @@ namespace DEFLATE_custom_chart.Hooks
             MelonLogger.Msg($"[★ HWA BMS 라인바 주입 ★] ({source}) trackID='{trackID}' | 원본 {originalCount}개 ➔ BMS {events.Count}개 (마디선 {measureLines} / 박자선 {events.Count - measureLines})");
             MelonLogger.Msg($"  - 원본 페이로드 분포: [{string.Join(", ", dist)}] | 마디선←'{measureKey}' 박자선←'{beatKey}' | 이벤트 길이 {span}샘플 | 원본 평균 간격 {avgInterval}샘플");
             return events;
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Error($"[BuildBmsLineBarEvents] 라인바 주입 중 예외 ({source}, trackID='{trackID}'): {ex.Message}");
+                return null;
+            }
         }
 
         private static string DescribePayload(IPayload payload)

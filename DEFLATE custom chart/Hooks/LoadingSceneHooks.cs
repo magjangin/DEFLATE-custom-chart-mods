@@ -9,8 +9,10 @@ namespace DEFLATE_custom_chart.Hooks
     {
         private static void ApplyLoadingUiMetadata(LoadingGamePlay instance)
         {
-            if (instance == null || instance.gameData == null) return;
-            if (!HwaAssetManager.IsTargetTrackActive) return;
+            try
+            {
+                if (instance == null || instance.gameData == null) return;
+                if (!HwaAssetManager.IsTargetTrackActive) return;
 
             var meta = HwaAssetManager.CurrentMeta ?? new HwaAssetManager.HwaMetaInfo();
             var gd = instance.gameData;
@@ -45,6 +47,11 @@ namespace DEFLATE_custom_chart.Hooks
             }
 
             MelonLogger.Msg($"[로딩 씬 커스텀 UI 주입] 제목: '{meta.Title}' | 아티스트: '{meta.Artist}' | 매퍼: '{meta.ChartAuthor}' | BGA: '{meta.BgaAuthor}' | 난이도: {gd.nowDifficulty}(★{targetStar}) | 앨범: '{meta.Album}'");
+            }
+            catch (System.Exception ex)
+            {
+                MelonLogger.Warning($"[로딩 씬 UI 주입] ApplyLoadingUiMetadata 처리 중 예외: {ex.Message}");
+            }
         }
 
         [HarmonyPatch(typeof(LoadingGamePlay), nameof(LoadingGamePlay.Start))]

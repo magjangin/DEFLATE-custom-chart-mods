@@ -19,18 +19,25 @@ namespace DEFLATE_custom_chart.Hooks
             // (System.Action으로 받으면 타입이 맞지 않는 객체를 델리게이트로 호출하게 된다)
             public static bool Prefix(ref string key, Il2CppSystem.Action<AudioClip> onSuccess, Il2CppSystem.Action onFail)
             {
-                MelonLogger.Msg($"[★ 핵심 훅: TrackAssetManager.LoadAudioClip ★] BGM 오디오 클립 로드 요청! Key: '{key}'");
-
-                // 곡 목록 프리뷰에서 사본("테스트 곡")이 선택된 상태로 자신의 오디오 Key가 요청된 경우에만
-                // hwa/ 커스텀 BGM으로 오버라이드한다 (원본 WindShifter는 같은 Key를 써도 건드리지 않음).
-                if (HwaAssetManager.IsTargetAudioPreview(key) && !string.IsNullOrEmpty(HwaAssetManager.BgmFilePath))
+                try
                 {
-                    MelonLogger.Msg($"[HwaAssetManager] ★ 곡 목록 프리뷰 Custom BGM 오버라이드 ★ Key: '{key}'");
-                    // 원본 로드를 건너뛰므로, 실패하면 onFail을 불러 게임이 계속 기다리지 않게 한다.
-                    MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(null, false,
-                        clip => onSuccess?.Invoke(clip),
-                        () => onFail?.Invoke()));
-                    return false;
+                    MelonLogger.Msg($"[★ 핵심 훅: TrackAssetManager.LoadAudioClip ★] BGM 오디오 클립 로드 요청! Key: '{key}'");
+
+                    // 곡 목록 프리뷰에서 사본("테스트 곡")이 선택된 상태로 자신의 오디오 Key가 요청된 경우에만
+                    // hwa/ 커스텀 BGM으로 오버라이드한다 (원본 WindShifter는 같은 Key를 써도 건드리지 않음).
+                    if (HwaAssetManager.IsTargetAudioPreview(key) && !string.IsNullOrEmpty(HwaAssetManager.BgmFilePath))
+                    {
+                        MelonLogger.Msg($"[HwaAssetManager] ★ 곡 목록 프리뷰 Custom BGM 오버라이드 ★ Key: '{key}'");
+                        // 원본 로드를 건너뛰므로, 실패하면 onFail을 불러 게임이 계속 기다리지 않게 한다.
+                        MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(null, false,
+                            clip => onSuccess?.Invoke(clip),
+                            () => onFail?.Invoke()));
+                        return false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[TrackAssetManager.LoadAudioClip] Prefix 처리 중 예외: {ex.Message}");
                 }
 
                 return true;
@@ -129,17 +136,24 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Prefix(VideoPlayer __instance)
             {
-                if (__instance == null) return;
-                MelonLogger.Msg($"[★ VideoPlayer.Play 감지 ★] 오브젝트: '{__instance.gameObject.name}' | 현재 source: {__instance.source} | url: '{__instance.url}'");
-
-                if (HwaAssetManager.IsTargetTrackActive && !string.IsNullOrEmpty(HwaAssetManager.BgaFileUrl))
+                try
                 {
-                    if (__instance.source != VideoSource.Url || __instance.url != HwaAssetManager.BgaFileUrl)
+                    if (__instance == null) return;
+                    MelonLogger.Msg($"[★ VideoPlayer.Play 감지 ★] 오브젝트: '{__instance.gameObject.name}' | 현재 source: {__instance.source} | url: '{__instance.url}'");
+
+                    if (HwaAssetManager.IsTargetTrackActive && !string.IsNullOrEmpty(HwaAssetManager.BgaFileUrl))
                     {
-                        __instance.source = VideoSource.Url;
-                        __instance.url = HwaAssetManager.BgaFileUrl;
-                        MelonLogger.Msg($"[★ Universal VideoPlayer.Play Custom BGA 강제 적용 ★] URL: '{HwaAssetManager.BgaFileUrl}'");
+                        if (__instance.source != VideoSource.Url || __instance.url != HwaAssetManager.BgaFileUrl)
+                        {
+                            __instance.source = VideoSource.Url;
+                            __instance.url = HwaAssetManager.BgaFileUrl;
+                            MelonLogger.Msg($"[★ Universal VideoPlayer.Play Custom BGA 강제 적용 ★] URL: '{HwaAssetManager.BgaFileUrl}'");
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[VideoPlayer.Play] Prefix 처리 중 예외: {ex.Message}");
                 }
             }
         }
@@ -149,17 +163,24 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Prefix(VideoPlayer __instance)
             {
-                if (__instance == null) return;
-                MelonLogger.Msg($"[★ VideoPlayer.Prepare 감지 ★] 오브젝트: '{__instance.gameObject.name}'");
-
-                if (HwaAssetManager.IsTargetTrackActive && !string.IsNullOrEmpty(HwaAssetManager.BgaFileUrl))
+                try
                 {
-                    if (__instance.source != VideoSource.Url || __instance.url != HwaAssetManager.BgaFileUrl)
+                    if (__instance == null) return;
+                    MelonLogger.Msg($"[★ VideoPlayer.Prepare 감지 ★] 오브젝트: '{__instance.gameObject.name}'");
+
+                    if (HwaAssetManager.IsTargetTrackActive && !string.IsNullOrEmpty(HwaAssetManager.BgaFileUrl))
                     {
-                        __instance.source = VideoSource.Url;
-                        __instance.url = HwaAssetManager.BgaFileUrl;
-                        MelonLogger.Msg($"[★ Universal VideoPlayer.Prepare Custom BGA 강제 적용 ★] URL: '{HwaAssetManager.BgaFileUrl}'");
+                        if (__instance.source != VideoSource.Url || __instance.url != HwaAssetManager.BgaFileUrl)
+                        {
+                            __instance.source = VideoSource.Url;
+                            __instance.url = HwaAssetManager.BgaFileUrl;
+                            MelonLogger.Msg($"[★ Universal VideoPlayer.Prepare Custom BGA 강제 적용 ★] URL: '{HwaAssetManager.BgaFileUrl}'");
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[VideoPlayer.Prepare] Prefix 처리 중 예외: {ex.Message}");
                 }
             }
         }
@@ -221,22 +242,29 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(Panel_Result __instance)
             {
-                if (__instance == null) return;
-                MelonLogger.Msg("[★ Panel_Result.Awake 감지 ★] 결과 씬 진입!");
-
-                if (!HwaAssetManager.IsTargetTrackActive) return;
-
-                // 자켓 PNG 주입 (사본 전용)
-                HwaAssetManager.ApplyCustomCoverToHierarchy(__instance.gameObject);
-
-                // BGA 주입 (사본 전용)
-                var players = __instance.GetComponentsInChildren<VideoPlayer>(true);
-                if (players != null)
+                try
                 {
-                    foreach (var vp in players)
+                    if (__instance == null) return;
+                    MelonLogger.Msg("[★ Panel_Result.Awake 감지 ★] 결과 씬 진입!");
+
+                    if (!HwaAssetManager.IsTargetTrackActive) return;
+
+                    // 자켓 PNG 주입 (사본 전용)
+                    HwaAssetManager.ApplyCustomCoverToHierarchy(__instance.gameObject);
+
+                    // BGA 주입 (사본 전용)
+                    var players = __instance.GetComponentsInChildren<VideoPlayer>(true);
+                    if (players != null)
                     {
-                        HwaAssetManager.ApplyCustomBga(vp, true);
+                        foreach (var vp in players)
+                        {
+                            HwaAssetManager.ApplyCustomBga(vp, true);
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[Panel_Result.Awake] Postfix 처리 중 예외: {ex.Message}");
                 }
             }
         }

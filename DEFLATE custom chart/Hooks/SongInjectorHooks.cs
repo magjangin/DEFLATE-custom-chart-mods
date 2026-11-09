@@ -27,102 +27,109 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(MainTrackList __instance)
             {
-                if (__instance == null || __instance.tracks == null || __instance.tracks.Length == 0) return;
-
-                if (!CustomSongLibrary.HasSongs)
+                try
                 {
-                    MelonLogger.Warning("[곡 목록 주입] hwa/ 폴더에서 스캔된 커스텀 곡이 없어 주입을 건너뜁니다.");
-                    return;
-                }
+                    if (__instance == null || __instance.tracks == null || __instance.tracks.Length == 0) return;
 
-                // 1) 이미 이번 tracks 배열에 사본이 있는 곡은 재생성하지 않고 상태만 재동기화한다.
-                var pending = new List<CustomSongEntry>(CustomSongLibrary.Entries);
-
-                foreach (var existing in __instance.tracks)
-                {
-                    if (existing == null) continue;
-
-                    // 이 모드가 만든 사본만 재사용 대상이다. 원곡은 제목+앨범이 커스텀 곡과 같아도 건너뛴다.
-                    if (!existing.gameObject.name.Contains(CloneNameMarker)) continue;
-
-                    var existingWrapper = new CustomTrackWrapper(existing);
-                    var matched = CustomSongLibrary.FindByTitleAndAlbum(existingWrapper.Title, existingWrapper.AlbumName);
-                    if (matched == null || !pending.Contains(matched)) continue;
-
-                    matched.InjectedTrackID = existingWrapper.UniqueID;
-                    matched.AudioKey = existingWrapper.AudioKey;
-                    matched.VideoKey = existingWrapper.VideoKey;
-                    pending.Remove(matched);
-
-                    MelonLogger.Msg($"[곡 목록 주입] 기존 사본 재사용: '{matched.Meta.Title}' (앨범: '{matched.Meta.Album}', ID: {existingWrapper.UniqueID})");
-                }
-
-                if (pending.Count == 0)
-                {
-                    MelonLogger.Msg($"[곡 목록 주입] 커스텀 곡 {CustomSongLibrary.Entries.Count}곡이 모두 이미 주입되어 있습니다.");
-                    return;
-                }
-
-                // 2) 복제 원본이 될 트랙 탐색
-                MainTrackListBlock sourceBlock = null;
-                CustomTrackWrapper sourceWrapper = null;
-
-                foreach (var track in __instance.tracks)
-                {
-                    if (track == null) continue;
-
-                    var tempWrapper = new CustomTrackWrapper(track);
-                    bool titleMatch = !string.IsNullOrEmpty(tempWrapper.Title) &&
-                        tempWrapper.Title.IndexOf(TargetKeyword, StringComparison.OrdinalIgnoreCase) >= 0;
-                    bool idMatch = !string.IsNullOrEmpty(tempWrapper.UniqueID) &&
-                        tempWrapper.UniqueID.IndexOf(TargetKeyword, StringComparison.OrdinalIgnoreCase) >= 0;
-
-                    if (titleMatch || idMatch)
+                    if (!CustomSongLibrary.HasSongs)
                     {
-                        sourceBlock = track;
-                        sourceWrapper = tempWrapper;
-                        break;
+                        MelonLogger.Warning("[곡 목록 주입] hwa/ 폴더에서 스캔된 커스텀 곡이 없어 주입을 건너뜁니다.");
+                        return;
                     }
-                }
 
-                if (sourceBlock == null || sourceWrapper == null)
+                    // 1) 이미 이번 tracks 배열에 사본이 있는 곡은 재생성하지 않고 상태만 재동기화한다.
+                    var pending = new List<CustomSongEntry>(CustomSongLibrary.Entries);
+
+                    foreach (var existing in __instance.tracks)
+                    {
+                        if (existing == null) continue;
+
+                        // 이 모드가 만든 사본만 재사용 대상이다. 원곡은 제목+앨범이 커스텀 곡과 같아도 건너뛴다.
+                        if (!existing.gameObject.name.Contains(CloneNameMarker)) continue;
+
+                        var existingWrapper = new CustomTrackWrapper(existing);
+                        var matched = CustomSongLibrary.FindByTitleAndAlbum(existingWrapper.Title, existingWrapper.AlbumName);
+                        if (matched == null || !pending.Contains(matched)) continue;
+
+                        matched.InjectedTrackID = existingWrapper.UniqueID;
+                        matched.AudioKey = existingWrapper.AudioKey;
+                        matched.VideoKey = existingWrapper.VideoKey;
+                        pending.Remove(matched);
+
+                        MelonLogger.Msg($"[곡 목록 주입] 기존 사본 재사용: '{matched.Meta.Title}' (앨범: '{matched.Meta.Album}', ID: {existingWrapper.UniqueID})");
+                    }
+
+                    if (pending.Count == 0)
+                    {
+                        MelonLogger.Msg($"[곡 목록 주입] 커스텀 곡 {CustomSongLibrary.Entries.Count}곡이 모두 이미 주입되어 있습니다.");
+                        return;
+                    }
+
+                    // 2) 복제 원본이 될 트랙 탐색
+                    MainTrackListBlock sourceBlock = null;
+                    CustomTrackWrapper sourceWrapper = null;
+
+                    foreach (var track in __instance.tracks)
+                    {
+                        if (track == null) continue;
+
+                        var tempWrapper = new CustomTrackWrapper(track);
+                        bool titleMatch = !string.IsNullOrEmpty(tempWrapper.Title) &&
+                            tempWrapper.Title.IndexOf(TargetKeyword, StringComparison.OrdinalIgnoreCase) >= 0;
+                        bool idMatch = !string.IsNullOrEmpty(tempWrapper.UniqueID) &&
+                            tempWrapper.UniqueID.IndexOf(TargetKeyword, StringComparison.OrdinalIgnoreCase) >= 0;
+
+                        if (titleMatch || idMatch)
+                        {
+                            sourceBlock = track;
+                            sourceWrapper = tempWrapper;
+                            break;
+                        }
+                    }
+
+                    if (sourceBlock == null || sourceWrapper == null)
+                    {
+                        MelonLogger.Warning($"[곡 목록 주입] '{TargetKeyword}' 트랙을 찾지 못했습니다.");
+                        return;
+                    }
+
+                    // 3) 남은 커스텀 곡마다 사본 생성
+                    var createdBlocks = new List<MainTrackListBlock>();
+
+                    foreach (var entry in pending)
+                    {
+                        var cloneBlock = CreateTrackBlock(sourceBlock, sourceWrapper, entry);
+                        if (cloneBlock != null) createdBlocks.Add(cloneBlock);
+                    }
+
+                    if (createdBlocks.Count == 0)
+                    {
+                        MelonLogger.Error("[곡 목록 주입] 사본을 하나도 만들지 못했습니다.");
+                        return;
+                    }
+
+                    // 4) tracks 배열 확장 주입 (한 번에)
+                    var oldTracks = __instance.tracks;
+                    var newTracks = new Il2CppReferenceArray<MainTrackListBlock>(oldTracks.Length + createdBlocks.Count);
+                    for (int i = 0; i < oldTracks.Length; i++)
+                    {
+                        newTracks[i] = oldTracks[i];
+                    }
+                    for (int i = 0; i < createdBlocks.Count; i++)
+                    {
+                        newTracks[oldTracks.Length + i] = createdBlocks[i];
+                    }
+                    __instance.tracks = newTracks;
+
+                    // 5) 곡 목록 진입 시점에는 아직 아무 커스텀 곡도 선택되지 않은 상태로 둔다.
+                    HwaAssetManager.IsTargetTrackActive = false;
+
+                    MelonLogger.Msg($"[곡 목록 주입 완료] 원본 '{sourceWrapper.Title}' (ID: {sourceWrapper.UniqueID}) 기반으로 커스텀 곡 {createdBlocks.Count}곡 주입 | 총 {__instance.tracks.Length}곡");
+                }
+                catch (Exception ex)
                 {
-                    MelonLogger.Warning($"[곡 목록 주입] '{TargetKeyword}' 트랙을 찾지 못했습니다.");
-                    return;
+                    MelonLogger.Error($"[곡 목록 주입] MainTrackList.Start 주입 처리 중 예외: {ex.Message}\n{ex.StackTrace}");
                 }
-
-                // 3) 남은 커스텀 곡마다 사본 생성
-                var createdBlocks = new List<MainTrackListBlock>();
-
-                foreach (var entry in pending)
-                {
-                    var cloneBlock = CreateTrackBlock(sourceBlock, sourceWrapper, entry);
-                    if (cloneBlock != null) createdBlocks.Add(cloneBlock);
-                }
-
-                if (createdBlocks.Count == 0)
-                {
-                    MelonLogger.Error("[곡 목록 주입] 사본을 하나도 만들지 못했습니다.");
-                    return;
-                }
-
-                // 4) tracks 배열 확장 주입 (한 번에)
-                var oldTracks = __instance.tracks;
-                var newTracks = new Il2CppReferenceArray<MainTrackListBlock>(oldTracks.Length + createdBlocks.Count);
-                for (int i = 0; i < oldTracks.Length; i++)
-                {
-                    newTracks[i] = oldTracks[i];
-                }
-                for (int i = 0; i < createdBlocks.Count; i++)
-                {
-                    newTracks[oldTracks.Length + i] = createdBlocks[i];
-                }
-                __instance.tracks = newTracks;
-
-                // 5) 곡 목록 진입 시점에는 아직 아무 커스텀 곡도 선택되지 않은 상태로 둔다.
-                HwaAssetManager.IsTargetTrackActive = false;
-
-                MelonLogger.Msg($"[곡 목록 주입 완료] 원본 '{sourceWrapper.Title}' (ID: {sourceWrapper.UniqueID}) 기반으로 커스텀 곡 {createdBlocks.Count}곡 주입 | 총 {__instance.tracks.Length}곡");
             }
         }
 
@@ -162,11 +169,20 @@ namespace DEFLATE_custom_chart.Hooks
                 // 4) 사본 래퍼 갱신 및 커스텀 info.txt 메타데이터 / PNG 커버 자켓 주입
                 var cloneWrapper = new CustomTrackWrapper(cloneBlock);
 
-                // ID 재생성에 실패해 원본과 같은 ID가 남으면, 원본 곡까지 커스텀 곡으로 판정되므로 사본을 버린다.
+                // ID 재생성에 실패해 원본과 같은 ID가 남으면, 고유 Fallback ID를 직접 생성하여 부여 (업데이트 내성 강화)
                 if (string.IsNullOrEmpty(cloneWrapper.UniqueID) ||
                     string.Equals(cloneWrapper.UniqueID, sourceWrapper.UniqueID, StringComparison.OrdinalIgnoreCase))
                 {
-                    MelonLogger.Error($"[곡 목록 주입] '{entry.Meta.Title}' 사본의 ID가 비었거나 원본과 같아 주입을 취소합니다 (ID: '{cloneWrapper.UniqueID}').");
+                    string fallbackId = "CUSTOM_" + Guid.NewGuid().ToString("N");
+                    MelonLogger.Warning($"[곡 목록 주입] RegenerateID 미작동 감지. 폴백 고유 ID를 직접 할당합니다: '{fallbackId}'");
+                    cloneWrapper.UniqueID = fallbackId;
+                    try { cloneBlock.uniqueID = fallbackId; } catch { }
+                }
+
+                if (string.IsNullOrEmpty(cloneWrapper.UniqueID) ||
+                    string.Equals(cloneWrapper.UniqueID, sourceWrapper.UniqueID, StringComparison.OrdinalIgnoreCase))
+                {
+                    MelonLogger.Error($"[곡 목록 주입] '{entry.Meta.Title}' 사본의 ID 확보 실패로 주입을 취소합니다.");
                     UnityEngine.Object.Destroy(cloneGO);
                     return null;
                 }
@@ -180,15 +196,22 @@ namespace DEFLATE_custom_chart.Hooks
                 if (customCover != null) cloneWrapper.CoverSprite = customCover;
                 cloneWrapper.ApplyTo(cloneBlock);
 
-                // MainTrackListBlock 직접 속성에도 확실히 반영
-                cloneBlock.TrackTitle = meta.Title;
-                cloneBlock.TrackAuthor = meta.Artist;
-                cloneBlock.TrackAlbum = meta.Album;
-                if (customCover != null) cloneBlock.TrackCover = customCover;
-                cloneBlock.EZ_Star = meta.EasyLevel;
-                cloneBlock.NM_Star = meta.NormalLevel;
-                cloneBlock.HD_Star = meta.HardLevel;
-                cloneBlock.Description = $"BGA: {meta.BgaAuthor} | Chart: {meta.ChartMaker} | Easy:{meta.EasyLevel} Normal:{meta.NormalLevel} Hard:{meta.HardLevel}";
+                // MainTrackListBlock 직접 속성에도 확실히 반영 (예외 가드 포함)
+                try
+                {
+                    cloneBlock.TrackTitle = meta.Title;
+                    cloneBlock.TrackAuthor = meta.Artist;
+                    cloneBlock.TrackAlbum = meta.Album;
+                    if (customCover != null) cloneBlock.TrackCover = customCover;
+                    cloneBlock.EZ_Star = meta.EasyLevel;
+                    cloneBlock.NM_Star = meta.NormalLevel;
+                    cloneBlock.HD_Star = meta.HardLevel;
+                    cloneBlock.Description = $"BGA: {meta.BgaAuthor} | Chart: {meta.ChartMaker} | Easy:{meta.EasyLevel} Normal:{meta.NormalLevel} Hard:{meta.HardLevel}";
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[곡 목록 주입] 직접 필드 할당 중 경고 (내성 래퍼 적용 유지): {ex.Message}");
+                }
 
                 // 5) 커스텀 에셋 타겟 정보 등록
                 entry.InjectedTrackID = cloneWrapper.UniqueID;
