@@ -36,9 +36,12 @@
 - **이유:** 곡 목록 씬에서 커서를 옮길 때 곡 BGA/BGM 프리뷰를 위해 `TrackAssetManager.LoadAudioClip`을 후킹해야 합니다. 그러나 이 훅이 로딩 씬/인게임 씬까지 무차별로 동작하면, 실제 게임플레이 오디오 로드 요청을 가로채 원본 로직을 스킵시켜버려 인게임 로딩 무한 대기 또는 크래시를 유발합니다.
 - **해결책:** `LoadingGamePlay.Start` 진입 시 `IsInSongSelectContext = false`로 설정하여 프리뷰 훅을 즉시 비활성화하고, 곡 선택 씬(`MainTrackList.Start`) 복귀 시 다시 `true`로 켭니다.
 
-### ③ 내성 강화 리플렉션 래퍼 (`CustomTrackWrapper` & `Il2CppReflectionHelper`)
-- **이유:** Unity Il2Cpp 게임은 버전 패치 시 필드/프로퍼티의 이름이나 대소문자, 접두사(`_`, `m_`)가 자주 변경됩니다.
-- **해결책:** `Il2CppReflectionHelper.GetValueResilient` 및 `SetValueResilient`를 도입하여, 다중 후보군(`uniqueID`, `id`, `m_UniqueID` 등)을 캐시 기반 리플렉션으로 탐색합니다. 직접 접근 실패 시에도 리플렉션 백업으로 값이 안전하게 전달됩니다.
+### ③ 내성 강화 리플렉션 래퍼 및 오타/인덱싱 최적화 (`CustomTrackWrapper` & `Il2CppReflectionHelper`)
+- **이유:** Unity Il2Cpp 게임은 버전 패치 시 필드/프로퍼티의 이름이나 대소문자, 접두사(`_`, `m_`), 메서드 시그니처가 변경되거나 상속 계층 구조가 바뀔 수 있습니다. 또한 게임 원본 코드(`GameData`, `LoadingGamePlay`)에 `NowTrackAurthor`, `NowTracLabel` 같은 오타 필드가 존재합니다.
+- **해결책:**
+  - `Il2CppReflectionHelper`: `GetValueResilient`/`SetValueResilient`/`InvokeMethodResilient`로 `BaseType` 상속 체인까지 캐시 기반 리플렉션 탐색을 수행하며(`DeclaredOnly` 계층 순회, 파라미터 없는 메서드 캐싱, 후보군 배열 할당 제거), `NowTrackAuthor`/`NowTrackLabel` 등 정정 표기 폴백으로 패치 내성을 확보합니다.
+  - `HwaAssetManager.ApplyMetaToGameData` & `CustomTrackWrapper.ApplySongMetadata`: 곡 메타데이터/커버/난이도 별 표기를 `MainTrackListBlock`과 `GameData`에 일관 주입합니다.
+  - **성능 & 메모리 최적화:** `CustomSongLibrary`는 `TrackID`/`Title` O(1) 딕셔너리 인덱스를 유지하고 `Scan()` 재스캔 시 기존 `Texture2D`/`Sprite`/`AudioClip`을 `ResetLoadedAssets()`로 즉시 해제합니다. `BmsChart`는 파싱 시 레인별 노트 인덱스(`_notesByLane`)를 미리 구축하고(`GetNotesForLane` O(1)), `CustomSongEntry.LoadBgmCoroutine`은 `Time.realtimeSinceStartup` 실시간 타임아웃 가드로 고프레임 환경에서의 조기 타임아웃을 방지합니다.
 
 ### ④ BMS 시간 계산 공식
 - 사용자 프로필 및 BMS 표준 공식 준수:
@@ -52,16 +55,17 @@
 
 | 후킹 클래스 & 메서드 | 타이밍 | 역할 및 주입 로직 |
 | :--- | :--- | :--- |
-| `MainTrackList.Start` | Postfix | 원본 `WindShifter` 트랙 복제, `tracks` 배열 확장 주입, 자켓 이미지 주입 |
+| `MainTrackList.Start` | Postfix | `High` 우선순위로 원본 `WindShifter` 복제 및 O(1) 등록, `Normal` 커버 주입, `Last` 카탈로그 로깅 |
 | `TrackListBlockCtrl.SetSelected` | Postfix | 곡 목록 커서 이동 시 현재 활성 트랙(`HwaAssetManager.Active`) 갱신 및 커버 적용 |
-| `MainTrackList.GotoSceneData` | Prefix | 곡 플레이 시작 확정 시 `GameData`에 커스텀 메타데이터(제목, 아티스트, 커버 등) 주입 |
+| `MainTrackList.GotoSceneData` | Prefix | 곡 플레이 시작 확정 시 `ApplyMetaToGameData`로 커스텀 메타데이터(제목, 아티스트, 커버 등) 주입 |
 | `TrackAssetManager.LoadAudioClip` | Prefix | 곡 목록 프리뷰 중 커스텀 BGM 비동기 로드 및 콜백 호출 (원본 로드 스킵) |
 | `SimpleRandomVideo.LoadVideoSmart` | Prefix | 곡 선택/결과/인게임 BGA VideoPlayer에 커스텀 MP4 URL 주입 |
-| `LoadingGamePlay.Start` | Postfix | 프리뷰 컨텍스트 비활성화(`IsInSongSelectContext = false`), 로딩 UI 메타데이터 주입 |
-| `RhythmGameController.Start` | Postfix | 인게임 BGM 0ms 즉시 할당, 오토플레이(`AutoMode`) 강제, 판정 파라미터 로깅 |
-| `RhythmGameController.InitializeKoreographyTracks` | Postfix | 드롭 노트 샘플(`dropEventSamples`) 주입 및 원본 잔여 이벤트 정리 |
-| `RhythmGameController.LoadKoreographyEvents` | Postfix | **[핵심]** 각 레인별(`lane_1`~`lane_4`) BMS 차트 이벤트(`KoreographyEvent`) 주입 |
-| `RhythmGameController.LoadLineBarEvents` | Postfix | BMS 마디/박자 기반 커스텀 라인바 이벤트 주입 |
+| `LoadingGamePlay.Start` | Postfix | 프리뷰 컨텍스트 비활성화(`IsInSongSelectContext = false`), 로딩 UI 메타데이터 주입(오타 필드 폴백 포함) |
+| `RhythmGameController.Start` | Postfix | 인게임 BGM 0ms 즉시 할당(`EnsureInGameCustomBgm`), 오토플레이(`AutoMode`) 강제, 판정 파라미터 로깅 |
+| `RhythmGameController.InitializeKoreographyTracks` | Postfix | `dropEventSamples`에 O(1) 드롭 레인 노트 주입 및 원본 잔여 이벤트 정리 |
+| `RhythmGameController.LoadKoreographyEvents` | Postfix | **[핵심]** 각 레인별(`lane_1`~`lane_4`) BMS 차트 이벤트(`KoreographyEvent`) O(1) 레인 인덱스 기반 주입 |
+| `RhythmGameController.ReplaceLaneEventsFromTrack` / `AtSample` | Postfix | 재시작·모드 전환 시 레인 이벤트가 원본 차트로 복원되지 않도록 커스텀 BMS 노트 재주입 |
+| `RhythmGameController.LoadLineBarEvents` / `ReplaceLineBarEventsFromTrack` / `AtSample` | Postfix | BMS 마디/박자 기반 커스텀 라인바 이벤트 주입 및 재시작 복원 방지 |
 | `GameData.SaveGameData` | Prefix | `BlockSave=1`일 때 세이브 방지 (스코어 덮어쓰기 방지) |
 | `Key_indicator.Start` | Prefix | 곡 시작 시 거슬리는 키 가이드 UI 강제 숨김 |
 

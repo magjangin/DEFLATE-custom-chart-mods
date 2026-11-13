@@ -13,6 +13,7 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(MainTrackList), nameof(MainTrackList.Start))]
         public static class MainTrackList_Start_Patch
         {
+            [HarmonyPriority(Priority.Last)]
             public static void Postfix(MainTrackList __instance)
             {
                 try
@@ -26,6 +27,7 @@ namespace DEFLATE_custom_chart.Hooks
                     MelonLogger.Msg($"[곡 목록 카탈로그 스캔 완료] 전체 수록곡: 총 {__instance.tracks.Length}곡");
                     MelonLogger.Msg("--------------------------------------------------");
 
+                    var sb = new StringBuilder();
                     for (int i = 0; i < __instance.tracks.Length; i++)
                     {
                         var track = __instance.tracks[i];
@@ -39,7 +41,7 @@ namespace DEFLATE_custom_chart.Hooks
                             coverInfoStr = $"'{sprite.name}' ({texInfo})";
                         }
 
-                        var sb = new StringBuilder();
+                        sb.Clear();
                         sb.AppendLine($"[트랙 #{i + 1}] ID: {track.uniqueID} | 제목: {track.TrackTitle} | 아티스트: {track.TrackAuthor}");
                         sb.AppendLine($"  - 앨범: {track.TrackAlbum} | 디스크: {track.DiscID}");
                         sb.AppendLine($"  - 자켓 이미지: {coverInfoStr}");
@@ -65,15 +67,22 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(MainTrackList __instance, int trackIndex)
             {
-                if (__instance == null || __instance.tracks == null) return;
-                if (trackIndex >= 0 && trackIndex < __instance.tracks.Length)
+                try
                 {
-                    var track = __instance.tracks[trackIndex];
-                    if (track != null)
+                    if (__instance == null || __instance.tracks == null) return;
+                    if (trackIndex >= 0 && trackIndex < __instance.tracks.Length)
                     {
-                        string coverName = track.TrackCover != null ? track.TrackCover.name : "null";
-                        MelonLogger.Msg($"[곡 목록 커서 이동] 인덱스: {trackIndex} | 제목: '{track.TrackTitle}' (ID: {track.uniqueID}) | 자켓: '{coverName}'");
+                        var track = __instance.tracks[trackIndex];
+                        if (track != null)
+                        {
+                            string coverName = track.TrackCover != null ? track.TrackCover.name : "null";
+                            MelonLogger.Msg($"[곡 목록 커서 이동] 인덱스: {trackIndex} | 제목: '{track.TrackTitle}' (ID: {track.uniqueID}) | 자켓: '{coverName}'");
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[곡 목록 커서 이동] GoToTrack 로깅 중 예외: {ex.Message}");
                 }
             }
         }
@@ -89,7 +98,7 @@ namespace DEFLATE_custom_chart.Hooks
 
                     // 곡 목록에서 커서가 옮겨갈 때마다 hwa/ 커스텀 에셋(사본 전용) 활성 상태를 갱신
                     // → 목록 PV 프리뷰(BGA)에서도 사본에서만 커스텀 비디오/오디오가 적용되도록 함
-                    bool isTargetTrack = HwaAssetManager.SetActiveTrack(__instance.UniqueID);
+                    bool isTargetTrack = HwaAssetManager.SetActiveTrack(__instance.UniqueID, __instance.UI_TrackTitle?.text);
                     if (isTargetTrack)
                     {
                         HwaAssetManager.ApplyCustomCover(__instance.cover);
@@ -110,8 +119,15 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(TrackListBlockCtrl __instance, PointerEventData eventData)
             {
-                if (__instance == null) return;
-                MelonLogger.Msg($"[곡 클릭 감지] 인덱스: {__instance.IndexInTrackList} | 제목: '{__instance.UI_TrackTitle?.text}' (ID: {__instance.UniqueID})");
+                try
+                {
+                    if (__instance == null) return;
+                    MelonLogger.Msg($"[곡 클릭 감지] 인덱스: {__instance.IndexInTrackList} | 제목: '{__instance.UI_TrackTitle?.text}' (ID: {__instance.UniqueID})");
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[곡 클릭 감지] OnPointerClick 처리 중 예외: {ex.Message}");
+                }
             }
         }
 
@@ -131,15 +147,7 @@ namespace DEFLATE_custom_chart.Hooks
                         var meta = HwaAssetManager.CurrentMeta ?? new HwaAssetManager.HwaMetaInfo();
                         var customCover = HwaAssetManager.LoadCoverSprite();
 
-                        __instance.gameData.NowTrackTitle = meta.Title;
-                        __instance.gameData.NowTrackAurthor = meta.Artist;
-                        __instance.gameData.NowTrackPVAuthor = meta.BgaAuthor;
-                        __instance.gameData.NowTracLabel = meta.Album;
-
-                        if (customCover != null)
-                        {
-                            __instance.gameData.NowTrackCover = customCover;
-                        }
+                        HwaAssetManager.ApplyMetaToGameData(__instance.gameData, customCover);
 
                         MelonLogger.Msg($"[GameData 사전 주입] 제목: '{meta.Title}', 아티스트: '{meta.Artist}', BGA: '{meta.BgaAuthor}', 앨범: '{meta.Album}', 커버: '{(customCover != null ? customCover.name : "null")}' 주입 완료");
                     }
@@ -162,11 +170,7 @@ namespace DEFLATE_custom_chart.Hooks
         {
             if (diffCtrl == null) return 8;
             var meta = HwaAssetManager.CurrentMeta ?? new HwaAssetManager.HwaMetaInfo();
-            int diffVal = (int)diffCtrl.myDifficulty;
-            if (diffVal == 0) return meta.EasyLevel;
-            if (diffVal == 1) return meta.NormalLevel;
-            if (diffVal == 2) return meta.HardLevel;
-            return meta.NormalLevel;
+            return meta.GetLevelForDifficulty((int)diffCtrl.myDifficulty);
         }
 
         private static void ApplyCustomDiffDisplay(DiffCtrl diffCtrl)
@@ -214,9 +218,16 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(DiffCtrl __instance)
             {
-                if (__instance == null) return;
-                ApplyCustomDiffDisplay(__instance);
-                MelonLogger.Msg($"[난이도 변경] 선택된 난이도: {__instance.myDifficulty}");
+                try
+                {
+                    if (__instance == null) return;
+                    ApplyCustomDiffDisplay(__instance);
+                    MelonLogger.Msg($"[난이도 변경] 선택된 난이도: {__instance.myDifficulty}");
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[난이도 변경] SelectNextDifficulty 처리 중 예외: {ex.Message}");
+                }
             }
         }
 
@@ -225,9 +236,16 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(DiffCtrl __instance)
             {
-                if (__instance == null) return;
-                ApplyCustomDiffDisplay(__instance);
-                MelonLogger.Msg($"[난이도 변경] 선택된 난이도: {__instance.myDifficulty}");
+                try
+                {
+                    if (__instance == null) return;
+                    ApplyCustomDiffDisplay(__instance);
+                    MelonLogger.Msg($"[난이도 변경] 선택된 난이도: {__instance.myDifficulty}");
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[난이도 변경] SelectPreviousDifficulty 처리 중 예외: {ex.Message}");
+                }
             }
         }
     }

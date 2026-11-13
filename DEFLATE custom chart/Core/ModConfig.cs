@@ -22,11 +22,39 @@ namespace DEFLATE_custom_chart.Core
         public bool NoteSwayDamping { get; set; } = true;
         public float NoteSwayDampingTime { get; set; } = 0.4f;
 
+        /// <summary>매 프레임 계산 병목 제거를 위해 사전 계산된 각주파수 (NoteSwaySpeed × 10π).</summary>
+        public float NoteSwayAngularFreq { get; private set; }
+
         // 4. 카오스 노트 스피드 (NoteSpeedChaos)
         public bool NoteSpeedChaos { get; set; } = false;
         public float NoteSpeedChaosMin { get; set; } = 0.6f;
         public float NoteSpeedChaosMax { get; set; } = 1.8f;
         public bool NoteSpeedChaosPerLane { get; set; } = true;
+
+        public ModConfig()
+        {
+            UpdateDerivedValues();
+        }
+
+        private void UpdateDerivedValues()
+        {
+            NoteSwayAmplitude = SanitizeFloat(NoteSwayAmplitude, 0f, 10000f, 20.0f);
+            NoteSwaySpeed = SanitizeFloat(NoteSwaySpeed, 0f, 1000f, 0.8f);
+            NoteSwayDampingTime = SanitizeFloat(NoteSwayDampingTime, 0f, 60f, 0.4f);
+            NoteSpeedChaosMin = SanitizeFloat(NoteSpeedChaosMin, 0.1f, 20f, 0.6f);
+            NoteSpeedChaosMax = SanitizeFloat(NoteSpeedChaosMax, NoteSpeedChaosMin, 20f, 1.8f);
+            if (NoteSpeedChaosMax < NoteSpeedChaosMin) NoteSpeedChaosMax = NoteSpeedChaosMin;
+
+            NoteSwayAngularFreq = NoteSwaySpeed * 10.0f * (float)Math.PI;
+        }
+
+        private static float SanitizeFloat(float value, float min, float max, float fallback)
+        {
+            if (!float.IsFinite(value)) return fallback;
+            if (value < min) return min;
+            if (value > max) return max;
+            return value;
+        }
 
         private static string ConfigFilePath =>
             Path.Combine(MelonEnvironment.GameRootDirectory, "savecustomkey", "config.txt");
@@ -64,6 +92,16 @@ namespace DEFLATE_custom_chart.Core
 
         private static readonly char[] KeyValueSeparators = { '=' };
 
+        private static readonly HashSet<string> TrueWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "true", "트루", "참", "켜기", "켜짐", "활성화", "on", "1", "enable", "enabled", "y", "yes"
+        };
+
+        private static readonly HashSet<string> FalseWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "false", "폴스", "거짓", "끄기", "꺼짐", "비활성화", "off", "0", "disable", "disabled", "n", "no"
+        };
+
         private static void LoadFromTxt()
         {
             var config = new ModConfig();
@@ -91,11 +129,11 @@ namespace DEFLATE_custom_chart.Core
                 }
                 else if (key.Equals("NoteSwayAmplitude", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (float.TryParse(val, NumberStyles.Any, CultureInfo.InvariantCulture, out float f)) config.NoteSwayAmplitude = f;
+                    if (TryParseFloat(val, out float f)) config.NoteSwayAmplitude = f;
                 }
                 else if (key.Equals("NoteSwaySpeed", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (float.TryParse(val, NumberStyles.Any, CultureInfo.InvariantCulture, out float f)) config.NoteSwaySpeed = f;
+                    if (TryParseFloat(val, out float f)) config.NoteSwaySpeed = f;
                 }
                 else if (key.Equals("NoteSwayDamping", StringComparison.OrdinalIgnoreCase))
                 {
@@ -103,7 +141,7 @@ namespace DEFLATE_custom_chart.Core
                 }
                 else if (key.Equals("NoteSwayDampingTime", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (float.TryParse(val, NumberStyles.Any, CultureInfo.InvariantCulture, out float f)) config.NoteSwayDampingTime = f;
+                    if (TryParseFloat(val, out float f)) config.NoteSwayDampingTime = f;
                 }
                 else if (key.Equals("NoteSpeedChaos", StringComparison.OrdinalIgnoreCase))
                 {
@@ -111,11 +149,11 @@ namespace DEFLATE_custom_chart.Core
                 }
                 else if (key.Equals("NoteSpeedChaosMin", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (float.TryParse(val, NumberStyles.Any, CultureInfo.InvariantCulture, out float f)) config.NoteSpeedChaosMin = f;
+                    if (TryParseFloat(val, out float f)) config.NoteSpeedChaosMin = f;
                 }
                 else if (key.Equals("NoteSpeedChaosMax", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (float.TryParse(val, NumberStyles.Any, CultureInfo.InvariantCulture, out float f)) config.NoteSpeedChaosMax = f;
+                    if (TryParseFloat(val, out float f)) config.NoteSpeedChaosMax = f;
                 }
                 else if (key.Equals("NoteSpeedChaosPerLane", StringComparison.OrdinalIgnoreCase))
                 {
@@ -123,13 +161,13 @@ namespace DEFLATE_custom_chart.Core
                 }
             }
 
-            if (config.NoteSwayAmplitude < 0f) config.NoteSwayAmplitude = 0f;
-            if (config.NoteSwaySpeed < 0f) config.NoteSwaySpeed = 0f;
-            if (config.NoteSwayDampingTime < 0f) config.NoteSwayDampingTime = 0f;
-            if (config.NoteSpeedChaosMin < 0.1f) config.NoteSpeedChaosMin = 0.1f;
-            if (config.NoteSpeedChaosMax < config.NoteSpeedChaosMin) config.NoteSpeedChaosMax = config.NoteSpeedChaosMin;
-
+            config.UpdateDerivedValues();
             Instance = config;
+        }
+
+        private static bool TryParseFloat(string val, out float result)
+        {
+            return float.TryParse(val, NumberStyles.Float, CultureInfo.InvariantCulture, out result) && float.IsFinite(result);
         }
 
         private static bool TryParseFlexibleBool(string input, out bool result)
@@ -137,29 +175,19 @@ namespace DEFLATE_custom_chart.Core
             result = false;
             if (string.IsNullOrWhiteSpace(input)) return false;
 
-            string normalized = input.Trim().ToLowerInvariant();
-
-            // True 의미를 갖는 단어들
-            if (normalized == "true" || normalized == "트루" || normalized == "참" ||
-                normalized == "켜기" || normalized == "켜짐" || normalized == "활성화" ||
-                normalized == "on" || normalized == "1" || normalized == "enable" ||
-                normalized == "enabled" || normalized == "y" || normalized == "yes")
+            string trimmed = input.Trim();
+            if (TrueWords.Contains(trimmed))
             {
                 result = true;
                 return true;
             }
-
-            // False 의미를 갖는 단어들
-            if (normalized == "false" || normalized == "폴스" || normalized == "거짓" ||
-                normalized == "끄기" || normalized == "꺼짐" || normalized == "비활성화" ||
-                normalized == "off" || normalized == "0" || normalized == "disable" ||
-                normalized == "disabled" || normalized == "n" || normalized == "no")
+            if (FalseWords.Contains(trimmed))
             {
                 result = false;
                 return true;
             }
 
-            return bool.TryParse(input, out result);
+            return bool.TryParse(trimmed, out result);
         }
 
         public static void Save()

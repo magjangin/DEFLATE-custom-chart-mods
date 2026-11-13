@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace DEFLATE_custom_chart.Core.Bms
@@ -54,6 +55,9 @@ namespace DEFLATE_custom_chart.Core.Bms
 
         public string Channel { get; set; } = string.Empty;
         public string NoteValue { get; set; } = string.Empty;
+
+        /// <summary>파싱 시점에 미리 확정된 DEFLATE 레인 슬롯 ID (lane_1~lane_4, drop).</summary>
+        public string ResolvedLane { get; set; } = string.Empty;
 
         public bool IsLongNote { get; set; }
         public double LongNoteEndTick { get; set; }
@@ -117,5 +121,45 @@ namespace DEFLATE_custom_chart.Core.Bms
 
         /// <summary>파싱 중 건너뛴 줄 등 차트 제작자가 알아야 할 경고 (로그 출력용).</summary>
         public List<string> Warnings { get; } = new List<string>();
+
+        private readonly Dictionary<string, List<BmsNote>> _notesByLane =
+            new Dictionary<string, List<BmsNote>>(StringComparer.OrdinalIgnoreCase);
+
+        private static readonly BmsNote[] EmptyNotes = Array.Empty<BmsNote>();
+
+        /// <summary>
+        /// 인게임 레인 슬롯별(lane_1~lane_4, drop) 노트 리스트를 O(1)로 조회합니다.
+        /// (9개 레인 + 드롭 초기화 시 전체 노트를 매번 순회하는 O(10N) 병목 제거)
+        /// </summary>
+        public IReadOnlyList<BmsNote> GetNotesForLane(string laneId)
+        {
+            if (string.IsNullOrEmpty(laneId)) return EmptyNotes;
+
+            if (_notesByLane.Count == 0 && Notes.Count > 0)
+            {
+                RebuildLaneIndex();
+            }
+
+            return _notesByLane.TryGetValue(laneId, out var laneNotes) ? laneNotes : EmptyNotes;
+        }
+
+        /// <summary>노트 목록을 레인 슬롯 기준으로 재인덱싱합니다.</summary>
+        public void RebuildLaneIndex()
+        {
+            _notesByLane.Clear();
+            foreach (var note in Notes)
+            {
+                if (note == null) continue;
+                string lane = BmsLaneMapper.ResolveNoteLane(note);
+                if (string.IsNullOrEmpty(lane)) continue;
+
+                if (!_notesByLane.TryGetValue(lane, out var list))
+                {
+                    list = new List<BmsNote>();
+                    _notesByLane[lane] = list;
+                }
+                list.Add(note);
+            }
+        }
     }
 }

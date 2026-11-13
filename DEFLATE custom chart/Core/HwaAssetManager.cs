@@ -1,10 +1,12 @@
 using System;
 using System.Collections;
 using System.IO;
+using Il2Cppdizzylab.castor;
 using MelonLoader;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.Video;
+using DEFLATE_custom_chart.Core.Wrapper;
 
 namespace DEFLATE_custom_chart.Core
 {
@@ -101,6 +103,50 @@ namespace DEFLATE_custom_chart.Core
             public int EasyLevel { get; set; } = 8;
             public int NormalLevel { get; set; } = 8;
             public int HardLevel { get; set; } = 8;
+
+            public int GetLevelForDifficulty(int difficultyIndex)
+            {
+                switch (difficultyIndex)
+                {
+                    case 0: return EasyLevel;
+                    case 1: return NormalLevel;
+                    case 2: return HardLevel;
+                    default: return NormalLevel;
+                }
+            }
+        }
+
+        private static readonly string[] GameDataTitleFallbacks = { "trackTitle", "Title" };
+        private static readonly string[] GameDataAuthorFallbacks = { "NowTrackAuthor", "TrackAuthor", "nowTrackAuthor" };
+        private static readonly string[] GameDataPvAuthorFallbacks = { "NowTrackPvAuthor", "TrackPVAuthor" };
+        private static readonly string[] GameDataLabelFallbacks = { "NowTrackLabel", "TrackLabel", "TrackAlbum" };
+        private static readonly string[] GameDataLevelFallbacks = { "TrackLevel", "nowTrackLevel" };
+        private static readonly string[] GameDataCoverFallbacks = { "TrackCover", "nowTrackCover" };
+
+        /// <summary>
+        /// 활성 커스텀 곡 메타데이터와 커버를 GameData에 안전하게 주입합니다.
+        /// 원본 오타 필드(NowTrackAurthor / NowTracLabel)가 향후 게임 패치에서 교정되더라도 폴백 리플렉션으로 동작합니다.
+        /// </summary>
+        public static void ApplyMetaToGameData(GameData gd, Sprite customCover = null, int? targetStar = null)
+        {
+            if (gd == null) return;
+            var meta = CurrentMeta;
+
+            Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackTitle = meta.Title, "NowTrackTitle", GameDataTitleFallbacks, meta.Title);
+            Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackAurthor = meta.Artist, "NowTrackAurthor", GameDataAuthorFallbacks, meta.Artist);
+            Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackPVAuthor = meta.BgaAuthor, "NowTrackPVAuthor", GameDataPvAuthorFallbacks, meta.BgaAuthor);
+            Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTracLabel = meta.Album, "NowTracLabel", GameDataLabelFallbacks, meta.Album);
+
+            if (targetStar.HasValue)
+            {
+                string levelStr = targetStar.Value.ToString();
+                Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackLevel = levelStr, "NowTrackLevel", GameDataLevelFallbacks, levelStr);
+            }
+
+            if (customCover != null)
+            {
+                Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackCover = customCover, "NowTrackCover", GameDataCoverFallbacks, customCover);
+            }
         }
 
         public static void Initialize()
@@ -148,6 +194,7 @@ namespace DEFLATE_custom_chart.Core
             {
                 if (img == null) continue;
                 string name = img.name;
+                if (string.IsNullOrEmpty(name)) continue;
                 if (name.IndexOf("cover", StringComparison.OrdinalIgnoreCase) >= 0 ||
                     name.IndexOf("track", StringComparison.OrdinalIgnoreCase) >= 0 ||
                     name.IndexOf("jacket", StringComparison.OrdinalIgnoreCase) >= 0)

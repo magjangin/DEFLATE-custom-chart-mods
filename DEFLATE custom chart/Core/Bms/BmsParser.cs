@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 
 namespace DEFLATE_custom_chart.Core.Bms
 {
@@ -26,6 +25,18 @@ namespace DEFLATE_custom_chart.Core.Bms
             {
                 if (data[start + i] != '0') return false;
             }
+            return true;
+        }
+
+        private static bool TryParse3Digits(string line, int startIndex, out int value)
+        {
+            value = 0;
+            if (line == null || startIndex + 3 > line.Length) return false;
+            int d0 = line[startIndex] - '0';
+            int d1 = line[startIndex + 1] - '0';
+            int d2 = line[startIndex + 2] - '0';
+            if ((uint)d0 > 9 || (uint)d1 > 9 || (uint)d2 > 9) return false;
+            value = d0 * 100 + d1 * 10 + d2;
             return true;
         }
 
@@ -53,21 +64,19 @@ namespace DEFLATE_custom_chart.Core.Bms
                 string line;
                 while ((line = reader.ReadLine()) != null)
                 {
-                    line = line.Trim();
-                    if (!line.StartsWith("#WAV", StringComparison.OrdinalIgnoreCase)) continue;
+                    int start = 0;
+                    while (start < line.Length && char.IsWhiteSpace(line[start])) start++;
+                    if (line.Length - start < 5 || line[start] != '#') continue;
+                    if (string.Compare(line, start, "#WAV", 0, 4, StringComparison.OrdinalIgnoreCase) != 0) continue;
 
                     // 예: #WAV01 sample.wav -> key: 01 (len 2)
                     // 예: #WAV1A2 sample.wav -> key: 1A2 (len 3)
-                    int spaceIdx = line.IndexOfAny(WhitespaceChars);
-                    string tagWithKey = spaceIdx > 0 ? line.Substring(0, spaceIdx) : line;
-
-                    if (tagWithKey.Length > 4)
+                    int keyStart = start + 4;
+                    int spaceIdx = line.IndexOfAny(WhitespaceChars, keyStart);
+                    int keyEnd = spaceIdx > 0 ? spaceIdx : line.Length;
+                    if (keyEnd - keyStart == 3)
                     {
-                        string key = tagWithKey.Substring(4);
-                        if (key.Length == 3)
-                        {
-                            return 3; // 확장 3글자 ID 감지
-                        }
+                        return 3; // 확장 3글자 ID 감지
                     }
                 }
             }
@@ -86,6 +95,7 @@ namespace DEFLATE_custom_chart.Core.Bms
 
             var rawChannelData = new List<RawMeasureChannel>();
             var measureLengths = new Dictionary<int, float>();
+            int maxMeasure = 0;
 
             // 1차 스캔: 헤더 및 마디/채널 데이터 수집
             using (var reader = new StringReader(bmsContent))
@@ -94,14 +104,14 @@ namespace DEFLATE_custom_chart.Core.Bms
                 while ((line = reader.ReadLine()) != null)
                 {
                     line = line.Trim();
-                    if (string.IsNullOrEmpty(line) || !line.StartsWith("#")) continue;
+                    if (string.IsNullOrEmpty(line) || line[0] != '#') continue;
 
-                    ParseLine(line, chart, rawChannelData, measureLengths, noteWidth);
+                    ParseLine(line, chart, rawChannelData, measureLengths, noteWidth, ref maxMeasure);
                 }
             }
 
             // 마디별 시작 틱 위치 계산 (마디 배율 #XXX02 적용)
-            var measureStartTicks = CalculateMeasureStartTicks(measureLengths, rawChannelData);
+            var measureStartTicks = CalculateMeasureStartTicks(measureLengths, maxMeasure);
 
             // BPM 변경 이벤트 목록 수집 및 틱 순서 정렬
             BuildBpmTimeline(chart, rawChannelData, measureStartTicks, noteWidth);
@@ -112,8 +122,11 @@ namespace DEFLATE_custom_chart.Core.Bms
             // 노트 생성 및 틱/시간(Seconds)/샘플위치 계산
             GenerateNotes(chart, rawChannelData, measureStartTicks, noteWidth, targetSampleRate);
 
+            // 이후 페어링 및 출력에서 정렬 재사용이 가능하도록 (Tick, Channel) 순으로 1회 인플레이스 정렬
+            chart.Notes.Sort(CompareNotesByTickThenChannel);
+
             // 롱노트(LN) Head-Tail 페어링 처리
-            PairLongNotes(chart, targetSampleRate);
+            PairLongNotes(chart);
 
             // 키음 이름("홀드 시작"/"홀드 끝") 기반 홀드 페어링 (GRC2 / sxtg2와 동일한 매칭 시맨틱)
             PairHoldNotesByKeysound(chart);
@@ -121,10 +134,16 @@ namespace DEFLATE_custom_chart.Core.Bms
             // 짝을 못 찾은 홀드 Head는 단타로 강등 (EndSample이 StartSample보다 앞서는 유령 노트 방지)
             SanitizeUnpairedLongNotes(chart);
 
-            // 최종 틱 순서 정렬
-            chart.Notes = chart.Notes.OrderBy(n => n.Tick).ThenBy(n => n.Channel).ToList();
+            // 인게임 O(1) 조회용 레인별 노트 인덱스 구축
+            chart.RebuildLaneIndex();
 
             return chart;
+        }
+
+        private static int CompareNotesByTickThenChannel(BmsNote a, BmsNote b)
+        {
+            int tickCmp = a.Tick.CompareTo(b.Tick);
+            return tickCmp != 0 ? tickCmp : string.CompareOrdinal(a.Channel, b.Channel);
         }
 
         private void ParseLine(
@@ -132,8 +151,37 @@ namespace DEFLATE_custom_chart.Core.Bms
             BmsChart chart,
             List<RawMeasureChannel> rawChannelData,
             Dictionary<int, float> measureLengths,
-            int noteWidth)
+            int noteWidth,
+            ref int maxMeasure)
         {
+            // BMS 본문의 대다수를 차지하는 #XXXYY:ZZZZ 채널 라인을 헤더 StartsWith 체인보다 먼저 판별한다.
+            if (line.Length >= 7 && line[6] == ':' && TryParse3Digits(line, 1, out int measure))
+            {
+                if (measure > maxMeasure) maxMeasure = measure;
+                string channel = line.Substring(4, 2);
+
+                // #XXX02: 마디 길이 변형 (배율 float 지정)
+                if (channel == "02")
+                {
+                    string data = line.Substring(7).Trim();
+                    if (float.TryParse(data, NumberStyles.Any, CultureInfo.InvariantCulture, out float lenMult) && lenMult >= 0f)
+                    {
+                        measureLengths[measure] = lenMult;
+                    }
+                }
+                else if (channel == "03" || channel == "08" || BmsLaneMapper.IsNoteChannel(channel))
+                {
+                    // 사용하지 않는 BGM(01)/BGA(04) 등 수백 줄의 채널 데이터 객체 할당을 생략한다.
+                    rawChannelData.Add(new RawMeasureChannel
+                    {
+                        Measure = measure,
+                        Channel = channel,
+                        Data = line.Substring(7).Trim()
+                    });
+                }
+                return;
+            }
+
             // 헤더 처리
             if (line.StartsWith("#TITLE", StringComparison.OrdinalIgnoreCase))
             {
@@ -200,33 +248,6 @@ namespace DEFLATE_custom_chart.Core.Bms
                     chart.Header.BpmTable[bpmKey] = exBpm;
                 }
             }
-            // #XXXYY:ZZZZ 채널 데이터 처리 (예: #00111:01020304 -> line[0]='#', line[1..3]=Measure, line[4..5]=Channel, line[6]=':')
-            else if (line.Length >= 7 && line[0] == '#' && line[6] == ':')
-            {
-                if (int.TryParse(line.Substring(1, 3), out int measure))
-                {
-                    string channel = line.Substring(4, 2);
-                    string data = line.Substring(7).Trim();
-
-                    // #XXX02: 마디 길이 변형 (배율 float 지정)
-                    if (channel == "02")
-                    {
-                        if (float.TryParse(data, NumberStyles.Any, CultureInfo.InvariantCulture, out float lenMult) && lenMult >= 0f)
-                        {
-                            measureLengths[measure] = lenMult;
-                        }
-                    }
-                    else
-                    {
-                        rawChannelData.Add(new RawMeasureChannel
-                        {
-                            Measure = measure,
-                            Channel = channel,
-                            Data = data
-                        });
-                    }
-                }
-            }
         }
 
         private string ExtractHeaderValue(string line, string prefix)
@@ -247,21 +268,15 @@ namespace DEFLATE_custom_chart.Core.Bms
         /// <summary>
         /// 변박자(#XXX02)를 고려하여 각 마디의 시작 Tick 위치를 구합니다.
         /// </summary>
-        private Dictionary<int, double> CalculateMeasureStartTicks(Dictionary<int, float> measureLengths, List<RawMeasureChannel> rawChannels)
+        private Dictionary<int, double> CalculateMeasureStartTicks(Dictionary<int, float> measureLengths, int maxMeasure)
         {
-            int maxMeasure = rawChannels.Count > 0 ? rawChannels.Max(r => r.Measure) : 0;
-            if (measureLengths.Count > 0)
-            {
-                maxMeasure = Math.Max(maxMeasure, measureLengths.Keys.Max());
-            }
-
             var startTicks = new Dictionary<int, double>();
             double currentTick = 0.0;
 
             for (int m = 0; m <= maxMeasure + 1; m++)
             {
                 startTicks[m] = currentTick;
-                float multiplier = measureLengths.ContainsKey(m) ? measureLengths[m] : 1.0f;
+                float multiplier = measureLengths.TryGetValue(m, out float lenMult) ? lenMult : 1.0f;
                 currentTick += TicksPerMeasure * multiplier;
             }
 
@@ -450,8 +465,8 @@ namespace DEFLATE_custom_chart.Core.Bms
             foreach (var raw in rawChannels)
             {
                 // 노트 채널 여부 확인: BmsLaneMapper가 아는 레인 채널(16/11/12/13/14)만 노트로 취급.
-                // 그 외 채널(02/03/08 등 제어 채널 포함)은 여기서 전부 걸러진다.
-                if (!BmsLaneMapper.IsNoteChannel(raw.Channel)) continue;
+                string resolvedLane = BmsLaneMapper.ResolveChannelLane(raw.Channel);
+                if (resolvedLane == null) continue;
                 if (string.IsNullOrEmpty(raw.Data)) continue;
                 if (raw.Data.Length % noteWidth != 0)
                 {
@@ -460,8 +475,9 @@ namespace DEFLATE_custom_chart.Core.Bms
                 }
 
                 int objectCount = raw.Data.Length / noteWidth;
-                double mStartTick = measureStartTicks.ContainsKey(raw.Measure) ? measureStartTicks[raw.Measure] : raw.Measure * TicksPerMeasure;
-                double mLengthTicks = (measureStartTicks.ContainsKey(raw.Measure + 1) ? measureStartTicks[raw.Measure + 1] : (raw.Measure + 1) * TicksPerMeasure) - mStartTick;
+                double mStartTick = measureStartTicks.TryGetValue(raw.Measure, out double ms) ? ms : raw.Measure * TicksPerMeasure;
+                double mEndTick = measureStartTicks.TryGetValue(raw.Measure + 1, out double me) ? me : (raw.Measure + 1) * TicksPerMeasure;
+                double mLengthTicks = mEndTick - mStartTick;
 
                 for (int i = 0; i < objectCount; i++)
                 {
@@ -481,7 +497,8 @@ namespace DEFLATE_custom_chart.Core.Bms
                         TimeSeconds = timeSec,
                         SamplePosition = samplePos,
                         Channel = raw.Channel,
-                        NoteValue = val
+                        NoteValue = val,
+                        ResolvedLane = resolvedLane
                         // IsLongNote는 여기서 정하지 않는다. 아래 #LNOBJ 처리와
                         // 키음("홀드 시작"/"홀드 끝") 매칭 단계에서 확정된다.
                     });
@@ -489,43 +506,55 @@ namespace DEFLATE_custom_chart.Core.Bms
             }
         }
 
+        private static Dictionary<string, List<BmsNote>> GroupSortedNotesByChannel(List<BmsNote> sortedNotes)
+        {
+            var grouped = new Dictionary<string, List<BmsNote>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var note in sortedNotes)
+            {
+                if (!grouped.TryGetValue(note.Channel, out var list))
+                {
+                    list = new List<BmsNote>();
+                    grouped[note.Channel] = list;
+                }
+                list.Add(note);
+            }
+            return grouped;
+        }
+
         /// <summary>
         /// #LNOBJ로 지정된 롱노트 종단 오브젝트의 Head-Tail 짝을 맞춰 롱노트 종단 정보를 갱신합니다.
+        /// (호출 시점에 chart.Notes는 이미 Tick 순으로 정렬되어 있어야 합니다.)
         /// </summary>
-        private void PairLongNotes(BmsChart chart, int sampleRate)
+        private void PairLongNotes(BmsChart chart)
         {
             string lnObjKey = chart.Header.LnObj;
+            if (string.IsNullOrEmpty(lnObjKey) || chart.Notes.Count == 0) return;
 
-            // 1. #LNOBJ 처리: 지정된 LNOBJ 키의 노트를 바로 전 노트의 Tail로 병합
-            if (!string.IsNullOrEmpty(lnObjKey))
+            var toRemove = new HashSet<BmsNote>();
+            var notesByChannel = GroupSortedNotesByChannel(chart.Notes);
+
+            foreach (var orderedNotes in notesByChannel.Values)
             {
-                var toRemove = new HashSet<BmsNote>();
-                var notesGroupedByChannel = chart.Notes.GroupBy(n => n.Channel);
-                foreach (var group in notesGroupedByChannel)
+                for (int i = 1; i < orderedNotes.Count; i++)
                 {
-                    var orderedNotes = group.OrderBy(n => n.Tick).ToList();
-                    for (int i = 0; i < orderedNotes.Count; i++)
-                    {
-                        if (orderedNotes[i].NoteValue == lnObjKey && i > 0)
-                        {
-                            var head = orderedNotes[i - 1];
-                            var tail = orderedNotes[i];
+                    if (orderedNotes[i].NoteValue != lnObjKey) continue;
 
-                            head.IsLongNote = true;
-                            head.LongNoteEndTick = tail.Tick;
-                            head.LongNoteEndTimeSeconds = tail.TimeSeconds;
-                            head.LongNoteEndSamplePosition = tail.SamplePosition;
+                    var head = orderedNotes[i - 1];
+                    var tail = orderedNotes[i];
 
-                            // Tail 전용 LNOBJ 개체는 일괄 삭제 대상에 추가
-                            toRemove.Add(tail);
-                        }
-                    }
+                    head.IsLongNote = true;
+                    head.LongNoteEndTick = tail.Tick;
+                    head.LongNoteEndTimeSeconds = tail.TimeSeconds;
+                    head.LongNoteEndSamplePosition = tail.SamplePosition;
+
+                    // Tail 전용 LNOBJ 개체는 일괄 삭제 대상에 추가
+                    toRemove.Add(tail);
                 }
+            }
 
-                if (toRemove.Count > 0)
-                {
-                    chart.Notes.RemoveAll(n => toRemove.Contains(n));
-                }
+            if (toRemove.Count > 0)
+            {
+                chart.Notes.RemoveAll(n => toRemove.Contains(n));
             }
         }
 
@@ -547,6 +576,7 @@ namespace DEFLATE_custom_chart.Core.Bms
 
         /// <summary>
         /// #WAV 키음 파일명이 "홀드 시작" / "홀드 끝"인 노트를 Head / Tail로 보고 짝을 맞춥니다.
+        /// (호출 시점에 chart.Notes는 이미 Tick 순으로 정렬되어 있어야 합니다.)
         ///
         /// 매칭 규칙 (GRC2 <c>HoldNoteProcessor.MatchHoldNotes</c> / sxtg2 <c>CalculateHoldNoteLengths</c>와 동일):
         ///   - 레인(= BMS 채널)이 같고, Head보다 뒤에 있는 Tail 중 **가장 가까운 것** 하나와 짝
@@ -574,14 +604,13 @@ namespace DEFLATE_custom_chart.Core.Bms
 
             if (startCount == 0 && endCount == 0) return;
 
-            // 2. 레인(채널)별로 Head ➔ 가장 가까운 Tail 매칭
+            // 2. 레인(채널)별로 Head ➔ 가장 가까운 Tail 매칭 (chart.Notes는 이미 Tick 순)
             var consumedTails = new HashSet<BmsNote>();
             var toRemove = new HashSet<BmsNote>();
             int paired = 0, orphanHeads = 0, orphanTails = 0;
 
-            foreach (var group in chart.Notes.GroupBy(n => n.Channel))
+            foreach (var ordered in GroupSortedNotesByChannel(chart.Notes).Values)
             {
-                var ordered = group.OrderBy(n => n.Tick).ToList();
                 int tailSearchIdx = 0;
 
                 for (int i = 0; i < ordered.Count; i++)
@@ -638,7 +667,7 @@ namespace DEFLATE_custom_chart.Core.Bms
 
             if (toRemove.Count > 0)
             {
-                chart.Notes = chart.Notes.Where(n => !toRemove.Contains(n)).ToList();
+                chart.Notes.RemoveAll(n => toRemove.Contains(n));
             }
 
             chart.HoldPairedCount = paired;

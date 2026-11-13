@@ -14,8 +14,15 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(RhythmGameController __instance)
             {
-                if (__instance == null) return;
-                MelonLogger.Msg($"[노트 수 재계산 완료] 전체 노트 수(AllNoteCount): {__instance.AllNoteCount}");
+                try
+                {
+                    if (__instance == null) return;
+                    MelonLogger.Msg($"[노트 수 재계산 완료] 전체 노트 수(AllNoteCount): {__instance.AllNoteCount}");
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[RecalculateAllNoteCount] Postfix 예외: {ex.Message}");
+                }
             }
         }
 
@@ -27,10 +34,17 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prefix()
             {
-                if (ModConfig.Instance.BlockSave)
+                try
                 {
-                    MelonLogger.Msg("[ModConfig] BlockSave=1: 게임 스코어 및 랭킹 데이터 저장을 차단했습니다.");
-                    return false;
+                    if (ModConfig.Instance.BlockSave)
+                    {
+                        MelonLogger.Msg("[ModConfig] BlockSave=1: 게임 스코어 및 랭킹 데이터 저장을 차단했습니다.");
+                        return false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[GameData.SaveGameData] Prefix 예외: {ex.Message}");
                 }
                 return true;
             }
@@ -139,7 +153,7 @@ namespace DEFLATE_custom_chart.Hooks
                         }
                     }
 
-                    float swayOffset = Mathf.Sin(progress * Mathf.PI * 2.0f * cfg.NoteSwaySpeed * 5.0f)
+                    float swayOffset = Mathf.Sin(progress * cfg.NoteSwayAngularFreq)
                         * cfg.NoteSwayAmplitude
                         * dampingFactor;
 

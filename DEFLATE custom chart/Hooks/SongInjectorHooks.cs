@@ -25,10 +25,14 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(MainTrackList), nameof(MainTrackList.Start))]
         public static class MainTrackList_Start_InjectCopy_Patch
         {
+            [HarmonyPriority(Priority.High)]
             public static void Postfix(MainTrackList __instance)
             {
                 try
                 {
+                    HwaAssetManager.IsInSongSelectContext = true;
+                    CustomAlbumManager.Clear();
+
                     if (__instance == null || __instance.tracks == null || __instance.tracks.Length == 0) return;
 
                     if (!CustomSongLibrary.HasSongs)
@@ -51,9 +55,7 @@ namespace DEFLATE_custom_chart.Hooks
                         var matched = CustomSongLibrary.FindByTitleAndAlbum(existingWrapper.Title, existingWrapper.AlbumName);
                         if (matched == null || !pending.Contains(matched)) continue;
 
-                        matched.InjectedTrackID = existingWrapper.UniqueID;
-                        matched.AudioKey = existingWrapper.AudioKey;
-                        matched.VideoKey = existingWrapper.VideoKey;
+                        CustomSongLibrary.RegisterInjectedTrack(matched, existingWrapper.UniqueID, existingWrapper.AudioKey, existingWrapper.VideoKey);
                         pending.Remove(matched);
 
                         MelonLogger.Msg($"[곡 목록 주입] 기존 사본 재사용: '{matched.Meta.Title}' (앨범: '{matched.Meta.Album}', ID: {existingWrapper.UniqueID})");
@@ -154,17 +156,12 @@ namespace DEFLATE_custom_chart.Hooks
                 // 2) 내성 래퍼를 통한 원본 데이터 재적용 (ApplyTo)
                 sourceWrapper.ApplyTo(cloneBlock);
 
-                // 3) RegenerateID 호출 시도 (메서드명 변경 시 안전 가드)
-                try
-                {
-                    cloneBlock.RegenerateID();
-                }
-                catch (Exception ex)
-                {
-                    MelonLogger.Warning($"[곡 목록 주입] RegenerateID() 직접 호출 실패 ({ex.Message}), 리플렉션 호출을 시도합니다.");
-                    var method = cloneBlock.GetType().GetMethod("RegenerateID", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-                    method?.Invoke(cloneBlock, null);
-                }
+                // 3) RegenerateID 호출 시도 (메서드명 변경 시 안전 가드 + 상속 체인 백업 리플렉션)
+                Il2CppReflectionHelper.InvokeMethodResilient(
+                    cloneBlock,
+                    () => cloneBlock.RegenerateID(),
+                    "RegenerateID",
+                    new[] { "GenerateID", "RefreshID", "ResetID" });
 
                 // 4) 사본 래퍼 갱신 및 커스텀 info.txt 메타데이터 / PNG 커버 자켓 주입
                 var cloneWrapper = new CustomTrackWrapper(cloneBlock);
@@ -176,7 +173,18 @@ namespace DEFLATE_custom_chart.Hooks
                     string fallbackId = "CUSTOM_" + Guid.NewGuid().ToString("N");
                     MelonLogger.Warning($"[곡 목록 주입] RegenerateID 미작동 감지. 폴백 고유 ID를 직접 할당합니다: '{fallbackId}'");
                     cloneWrapper.UniqueID = fallbackId;
-                    try { cloneBlock.uniqueID = fallbackId; } catch { }
+                    Il2CppReflectionHelper.SetValueResilient(
+                        cloneBlock,
+                        () => cloneBlock.uniqueID = fallbackId,
+                        "uniqueID",
+                        new[] { "UniqueID", "id", "m_UniqueID", "trackID", "_uniqueID" },
+                        fallbackId);
+                    cloneWrapper.UniqueID = Il2CppReflectionHelper.GetValueResilient(
+                        cloneBlock,
+                        () => cloneBlock.uniqueID,
+                        "uniqueID",
+                        new[] { "UniqueID", "id", "m_UniqueID", "trackID", "_uniqueID" },
+                        fallbackId);
                 }
 
                 if (string.IsNullOrEmpty(cloneWrapper.UniqueID) ||
@@ -190,33 +198,11 @@ namespace DEFLATE_custom_chart.Hooks
                 var meta = entry.Meta;
                 var customCover = entry.LoadCoverSprite();
 
-                cloneWrapper.Title = meta.Title;
-                cloneWrapper.Artist = meta.Artist;
-                cloneWrapper.AlbumName = meta.Album;
-                if (customCover != null) cloneWrapper.CoverSprite = customCover;
+                cloneWrapper.ApplySongMetadata(meta, customCover);
                 cloneWrapper.ApplyTo(cloneBlock);
 
-                // MainTrackListBlock 직접 속성에도 확실히 반영 (예외 가드 포함)
-                try
-                {
-                    cloneBlock.TrackTitle = meta.Title;
-                    cloneBlock.TrackAuthor = meta.Artist;
-                    cloneBlock.TrackAlbum = meta.Album;
-                    if (customCover != null) cloneBlock.TrackCover = customCover;
-                    cloneBlock.EZ_Star = meta.EasyLevel;
-                    cloneBlock.NM_Star = meta.NormalLevel;
-                    cloneBlock.HD_Star = meta.HardLevel;
-                    cloneBlock.Description = $"BGA: {meta.BgaAuthor} | Chart: {meta.ChartMaker} | Easy:{meta.EasyLevel} Normal:{meta.NormalLevel} Hard:{meta.HardLevel}";
-                }
-                catch (Exception ex)
-                {
-                    MelonLogger.Warning($"[곡 목록 주입] 직접 필드 할당 중 경고 (내성 래퍼 적용 유지): {ex.Message}");
-                }
-
-                // 5) 커스텀 에셋 타겟 정보 등록
-                entry.InjectedTrackID = cloneWrapper.UniqueID;
-                entry.AudioKey = cloneWrapper.AudioKey;
-                entry.VideoKey = cloneWrapper.VideoKey;
+                // 5) 커스텀 에셋 타겟 정보 및 O(1) 조회 인덱스 등록
+                CustomSongLibrary.RegisterInjectedTrack(entry, cloneWrapper.UniqueID, cloneWrapper.AudioKey, cloneWrapper.VideoKey);
 
                 MelonLogger.Msg($"  [사본 생성] 앨범 '{meta.Album}' / '{meta.Title}' (ID: {cloneWrapper.UniqueID}) ← 폴더 '{entry.FolderName}'");
                 return cloneBlock;

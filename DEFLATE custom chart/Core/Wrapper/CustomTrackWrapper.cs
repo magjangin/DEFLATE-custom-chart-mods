@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using MelonLoader;
 using Il2Cppdizzylab.castor;
+using DEFLATE_custom_chart.Core;
 
 namespace DEFLATE_custom_chart.Core.Wrapper
 {
@@ -14,6 +15,10 @@ namespace DEFLATE_custom_chart.Core.Wrapper
         public string Title { get; set; } = string.Empty;
         public string Artist { get; set; } = string.Empty;
         public string AlbumName { get; set; } = string.Empty;
+        public string TrackLabel { get; set; } = string.Empty;
+        public string PVAuthor { get; set; } = string.Empty;
+        public string ChartMaker { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
         public string AudioKey { get; set; } = string.Empty;
         public string VideoKey { get; set; } = string.Empty;
 
@@ -21,6 +26,11 @@ namespace DEFLATE_custom_chart.Core.Wrapper
         public string EZ_KoreKey { get; set; } = string.Empty;
         public string NM_KoreKey { get; set; } = string.Empty;
         public string HD_KoreKey { get; set; } = string.Empty;
+
+        // 난이도별 표기 레벨
+        public int EZ_Star { get; set; }
+        public int NM_Star { get; set; }
+        public int HD_Star { get; set; }
 
         // 커버 이미지 에셋
         public Sprite CoverSprite { get; set; }
@@ -125,6 +135,85 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 "TrackCover",
                 new[] { "trackCover", "Cover", "cover", "m_TrackCover", "CoverSprite" },
                 null);
+
+            // 11. EZ_Star
+            EZ_Star = Il2CppReflectionHelper.GetValueResilient(
+                targetObj,
+                () => NativeBlock != null ? NativeBlock.EZ_Star : 0,
+                "EZ_Star",
+                new[] { "ez_Star", "ezStar", "EasyStar", "m_EZ_Star" },
+                0);
+
+            // 12. NM_Star
+            NM_Star = Il2CppReflectionHelper.GetValueResilient(
+                targetObj,
+                () => NativeBlock != null ? NativeBlock.NM_Star : 0,
+                "NM_Star",
+                new[] { "nm_Star", "nmStar", "NormalStar", "m_NM_Star" },
+                0);
+
+            // 13. HD_Star
+            HD_Star = Il2CppReflectionHelper.GetValueResilient(
+                targetObj,
+                () => NativeBlock != null ? NativeBlock.HD_Star : 0,
+                "HD_Star",
+                new[] { "hd_Star", "hdStar", "HardStar", "m_HD_Star" },
+                0);
+
+            // 14. Description
+            Description = Il2CppReflectionHelper.GetValueResilient(
+                targetObj,
+                () => NativeBlock?.Description,
+                "Description",
+                new[] { "description", "Desc", "desc", "m_Description" },
+                string.Empty);
+
+            // 15. PVAuthor (TrackPVAuthor)
+            PVAuthor = Il2CppReflectionHelper.GetValueResilient(
+                targetObj,
+                () => NativeBlock?.TrackPVAuthor,
+                "TrackPVAuthor",
+                new[] { "trackPVAuthor", "PVAuthor", "pvAuthor", "BgaAuthor", "m_TrackPVAuthor" },
+                string.Empty);
+
+            // 16. ChartMaker (TrackScore)
+            ChartMaker = Il2CppReflectionHelper.GetValueResilient(
+                targetObj,
+                () => NativeBlock?.TrackScore,
+                "TrackScore",
+                new[] { "trackScore", "ChartAuthor", "ChartMaker", "ScoreAuthor", "m_TrackScore" },
+                string.Empty);
+
+            // 17. TrackLabel
+            TrackLabel = Il2CppReflectionHelper.GetValueResilient(
+                targetObj,
+                () => NativeBlock?.TrackLabel,
+                "TrackLabel",
+                new[] { "trackLabel", "Label", "label", "m_TrackLabel" },
+                string.Empty);
+        }
+
+        /// <summary>
+        /// 커스텀 곡의 info.txt 메타데이터와 자켓 스프라이트를 래퍼 속성에 한 번에 적용합니다.
+        /// </summary>
+        public void ApplySongMetadata(HwaAssetManager.HwaMetaInfo meta, Sprite customCover = null)
+        {
+            if (meta == null) return;
+
+            Title = meta.Title;
+            Artist = meta.Artist;
+            AlbumName = meta.Album;
+            TrackLabel = meta.Album;
+            PVAuthor = meta.BgaAuthor;
+            ChartMaker = meta.ChartAuthor;
+            EZ_Star = meta.EasyLevel;
+            NM_Star = meta.NormalLevel;
+            HD_Star = meta.HardLevel;
+            Description = $"BGA: {meta.BgaAuthor} | Chart: {meta.ChartAuthor} | Easy:{meta.EasyLevel} Normal:{meta.NormalLevel} Hard:{meta.HardLevel}";
+            if (customCover != null)
+            {
+                CoverSprite = customCover;
+            }
         }
 
         /// <summary>
@@ -220,6 +309,62 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                     new[] { "trackCover", "Cover", "cover", "m_TrackCover", "CoverSprite" },
                     CoverSprite);
             }
+
+            // 11. EZ_Star
+            Il2CppReflectionHelper.SetValueResilient(
+                targetObj,
+                () => { if (targetBlock != null) targetBlock.EZ_Star = EZ_Star; },
+                "EZ_Star",
+                new[] { "ez_Star", "ezStar", "EasyStar", "m_EZ_Star" },
+                EZ_Star);
+
+            // 12. NM_Star
+            Il2CppReflectionHelper.SetValueResilient(
+                targetObj,
+                () => { if (targetBlock != null) targetBlock.NM_Star = NM_Star; },
+                "NM_Star",
+                new[] { "nm_Star", "nmStar", "NormalStar", "m_NM_Star" },
+                NM_Star);
+
+            // 13. HD_Star
+            Il2CppReflectionHelper.SetValueResilient(
+                targetObj,
+                () => { if (targetBlock != null) targetBlock.HD_Star = HD_Star; },
+                "HD_Star",
+                new[] { "hd_Star", "hdStar", "HardStar", "m_HD_Star" },
+                HD_Star);
+
+            // 14. Description
+            Il2CppReflectionHelper.SetValueResilient(
+                targetObj,
+                () => { if (targetBlock != null) targetBlock.Description = Description; },
+                "Description",
+                new[] { "description", "Desc", "desc", "m_Description" },
+                Description);
+
+            // 15. PVAuthor (TrackPVAuthor)
+            Il2CppReflectionHelper.SetValueResilient(
+                targetObj,
+                () => { if (targetBlock != null) targetBlock.TrackPVAuthor = PVAuthor; },
+                "TrackPVAuthor",
+                new[] { "trackPVAuthor", "PVAuthor", "pvAuthor", "BgaAuthor", "m_TrackPVAuthor" },
+                PVAuthor);
+
+            // 16. ChartMaker (TrackScore)
+            Il2CppReflectionHelper.SetValueResilient(
+                targetObj,
+                () => { if (targetBlock != null) targetBlock.TrackScore = ChartMaker; },
+                "TrackScore",
+                new[] { "trackScore", "ChartAuthor", "ChartMaker", "ScoreAuthor", "m_TrackScore" },
+                ChartMaker);
+
+            // 17. TrackLabel
+            Il2CppReflectionHelper.SetValueResilient(
+                targetObj,
+                () => { if (targetBlock != null) targetBlock.TrackLabel = TrackLabel; },
+                "TrackLabel",
+                new[] { "trackLabel", "Label", "label", "m_TrackLabel" },
+                TrackLabel);
         }
     }
 }

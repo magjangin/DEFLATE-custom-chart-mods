@@ -46,13 +46,22 @@ namespace DEFLATE_custom_chart.Core.Wrapper
             }
         }
 
+        public static void Clear()
+        {
+            RegisteredAlbums.Clear();
+        }
+
         public static CustomTrackWrapper FindTrack(string trackId)
         {
+            if (string.IsNullOrEmpty(trackId)) return null;
+
             foreach (var album in RegisteredAlbums)
             {
+                if (album == null) continue;
                 foreach (var track in album.Tracks)
                 {
-                    if (track.UniqueID.Equals(trackId, System.StringComparison.OrdinalIgnoreCase))
+                    if (track != null && !string.IsNullOrEmpty(track.UniqueID) &&
+                        track.UniqueID.Equals(trackId, System.StringComparison.OrdinalIgnoreCase))
                     {
                         return track;
                     }

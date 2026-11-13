@@ -12,8 +12,12 @@ namespace DEFLATE_custom_chart.Core.Wrapper
     /// </summary>
     public static class Il2CppReflectionHelper
     {
+        private const BindingFlags DeclaredInstanceFlags =
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase | BindingFlags.DeclaredOnly;
+
         private static readonly ConcurrentDictionary<(Type, string), PropertyInfo> PropertyCache = new ConcurrentDictionary<(Type, string), PropertyInfo>();
         private static readonly ConcurrentDictionary<(Type, string), FieldInfo> FieldCache = new ConcurrentDictionary<(Type, string), FieldInfo>();
+        private static readonly ConcurrentDictionary<(Type, string), MethodInfo> MethodCache = new ConcurrentDictionary<(Type, string), MethodInfo>();
 
         /// <summary>
         /// Il2CppObjectBase 인스턴스 또는 object를 안전하게 T 타입으로 Cast합니다.
@@ -59,42 +63,20 @@ namespace DEFLATE_custom_chart.Core.Wrapper
             }
 
             Type targetType = target.GetType();
-            var candidateNames = CombineCandidates(directPropertyName, fallbackNames);
-
-            foreach (var name in candidateNames)
+            if (!string.IsNullOrEmpty(directPropertyName) && TryReadMember(target, targetType, directPropertyName, out T directVal))
             {
-                if (string.IsNullOrEmpty(name)) continue;
+                return directVal;
+            }
 
-                // 2-1. Property 읽기 시도
-                PropertyInfo prop = PropertyCache.GetOrAdd((targetType, name), key =>
-                    key.Item1.GetProperty(key.Item2, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase));
-
-                if (prop != null && prop.CanRead)
+            if (fallbackNames != null)
+            {
+                for (int i = 0; i < fallbackNames.Length; i++)
                 {
-                    try
+                    string name = fallbackNames[i];
+                    if (!string.IsNullOrEmpty(name) && TryReadMember(target, targetType, name, out T fallbackVal))
                     {
-                        object val = prop.GetValue(target);
-                        if (val is T typedVal) return typedVal;
-                        if (val != null && typeof(T) == typeof(string)) return (T)(object)val.ToString();
-                        if (val != null) return (T)Convert.ChangeType(val, typeof(T));
+                        return fallbackVal;
                     }
-                    catch { }
-                }
-
-                // 2-2. Field 읽기 시도
-                FieldInfo field = FieldCache.GetOrAdd((targetType, name), key =>
-                    key.Item1.GetField(key.Item2, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase));
-
-                if (field != null)
-                {
-                    try
-                    {
-                        object val = field.GetValue(target);
-                        if (val is T typedVal) return typedVal;
-                        if (val != null && typeof(T) == typeof(string)) return (T)(object)val.ToString();
-                        if (val != null) return (T)Convert.ChangeType(val, typeof(T));
-                    }
-                    catch { }
                 }
             }
 
@@ -123,38 +105,20 @@ namespace DEFLATE_custom_chart.Core.Wrapper
             }
 
             Type targetType = target.GetType();
-            var candidateNames = CombineCandidates(directPropertyName, fallbackNames);
-
-            foreach (var name in candidateNames)
+            if (!string.IsNullOrEmpty(directPropertyName) && TryWriteMember(target, targetType, directPropertyName, value))
             {
-                if (string.IsNullOrEmpty(name)) continue;
+                return true;
+            }
 
-                // 2-1. Property 주입 시도
-                PropertyInfo prop = PropertyCache.GetOrAdd((targetType, name), key =>
-                    key.Item1.GetProperty(key.Item2, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase));
-
-                if (prop != null && prop.CanWrite)
+            if (fallbackNames != null)
+            {
+                for (int i = 0; i < fallbackNames.Length; i++)
                 {
-                    try
+                    string name = fallbackNames[i];
+                    if (!string.IsNullOrEmpty(name) && TryWriteMember(target, targetType, name, value))
                     {
-                        prop.SetValue(target, value);
                         return true;
                     }
-                    catch { }
-                }
-
-                // 2-2. Field 주입 시도
-                FieldInfo field = FieldCache.GetOrAdd((targetType, name), key =>
-                    key.Item1.GetField(key.Item2, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase));
-
-                if (field != null)
-                {
-                    try
-                    {
-                        field.SetValue(target, value);
-                        return true;
-                    }
-                    catch { }
                 }
             }
 
@@ -162,16 +126,186 @@ namespace DEFLATE_custom_chart.Core.Wrapper
             return false;
         }
 
-        private static string[] CombineCandidates(string primary, string[] fallbacks)
+        /// <summary>
+        /// 매개변수 없는 메서드를 직접 호출 우선으로 실행하고, 실패 시 상속 체인까지 백업 리플렉션으로 탐색해 호출합니다.
+        /// </summary>
+        public static bool InvokeMethodResilient(object target, Action directCall, string methodName, string[] fallbackNames = null)
         {
-            int fallbackLen = fallbacks?.Length ?? 0;
-            var result = new string[1 + fallbackLen];
-            result[0] = primary;
-            if (fallbackLen > 0)
+            if (target == null) return false;
+
+            if (directCall != null)
             {
-                Array.Copy(fallbacks, 0, result, 1, fallbackLen);
+                try
+                {
+                    directCall();
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[InvokeMethodResilient] 직접 호출 '{methodName}' 실패 ({ex.GetType().Name}), 백업 리플렉션을 시도합니다.");
+                }
             }
-            return result;
+
+            Type targetType = target.GetType();
+            if (!string.IsNullOrEmpty(methodName) && TryInvokeParameterlessMethod(target, targetType, methodName))
+            {
+                return true;
+            }
+
+            if (fallbackNames != null)
+            {
+                for (int i = 0; i < fallbackNames.Length; i++)
+                {
+                    string name = fallbackNames[i];
+                    if (!string.IsNullOrEmpty(name) && TryInvokeParameterlessMethod(target, targetType, name))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            MelonLogger.Warning($"[InvokeMethodResilient] '{targetType.Name}' 객체에서 '{methodName}' 메서드를 호출하지 못했습니다.");
+            return false;
+        }
+
+        private static bool TryReadMember<T>(object target, Type targetType, string name, out T value)
+        {
+            PropertyInfo prop = FindPropertyResilient(targetType, name);
+            if (prop != null && prop.CanRead)
+            {
+                try
+                {
+                    if (TryConvertValue(prop.GetValue(target), out value))
+                    {
+                        return true;
+                    }
+                }
+                catch { }
+            }
+
+            FieldInfo field = FindFieldResilient(targetType, name);
+            if (field != null)
+            {
+                try
+                {
+                    if (TryConvertValue(field.GetValue(target), out value))
+                    {
+                        return true;
+                    }
+                }
+                catch { }
+            }
+
+            value = default;
+            return false;
+        }
+
+        private static bool TryWriteMember(object target, Type targetType, string name, object value)
+        {
+            PropertyInfo prop = FindPropertyResilient(targetType, name);
+            if (prop != null && prop.CanWrite)
+            {
+                try
+                {
+                    prop.SetValue(target, value);
+                    return true;
+                }
+                catch { }
+            }
+
+            FieldInfo field = FindFieldResilient(targetType, name);
+            if (field != null)
+            {
+                try
+                {
+                    field.SetValue(target, value);
+                    return true;
+                }
+                catch { }
+            }
+
+            return false;
+        }
+
+        private static bool TryInvokeParameterlessMethod(object target, Type targetType, string name)
+        {
+            MethodInfo method = FindMethodResilient(targetType, name);
+            if (method == null) return false;
+
+            try
+            {
+                method.Invoke(target, null);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[InvokeMethodResilient] 리플렉션 '{name}' 호출 실패: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static bool TryConvertValue<T>(object val, out T result)
+        {
+            if (val is T typedVal)
+            {
+                result = typedVal;
+                return true;
+            }
+
+            if (val != null)
+            {
+                if (typeof(T) == typeof(string))
+                {
+                    result = (T)(object)val.ToString();
+                    return true;
+                }
+
+                Type underlying = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
+                result = (T)Convert.ChangeType(val, underlying);
+                return true;
+            }
+
+            result = default;
+            return false;
+        }
+
+        private static PropertyInfo FindPropertyResilient(Type type, string name)
+        {
+            return PropertyCache.GetOrAdd((type, name), key =>
+            {
+                for (Type t = key.Item1; t != null && t != typeof(object); t = t.BaseType)
+                {
+                    PropertyInfo prop = t.GetProperty(key.Item2, DeclaredInstanceFlags);
+                    if (prop != null) return prop;
+                }
+                return null;
+            });
+        }
+
+        private static FieldInfo FindFieldResilient(Type type, string name)
+        {
+            return FieldCache.GetOrAdd((type, name), key =>
+            {
+                for (Type t = key.Item1; t != null && t != typeof(object); t = t.BaseType)
+                {
+                    FieldInfo field = t.GetField(key.Item2, DeclaredInstanceFlags);
+                    if (field != null) return field;
+                }
+                return null;
+            });
+        }
+
+        private static MethodInfo FindMethodResilient(Type type, string name)
+        {
+            return MethodCache.GetOrAdd((type, name), key =>
+            {
+                for (Type t = key.Item1; t != null && t != typeof(object); t = t.BaseType)
+                {
+                    MethodInfo method = t.GetMethod(key.Item2, DeclaredInstanceFlags, null, Type.EmptyTypes, null);
+                    if (method != null) return method;
+                }
+                return null;
+            });
         }
     }
 }
