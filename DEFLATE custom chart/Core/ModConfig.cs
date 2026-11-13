@@ -62,6 +62,8 @@ namespace DEFLATE_custom_chart.Core
             }
         }
 
+        private static readonly char[] KeyValueSeparators = { '=' };
+
         private static void LoadFromTxt()
         {
             var config = new ModConfig();
@@ -71,7 +73,7 @@ namespace DEFLATE_custom_chart.Core
                 string trimmed = line.Trim();
                 if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("#") || !trimmed.Contains("=")) continue;
 
-                string[] parts = trimmed.Split(new[] { '=' }, 2);
+                string[] parts = trimmed.Split(KeyValueSeparators, 2);
                 string key = parts[0].Trim();
                 string val = parts[1].Trim();
 
@@ -120,6 +122,13 @@ namespace DEFLATE_custom_chart.Core
                     if (TryParseFlexibleBool(val, out bool b)) config.NoteSpeedChaosPerLane = b;
                 }
             }
+
+            if (config.NoteSwayAmplitude < 0f) config.NoteSwayAmplitude = 0f;
+            if (config.NoteSwaySpeed < 0f) config.NoteSwaySpeed = 0f;
+            if (config.NoteSwayDampingTime < 0f) config.NoteSwayDampingTime = 0f;
+            if (config.NoteSpeedChaosMin < 0.1f) config.NoteSpeedChaosMin = 0.1f;
+            if (config.NoteSpeedChaosMax < config.NoteSpeedChaosMin) config.NoteSpeedChaosMax = config.NoteSpeedChaosMin;
+
             Instance = config;
         }
 

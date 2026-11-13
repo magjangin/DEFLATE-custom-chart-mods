@@ -18,6 +18,17 @@ namespace DEFLATE_custom_chart.Core.Bms
         // 4분음표 1박 틱 수 (라인바 박자선 간격)
         public const int TicksPerBeat = TicksPerMeasure / 4;
 
+        private static readonly char[] WhitespaceChars = { ' ', '\t' };
+
+        private static bool IsAllZeros(string data, int start, int length)
+        {
+            for (int i = 0; i < length; i++)
+            {
+                if (data[start + i] != '0') return false;
+            }
+            return true;
+        }
+
         /// <summary>
         /// 파일 경로로부터 BMS 데이터를 파싱합니다.
         /// </summary>
@@ -47,7 +58,7 @@ namespace DEFLATE_custom_chart.Core.Bms
 
                     // 예: #WAV01 sample.wav -> key: 01 (len 2)
                     // 예: #WAV1A2 sample.wav -> key: 1A2 (len 3)
-                    int spaceIdx = line.IndexOfAny(new[] { ' ', '\t' });
+                    int spaceIdx = line.IndexOfAny(WhitespaceChars);
                     string tagWithKey = spaceIdx > 0 ? line.Substring(0, spaceIdx) : line;
 
                     if (tagWithKey.Length > 4)
@@ -69,7 +80,7 @@ namespace DEFLATE_custom_chart.Core.Bms
         /// </summary>
         public BmsChart Parse(string bmsContent, int targetSampleRate = 44100)
         {
-            var chart = new BmsChart();
+            var chart = new BmsChart { SampleRate = targetSampleRate };
             int noteWidth = DetectNoteValueWidth(bmsContent);
             chart.Header.NoteValueWidth = noteWidth;
 
@@ -143,7 +154,7 @@ namespace DEFLATE_custom_chart.Core.Bms
             else if (line.StartsWith("#BPM", StringComparison.OrdinalIgnoreCase) && line.Length > 4 && char.IsWhiteSpace(line[4]))
             {
                 // "#BPM 150" / "#BPM\t150" (공백·탭 모두) ➔ 초기 BPM
-                if (float.TryParse(ExtractHeaderValue(line, "#BPM"), NumberStyles.Any, CultureInfo.InvariantCulture, out float bpm))
+                if (float.TryParse(ExtractHeaderValue(line, "#BPM"), NumberStyles.Any, CultureInfo.InvariantCulture, out float bpm) && bpm > 0f)
                 {
                     chart.Header.InitialBpm = bpm;
                 }
@@ -200,7 +211,7 @@ namespace DEFLATE_custom_chart.Core.Bms
                     // #XXX02: 마디 길이 변형 (배율 float 지정)
                     if (channel == "02")
                     {
-                        if (float.TryParse(data, NumberStyles.Any, CultureInfo.InvariantCulture, out float lenMult))
+                        if (float.TryParse(data, NumberStyles.Any, CultureInfo.InvariantCulture, out float lenMult) && lenMult >= 0f)
                         {
                             measureLengths[measure] = lenMult;
                         }
@@ -292,8 +303,10 @@ namespace DEFLATE_custom_chart.Core.Bms
 
                 for (int i = 0; i < objectCount; i++)
                 {
-                    string val = raw.Data.Substring(i * noteWidth, noteWidth);
-                    if (val == new string('0', noteWidth)) continue;
+                    int startIdx = i * noteWidth;
+                    if (IsAllZeros(raw.Data, startIdx, noteWidth)) continue;
+
+                    string val = raw.Data.Substring(startIdx, noteWidth);
 
                     double eventTick = mStartTick + ((double)i / objectCount) * mLengthTicks;
                     float newBpm = 0.0f;
@@ -333,45 +346,52 @@ namespace DEFLATE_custom_chart.Core.Bms
 
             double prevTick = 0.0;
             double prevTime = 0.0;
-            float currentBpm = chart.Header.InitialBpm;
+            float currentBpm = chart.Header.InitialBpm > 0f ? chart.Header.InitialBpm : 130.0f;
 
             foreach (var bpmEv in chart.BpmEvents)
             {
                 double deltaTick = bpmEv.Tick - prevTick;
                 // 공식: time = tick * 240 / (bpm * TicksPerMeasure)
-                double deltaTime = deltaTick * 240.0 / (currentBpm * TicksPerMeasure);
+                double safeBpm = currentBpm > 0f ? currentBpm : 130.0;
+                double deltaTime = deltaTick * 240.0 / (safeBpm * TicksPerMeasure);
                 prevTime += deltaTime;
                 bpmEv.TimeSeconds = prevTime;
 
                 prevTick = bpmEv.Tick;
-                currentBpm = bpmEv.Bpm;
+                if (bpmEv.Bpm > 0f) currentBpm = bpmEv.Bpm;
             }
         }
 
         /// <summary>
-        /// 주어진 Tick 위치에 대한 정확한 시간(초)을 타임라인을 기초하여 구합니다.
+        /// 주어진 Tick 위치에 대한 정확한 시간(초)을 타임라인을 기초하여 이진 탐색으로 구합니다.
         /// 공식: time = prevTime + (tick - prevTick) * 240 / (bpm * TicksPerMeasure)
         /// </summary>
         private double CalculateTimeAtTick(double tick, List<BmsBpmEvent> bpmEvents)
         {
             if (bpmEvents == null || bpmEvents.Count == 0) return 0.0;
 
-            BmsBpmEvent currentEvent = bpmEvents[0];
+            int lo = 0;
+            int hi = bpmEvents.Count - 1;
+            int bestIdx = 0;
 
-            for (int i = 0; i < bpmEvents.Count; i++)
+            while (lo <= hi)
             {
-                if (bpmEvents[i].Tick <= tick)
+                int mid = lo + ((hi - lo) >> 1);
+                if (bpmEvents[mid].Tick <= tick)
                 {
-                    currentEvent = bpmEvents[i];
+                    bestIdx = mid;
+                    lo = mid + 1;
                 }
                 else
                 {
-                    break;
+                    hi = mid - 1;
                 }
             }
 
+            BmsBpmEvent currentEvent = bpmEvents[bestIdx];
+            double safeBpm = currentEvent.Bpm > 0f ? currentEvent.Bpm : 130.0;
             double deltaTick = tick - currentEvent.Tick;
-            double deltaTime = deltaTick * 240.0 / (currentEvent.Bpm * TicksPerMeasure);
+            double deltaTime = deltaTick * 240.0 / (safeBpm * TicksPerMeasure);
             return currentEvent.TimeSeconds + deltaTime;
         }
 
@@ -445,8 +465,10 @@ namespace DEFLATE_custom_chart.Core.Bms
 
                 for (int i = 0; i < objectCount; i++)
                 {
-                    string val = raw.Data.Substring(i * noteWidth, noteWidth).ToUpperInvariant();
-                    if (val == new string('0', noteWidth)) continue;
+                    int startIdx = i * noteWidth;
+                    if (IsAllZeros(raw.Data, startIdx, noteWidth)) continue;
+
+                    string val = raw.Data.Substring(startIdx, noteWidth).ToUpperInvariant();
 
                     double noteTick = mStartTick + ((double)i / objectCount) * mLengthTicks;
                     double timeSec = CalculateTimeAtTick(noteTick, chart.BpmEvents);
@@ -477,6 +499,7 @@ namespace DEFLATE_custom_chart.Core.Bms
             // 1. #LNOBJ 처리: 지정된 LNOBJ 키의 노트를 바로 전 노트의 Tail로 병합
             if (!string.IsNullOrEmpty(lnObjKey))
             {
+                var toRemove = new HashSet<BmsNote>();
                 var notesGroupedByChannel = chart.Notes.GroupBy(n => n.Channel);
                 foreach (var group in notesGroupedByChannel)
                 {
@@ -493,10 +516,15 @@ namespace DEFLATE_custom_chart.Core.Bms
                             head.LongNoteEndTimeSeconds = tail.TimeSeconds;
                             head.LongNoteEndSamplePosition = tail.SamplePosition;
 
-                            // Tail 전용 LNOBJ 개체는 삭제 대상 처리
-                            chart.Notes.Remove(tail);
+                            // Tail 전용 LNOBJ 개체는 일괄 삭제 대상에 추가
+                            toRemove.Add(tail);
                         }
                     }
+                }
+
+                if (toRemove.Count > 0)
+                {
+                    chart.Notes.RemoveAll(n => toRemove.Contains(n));
                 }
             }
         }
@@ -554,20 +582,29 @@ namespace DEFLATE_custom_chart.Core.Bms
             foreach (var group in chart.Notes.GroupBy(n => n.Channel))
             {
                 var ordered = group.OrderBy(n => n.Tick).ToList();
+                int tailSearchIdx = 0;
 
-                foreach (var head in ordered)
+                for (int i = 0; i < ordered.Count; i++)
                 {
+                    var head = ordered[i];
                     if (!head.IsHoldStart) continue;
 
                     // 이미 LN 채널 / #LNOBJ 로 짝이 맞은 노트는 그대로 둔다.
                     if (head.LongNoteEndSamplePosition > head.SamplePosition) continue;
 
+                    if (tailSearchIdx <= i) tailSearchIdx = i + 1;
+
                     BmsNote tail = null;
-                    foreach (var candidate in ordered)
+                    while (tailSearchIdx < ordered.Count)
                     {
-                        if (!candidate.IsHoldEnd || consumedTails.Contains(candidate)) continue;
-                        if (candidate.Tick <= head.Tick) continue;
+                        var candidate = ordered[tailSearchIdx];
+                        if (!candidate.IsHoldEnd || consumedTails.Contains(candidate) || candidate.Tick <= head.Tick)
+                        {
+                            tailSearchIdx++;
+                            continue;
+                        }
                         tail = candidate; // ordered 정렬이므로 첫 후보가 가장 가까운 Tail
+                        tailSearchIdx++;
                         break;
                     }
 

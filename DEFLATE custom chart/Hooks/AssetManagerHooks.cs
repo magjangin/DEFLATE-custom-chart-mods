@@ -131,30 +131,35 @@ namespace DEFLATE_custom_chart.Hooks
             }
         }
 
+        private static void EnforceCustomBgaUrl(VideoPlayer player, string caller)
+        {
+            try
+            {
+                if (player == null) return;
+                if (!HwaAssetManager.IsTargetTrackActive) return;
+
+                string bgaUrl = HwaAssetManager.BgaFileUrl;
+                if (string.IsNullOrEmpty(bgaUrl)) return;
+
+                if (player.source != VideoSource.Url || !string.Equals(player.url, bgaUrl, StringComparison.Ordinal))
+                {
+                    player.source = VideoSource.Url;
+                    player.url = bgaUrl;
+                    MelonLogger.Msg($"[★ Universal {caller} Custom BGA 강제 적용 ★] 오브젝트: '{player.gameObject.name}' | URL: '{bgaUrl}'");
+                }
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[{caller}] Prefix 처리 중 예외: {ex.Message}");
+            }
+        }
+
         [HarmonyPatch(typeof(VideoPlayer), nameof(VideoPlayer.Play))]
         public static class VideoPlayer_Play_Patch
         {
             public static void Prefix(VideoPlayer __instance)
             {
-                try
-                {
-                    if (__instance == null) return;
-                    MelonLogger.Msg($"[★ VideoPlayer.Play 감지 ★] 오브젝트: '{__instance.gameObject.name}' | 현재 source: {__instance.source} | url: '{__instance.url}'");
-
-                    if (HwaAssetManager.IsTargetTrackActive && !string.IsNullOrEmpty(HwaAssetManager.BgaFileUrl))
-                    {
-                        if (__instance.source != VideoSource.Url || __instance.url != HwaAssetManager.BgaFileUrl)
-                        {
-                            __instance.source = VideoSource.Url;
-                            __instance.url = HwaAssetManager.BgaFileUrl;
-                            MelonLogger.Msg($"[★ Universal VideoPlayer.Play Custom BGA 강제 적용 ★] URL: '{HwaAssetManager.BgaFileUrl}'");
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    MelonLogger.Warning($"[VideoPlayer.Play] Prefix 처리 중 예외: {ex.Message}");
-                }
+                EnforceCustomBgaUrl(__instance, "VideoPlayer.Play");
             }
         }
 
@@ -163,25 +168,7 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Prefix(VideoPlayer __instance)
             {
-                try
-                {
-                    if (__instance == null) return;
-                    MelonLogger.Msg($"[★ VideoPlayer.Prepare 감지 ★] 오브젝트: '{__instance.gameObject.name}'");
-
-                    if (HwaAssetManager.IsTargetTrackActive && !string.IsNullOrEmpty(HwaAssetManager.BgaFileUrl))
-                    {
-                        if (__instance.source != VideoSource.Url || __instance.url != HwaAssetManager.BgaFileUrl)
-                        {
-                            __instance.source = VideoSource.Url;
-                            __instance.url = HwaAssetManager.BgaFileUrl;
-                            MelonLogger.Msg($"[★ Universal VideoPlayer.Prepare Custom BGA 강제 적용 ★] URL: '{HwaAssetManager.BgaFileUrl}'");
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    MelonLogger.Warning($"[VideoPlayer.Prepare] Prefix 처리 중 예외: {ex.Message}");
-                }
+                EnforceCustomBgaUrl(__instance, "VideoPlayer.Prepare");
             }
         }
 
@@ -279,7 +266,11 @@ namespace DEFLATE_custom_chart.Hooks
 
                 if (!HwaAssetManager.IsTargetTrackActive) return;
 
-                var players = UnityEngine.Object.FindObjectsOfType<VideoPlayer>();
+                var players = __instance.GetComponentsInChildren<VideoPlayer>(true);
+                if (players == null || players.Length == 0)
+                {
+                    players = UnityEngine.Object.FindObjectsOfType<VideoPlayer>();
+                }
                 if (players != null)
                 {
                     foreach (var vp in players)

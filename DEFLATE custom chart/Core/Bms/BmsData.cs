@@ -98,6 +98,7 @@ namespace DEFLATE_custom_chart.Core.Bms
     /// </summary>
     public class BmsChart
     {
+        public int SampleRate { get; set; } = 44100;
         public BmsHeader Header { get; set; } = new BmsHeader();
         public List<BmsBpmEvent> BpmEvents { get; set; } = new List<BmsBpmEvent>();
         public List<BmsNote> Notes { get; set; } = new List<BmsNote>();

@@ -17,6 +17,15 @@ namespace DEFLATE_custom_chart.Hooks
 {
     public static class InGameRhythmHooks
     {
+        private static int ResolveSamplePosition(double timeSeconds, int precomputedSample, int chartSampleRate, int targetSampleRate)
+        {
+            if (targetSampleRate > 0 && chartSampleRate > 0 && targetSampleRate != chartSampleRate)
+            {
+                return (int)Math.Round(timeSeconds * targetSampleRate);
+            }
+            return precomputedSample;
+        }
+
         [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.Start))]
         public static class RhythmGameController_Start_Patch
         {
@@ -25,6 +34,7 @@ namespace DEFLATE_custom_chart.Hooks
                 try
                 {
                     if (__instance == null) return;
+                    RhythmGameController_UpdateSongDurationScrollbar_Patch.ResetTimer();
 
                     MelonLogger.Msg("==================================================");
                     MelonLogger.Msg("[★ 핵심 훅: RhythmGameController.Start ★] 인게임 리듬게임 씬 진입!");
@@ -159,11 +169,12 @@ namespace DEFLATE_custom_chart.Hooks
                         var bmsChart = HwaAssetManager.LoadedBmsChart;
                         if (bmsChart != null && bmsChart.Notes.Count > 0 && __instance.dropEventSamples != null)
                         {
+                            int targetSampleRate = koreo.SampleRate;
                             foreach (var n in bmsChart.Notes)
                             {
                                 if (BmsLaneMapper.ResolveNoteLane(n) == BmsLaneMapper.Drop)
                                 {
-                                    __instance.dropEventSamples.Add(n.SamplePosition);
+                                    __instance.dropEventSamples.Add(ResolveSamplePosition(n.TimeSeconds, n.SamplePosition, bmsChart.SampleRate, targetSampleRate));
                                 }
                             }
                             MelonLogger.Msg($"  - [BMS 14번 채널] 커스텀 드롭(Drop) 노트 샘플 {__instance.dropEventSamples.Count}개 dropEventSamples 주입 완료!");
@@ -210,7 +221,7 @@ namespace DEFLATE_custom_chart.Hooks
                 {
                     if (lane == null) return;
 
-                    if (__instance != null && __instance.gameData != null)
+                    if (HwaAssetManager.Active == null && __instance != null && __instance.gameData != null)
                     {
                         HwaAssetManager.SetActiveTrack(__instance.gameData.NowTrackID, __instance.gameData.NowTrackTitle);
                     }
@@ -265,12 +276,16 @@ namespace DEFLATE_custom_chart.Hooks
                     {
                         int addedCount = 0;
                         int holdCount = 0;
+                        int targetSampleRate = koreo.SampleRate;
+                        int tapDurationSamples = (int)(targetSampleRate * 0.1f);
                         foreach (var bmsNote in bmsChart.Notes)
                         {
                             if (!string.Equals(BmsLaneMapper.ResolveNoteLane(bmsNote), targetLane, StringComparison.OrdinalIgnoreCase)) continue;
 
-                            int startSample = bmsNote.SamplePosition;
-                            int endSample = bmsNote.IsLongNote ? bmsNote.LongNoteEndSamplePosition : startSample + (int)(koreo.SampleRate * 0.1f);
+                            int startSample = ResolveSamplePosition(bmsNote.TimeSeconds, bmsNote.SamplePosition, bmsChart.SampleRate, targetSampleRate);
+                            int endSample = bmsNote.IsLongNote
+                                ? ResolveSamplePosition(bmsNote.LongNoteEndTimeSeconds, bmsNote.LongNoteEndSamplePosition, bmsChart.SampleRate, targetSampleRate)
+                                : startSample + tapDurationSamples;
 
                             var newEvt = new KoreographyEvent();
                             newEvt.StartSample = startSample;
@@ -401,13 +416,17 @@ namespace DEFLATE_custom_chart.Hooks
             // 2. BMS 마디선/박자선 ➔ KoreographyEvent
             var events = new Il2CppSystem.Collections.Generic.List<KoreographyEvent>();
             int measureLines = 0;
+            int targetSampleRate = lane.gameController != null && lane.gameController.playingKoreo != null
+                ? lane.gameController.playingKoreo.SampleRate
+                : bmsChart.SampleRate;
             foreach (var bar in bmsChart.BarLines)
             {
-                if (bar.SamplePosition <= 0) continue; // 곡 시작 순간의 선은 이미 판정선 위라 보이지 않는다
+                int samplePos = ResolveSamplePosition(bar.TimeSeconds, bar.SamplePosition, bmsChart.SampleRate, targetSampleRate);
+                if (samplePos <= 0) continue; // 곡 시작 순간의 선은 이미 판정선 위라 보이지 않는다
 
                 var evt = new KoreographyEvent();
-                evt.StartSample = bar.SamplePosition;
-                evt.EndSample = bar.SamplePosition + span;
+                evt.StartSample = samplePos;
+                evt.EndSample = samplePos + span;
                 var payload = bar.IsMeasureStart ? measurePayload : beatPayload;
                 if (payload != null) evt.Payload = payload;
                 events.Add(evt);
@@ -485,11 +504,18 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), "UpdateSongDurationScrollbar")]
         public static class RhythmGameController_UpdateSongDurationScrollbar_Patch
         {
-            private static float lastLoggedTime = -5f;
+            private static float lastLoggedTime = -10f;
+
+            public static void ResetTimer() => lastLoggedTime = -10f;
 
             public static bool Prefix(RhythmGameController __instance, ref float currentTimeSeconds)
             {
                 if (__instance == null) return true;
+
+                if (currentTimeSeconds < lastLoggedTime)
+                {
+                    lastLoggedTime = -10f;
+                }
 
                 if (currentTimeSeconds - lastLoggedTime >= 10f)
                 {
