@@ -60,6 +60,14 @@ namespace SignatureDumper
             }
         }
 
+        private static readonly string[] MultiplayerKeywords = new[]
+        {
+            "Photon", "PUN", "PhotonNetwork", "Fusion", "Mirror", "NetworkBehaviour",
+            "NetworkServer", "NetworkClient", "NetworkIdentity", "ClientRpc", "ServerRpc",
+            "SyncVar", "SteamNetworking", "Matchmaking", "Multiplayer", "NetworkManager",
+            "P2P", "Lobby", "LobbyManager"
+        };
+
         static void AnalyzeMultiplayer(string decompiledDir)
         {
             if (!Directory.Exists(decompiledDir))
@@ -71,24 +79,20 @@ namespace SignatureDumper
             var csFiles = Directory.GetFiles(decompiledDir, "*.cs", SearchOption.AllDirectories);
             Console.WriteLine($"Scanning {csFiles.Length} decompiled C# source files...");
 
-            string[] mpKeywords = new[]
-            {
-                "Photon", "PUN", "PhotonNetwork", "Fusion", "Mirror", "NetworkBehaviour", 
-                "NetworkServer", "NetworkClient", "NetworkIdentity", "ClientRpc", "ServerRpc",
-                "SyncVar", "SteamNetworking", "Matchmaking", "Multiplayer", "NetworkManager",
-                "P2P", "Lobby", "LobbyManager"
-            };
+            var compiledPatterns = MultiplayerKeywords
+                .Select(kw => (Keyword: kw, Pattern: new Regex($@"\b{kw}\b", RegexOptions.IgnoreCase | RegexOptions.Compiled)))
+                .ToArray();
 
             int matchCount = 0;
 
             foreach (var file in csFiles)
             {
                 string content = File.ReadAllText(file);
-                foreach (var kw in mpKeywords)
+                for (int i = 0; i < compiledPatterns.Length; i++)
                 {
-                    if (Regex.IsMatch(content, $@"\b{kw}\b", RegexOptions.IgnoreCase))
+                    if (compiledPatterns[i].Pattern.IsMatch(content))
                     {
-                        Console.WriteLine($"  [Match] {Path.GetFileName(file)} -> '{kw}'");
+                        Console.WriteLine($"  [Match] {Path.GetFileName(file)} -> '{compiledPatterns[i].Keyword}'");
                         matchCount++;
                     }
                 }

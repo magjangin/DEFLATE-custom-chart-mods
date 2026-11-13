@@ -22,6 +22,10 @@ namespace DEFLATE_custom_chart.Core
         /// <summary>스캔된 전체 커스텀 곡 (앨범 ➔ 곡 순으로 정렬된 주입 순서).</summary>
         public static List<CustomSongEntry> Entries { get; } = new List<CustomSongEntry>();
 
+        // O(1) 조회용 인덱스 (주입 ID 및 제목)
+        private static readonly Dictionary<string, CustomSongEntry> _byTrackId = new Dictionary<string, CustomSongEntry>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, CustomSongEntry> _byTitle = new Dictionary<string, CustomSongEntry>(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>현재 선택/재생 중인 커스텀 곡. 커스텀 곡이 아닌 원본 곡을 고르면 null.</summary>
         public static CustomSongEntry Active { get; private set; }
 
@@ -51,14 +55,22 @@ namespace DEFLATE_custom_chart.Core
 
         public static void Scan()
         {
+            // 재스캔(Rescan) 시 기존 로드된 Texture2D / Sprite / AudioClip 네이티브 리소스 누수 방지
+            foreach (var oldEntry in Entries)
+            {
+                oldEntry.ResetLoadedAssets();
+            }
+
             Entries.Clear();
+            _byTrackId.Clear();
+            _byTitle.Clear();
             Active = null;
 
             if (!Directory.Exists(HwaDirectoryPath)) return;
 
             // 1) hwa/ 루트에 직접 놓인 에셋 = 기존 방식의 단일 곡
             var rootEntry = CustomSongEntry.TryCreate(HwaDirectoryPath, null, isRootLegacy: true);
-            if (rootEntry != null) Entries.Add(rootEntry);
+            if (rootEntry != null) AddScannedEntry(rootEntry);
 
             // 2) hwa/ 하위 폴더 순회 (앨범 폴더 / 단독 곡 폴더 자동 판별)
             string[] subDirs;
@@ -80,12 +92,12 @@ namespace DEFLATE_custom_chart.Core
                 var direct = CustomSongEntry.TryCreate(dir, null);
                 if (direct != null)
                 {
-                    Entries.Add(direct);
+                    AddScannedEntry(direct);
                     continue;
                 }
 
                 // 에셋이 없고 하위 폴더만 있으면 앨범 폴더로 본다.
-                string albumName = new DirectoryInfo(dir).Name;
+                string albumName = CustomSongEntry.GetDirectoryName(dir);
                 string[] songDirs;
                 try
                 {
@@ -110,8 +122,8 @@ namespace DEFLATE_custom_chart.Core
                 foreach (var songDir in songDirs)
                 {
                     var song = CustomSongEntry.TryCreate(songDir, albumName);
-                    if (song != null) { Entries.Add(song); addedInAlbum++; }
-                    else MelonLogger.Msg($"[커스텀 곡 라이브러리] 곡 에셋(info.txt/BMS/PNG/MP4)이 없어 건너뜀: '{albumName}/{new DirectoryInfo(songDir).Name}'");
+                    if (song != null) { AddScannedEntry(song); addedInAlbum++; }
+                    else MelonLogger.Msg($"[커스텀 곡 라이브러리] 곡 에셋(info.txt/BMS/PNG/MP4)이 없어 건너뜀: '{albumName}/{CustomSongEntry.GetDirectoryName(songDir)}'");
                 }
 
                 if (addedInAlbum == 0)
@@ -121,6 +133,37 @@ namespace DEFLATE_custom_chart.Core
             }
 
             LogCatalog();
+        }
+
+        private static void AddScannedEntry(CustomSongEntry entry)
+        {
+            Entries.Add(entry);
+            string title = entry.Meta?.Title;
+            if (!string.IsNullOrEmpty(title) && !_byTitle.ContainsKey(title))
+            {
+                _byTitle[title] = entry;
+            }
+        }
+
+        /// <summary>주입된 사본 트랙의 ID와 키를 등록하고 O(1) 조회 인덱스를 갱신합니다.</summary>
+        public static void RegisterInjectedTrack(CustomSongEntry entry, string trackId, string audioKey, string videoKey)
+        {
+            if (entry == null) return;
+
+            if (!string.IsNullOrEmpty(entry.InjectedTrackID) &&
+                _byTrackId.TryGetValue(entry.InjectedTrackID, out var prev) && ReferenceEquals(prev, entry))
+            {
+                _byTrackId.Remove(entry.InjectedTrackID);
+            }
+
+            entry.InjectedTrackID = trackId;
+            entry.AudioKey = audioKey;
+            entry.VideoKey = videoKey;
+
+            if (!string.IsNullOrEmpty(trackId))
+            {
+                _byTrackId[trackId] = entry;
+            }
         }
 
         private static void LogCatalog()
@@ -160,10 +203,17 @@ namespace DEFLATE_custom_chart.Core
         private static CustomSongEntry FindByTitle(string title)
         {
             if (string.IsNullOrEmpty(title)) return null;
+            if (_byTitle.TryGetValue(title, out var indexed) &&
+                string.Equals(indexed.Meta?.Title, title, StringComparison.OrdinalIgnoreCase))
+            {
+                return indexed;
+            }
+
             foreach (var entry in Entries)
             {
                 if (string.Equals(entry.Meta?.Title, title, StringComparison.OrdinalIgnoreCase))
                 {
+                    _byTitle[title] = entry;
                     return entry;
                 }
             }
@@ -173,11 +223,18 @@ namespace DEFLATE_custom_chart.Core
         public static CustomSongEntry FindByTrackID(string trackID)
         {
             if (string.IsNullOrEmpty(trackID)) return null;
+            if (_byTrackId.TryGetValue(trackID, out var indexed) &&
+                string.Equals(indexed.InjectedTrackID, trackID, StringComparison.OrdinalIgnoreCase))
+            {
+                return indexed;
+            }
+
             foreach (var entry in Entries)
             {
                 if (!string.IsNullOrEmpty(entry.InjectedTrackID) &&
                     string.Equals(entry.InjectedTrackID, trackID, StringComparison.OrdinalIgnoreCase))
                 {
+                    _byTrackId[trackID] = entry;
                     return entry;
                 }
             }
@@ -207,6 +264,7 @@ namespace DEFLATE_custom_chart.Core
                 entry.AudioKey = null;
                 entry.VideoKey = null;
             }
+            _byTrackId.Clear();
             Active = null;
         }
     }

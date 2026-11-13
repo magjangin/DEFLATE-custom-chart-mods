@@ -1,3 +1,4 @@
+using System;
 using MelonLoader;
 using HarmonyLib;
 using Il2Cppdizzylab.castor;
@@ -16,18 +17,31 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(HUDControl), nameof(HUDControl.RefreshSongMetaUI))]
         public static class HUDControl_RefreshSongMetaUI_Patch
         {
-            private static string lastLogged = null;
+            private static string _lastCoverName;
+            private static string _lastTitle;
 
             public static void Postfix(HUDControl __instance, bool forceUpdate)
             {
-                if (__instance == null) return;
+                try
+                {
+                    if (__instance == null) return;
 
-                string coverName = __instance.cachedCover != null ? __instance.cachedCover.name : "null";
-                string key = $"{coverName}|{__instance.cachedTitle}";
-                if (key == lastLogged) return;
-                lastLogged = key;
+                    string coverName = __instance.cachedCover != null ? __instance.cachedCover.name : "null";
+                    string title = __instance.cachedTitle;
+                    if (string.Equals(coverName, _lastCoverName, StringComparison.Ordinal) &&
+                        string.Equals(title, _lastTitle, StringComparison.Ordinal))
+                    {
+                        return;
+                    }
 
-                MelonLogger.Msg($"[HUD] Cover='{coverName}' | Title='{__instance.cachedTitle}'");
+                    _lastCoverName = coverName;
+                    _lastTitle = title;
+                    MelonLogger.Msg($"[HUD] Cover='{coverName}' | Title='{title}'");
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[HUDControl.RefreshSongMetaUI] Postfix 예외: {ex.Message}");
+                }
             }
         }
     }

@@ -47,12 +47,22 @@ namespace DEFLATE_custom_chart.Core.Bms
             ("drop", Drop),
         };
 
+        /// <summary>BMS 채널 문자열이 어느 레인으로 가야 하는지 판정합니다. 채널이 표에 없으면 null.</summary>
+        public static string ResolveChannelLane(string channel)
+        {
+            if (string.IsNullOrEmpty(channel)) return null;
+            return ChannelToLane.TryGetValue(channel, out string lane) ? lane : null;
+        }
+
         /// <summary>BMS 노트가 어느 레인으로 가야 하는지 판정합니다. 채널이 표에 없으면 null.</summary>
         public static string ResolveNoteLane(BmsNote note)
         {
-            if (note == null || string.IsNullOrEmpty(note.Channel)) return null;
+            if (note == null) return null;
+            if (!string.IsNullOrEmpty(note.ResolvedLane)) return note.ResolvedLane;
 
-            return ChannelToLane.TryGetValue(note.Channel, out string lane) ? lane : null;
+            string lane = ResolveChannelLane(note.Channel);
+            if (lane != null) note.ResolvedLane = lane;
+            return lane;
         }
 
         /// <summary>이 채널이 레인 노트(16/11/12/13/14) 채널인지 판정합니다. 파서가 노트를 생성할지 걸러낼 때 씁니다.</summary>
@@ -67,12 +77,13 @@ namespace DEFLATE_custom_chart.Core.Bms
         /// </summary>
         public static string ResolveLaneId(string trackID, string laneTypeName)
         {
-            string tid = trackID != null ? trackID.ToLowerInvariant() : string.Empty;
-            string ltype = laneTypeName != null ? laneTypeName.ToLowerInvariant() : string.Empty;
-
             foreach (var (keyword, lane) in LaneNameKeywords)
             {
-                if (tid.Contains(keyword) || ltype.Contains(keyword)) return lane;
+                if ((trackID != null && trackID.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                    (laneTypeName != null && laneTypeName.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0))
+                {
+                    return lane;
+                }
             }
             return null;
         }

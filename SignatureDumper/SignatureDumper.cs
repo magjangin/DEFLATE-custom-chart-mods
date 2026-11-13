@@ -41,11 +41,40 @@ namespace SignatureDumper
 
     public class AssemblySignatureDumper
     {
+        private static readonly HashSet<char> InvalidFileNameChars = new HashSet<char>(
+            Path.GetInvalidFileNameChars().Concat(new[] { '<', '>', ':', '*', '?', '"', '|', '/' }));
+
         private readonly SignatureDumperOptions _options;
 
         public AssemblySignatureDumper(SignatureDumperOptions options)
         {
             _options = options ?? new SignatureDumperOptions();
+        }
+
+        private List<string> BuildSearchDirectories(string primaryDir)
+        {
+            var dirs = new List<string>
+            {
+                primaryDir,
+                Path.Combine(_options.GameDirectory, "MelonLoader", "net6"),
+                Path.Combine(_options.GameDirectory, "MelonLoader", "net472"),
+                Path.Combine(_options.GameDirectory, "MelonLoader", "net35"),
+                Path.Combine(_options.GameDirectory, "MelonLoader", "Dependencies"),
+                Path.Combine(_options.GameDirectory, "MelonLoader", "Dependencies", "Il2CppAssemblyGenerator", "Cpp2IL", "cpp2il_out")
+            };
+
+            if (Directory.Exists(_options.GameDirectory))
+            {
+                foreach (var dataDir in Directory.GetDirectories(_options.GameDirectory, "*_Data"))
+                {
+                    dirs.Add(Path.Combine(dataDir, "Managed"));
+                }
+            }
+
+            return dirs
+                .Where(d => !string.IsNullOrEmpty(d))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         public void Dump()
@@ -77,32 +106,16 @@ namespace SignatureDumper
 
             Console.WriteLine($"[SignatureDumper] Target Assembly: {assemblyPath}");
             string searchDir = Path.GetDirectoryName(assemblyPath);
+            var searchDirs = BuildSearchDirectories(searchDir);
 
-            AppDomain.CurrentDomain.AssemblyResolve += (sender, args) =>
+            ResolveEventHandler resolveHandler = (sender, args) =>
             {
                 try
                 {
                     var asmName = new AssemblyName(args.Name).Name + ".dll";
-                    var candidatePaths = new List<string>
+                    for (int i = 0; i < searchDirs.Count; i++)
                     {
-                        Path.Combine(searchDir, asmName),
-                        Path.Combine(_options.GameDirectory, "MelonLoader", "net6", asmName),
-                        Path.Combine(_options.GameDirectory, "MelonLoader", "net472", asmName),
-                        Path.Combine(_options.GameDirectory, "MelonLoader", "net35", asmName),
-                        Path.Combine(_options.GameDirectory, "MelonLoader", "Dependencies", asmName),
-                        Path.Combine(_options.GameDirectory, "MelonLoader", "Dependencies", "Il2CppAssemblyGenerator", "Cpp2IL", "cpp2il_out", asmName)
-                    };
-
-                    if (Directory.Exists(_options.GameDirectory))
-                    {
-                        foreach (var dataDir in Directory.GetDirectories(_options.GameDirectory, "*_Data"))
-                        {
-                            candidatePaths.Add(Path.Combine(dataDir, "Managed", asmName));
-                        }
-                    }
-
-                    foreach (var path in candidatePaths)
-                    {
+                        string path = Path.Combine(searchDirs[i], asmName);
                         if (File.Exists(path))
                         {
                             return Assembly.LoadFrom(path);
@@ -113,64 +126,72 @@ namespace SignatureDumper
                 return null;
             };
 
-            Assembly asm = Assembly.LoadFrom(assemblyPath);
-            Type[] types;
-
+            AppDomain.CurrentDomain.AssemblyResolve += resolveHandler;
             try
             {
-                types = asm.GetTypes();
-            }
-            catch (ReflectionTypeLoadException ex)
-            {
-                types = ex.Types.Where(t => t != null).ToArray();
-                Console.WriteLine($"[SignatureDumper] Warning: Loaded {types.Length} types with some unresolved dependencies.");
-            }
+                Assembly asm = Assembly.LoadFrom(assemblyPath);
+                Type[] types;
 
-            Console.WriteLine($"[SignatureDumper] Analyzing {types.Length} types...");
-
-            List<TypeSignatureInfo> infos = new List<TypeSignatureInfo>();
-
-            foreach (var type in types.OrderBy(t => t.Namespace).ThenBy(t => t.Name))
-            {
                 try
                 {
-                    infos.Add(AnalyzeType(type));
+                    types = asm.GetTypes();
                 }
-                catch (Exception ex)
+                catch (ReflectionTypeLoadException ex)
                 {
-                    Console.WriteLine($"[SignatureDumper] Error analyzing type '{type.FullName}': {ex.Message}");
+                    types = ex.Types.Where(t => t != null).ToArray();
+                    Console.WriteLine($"[SignatureDumper] Warning: Loaded {types.Length} types with some unresolved dependencies.");
+                }
+
+                Console.WriteLine($"[SignatureDumper] Analyzing {types.Length} types...");
+
+                List<TypeSignatureInfo> infos = new List<TypeSignatureInfo>();
+
+                foreach (var type in types.OrderBy(t => t.Namespace).ThenBy(t => t.Name))
+                {
+                    try
+                    {
+                        infos.Add(AnalyzeType(type));
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"[SignatureDumper] Error analyzing type '{type.FullName}': {ex.Message}");
+                    }
+                }
+
+                Directory.CreateDirectory(_options.OutputDirectory);
+                string asmBaseName = Path.GetFileNameWithoutExtension(assemblyPath);
+
+                if (_options.DumpCSharpSignatures)
+                {
+                    string csPath = Path.Combine(_options.OutputDirectory, $"{asmBaseName}_Signatures.cs");
+                    WriteCSharpSignatures(csPath, asmBaseName, infos);
+                    Console.WriteLine($"[SignatureDumper] Dumped single C# signature file to: {csPath}");
+                }
+
+                if (_options.DumpIndividualFiles)
+                {
+                    string decompileDir = Path.Combine(_options.OutputDirectory, _options.DecompileFolderName);
+                    WriteIndividualFiles(decompileDir, infos);
+                    Console.WriteLine($"[SignatureDumper] Generated {infos.Count} individual C# files in folder: {decompileDir}");
+                }
+
+                if (_options.DumpSummaryText)
+                {
+                    string summaryPath = Path.Combine(_options.OutputDirectory, $"{asmBaseName}_Summary.txt");
+                    WriteSummaryText(summaryPath, asmBaseName, infos);
+                    Console.WriteLine($"[SignatureDumper] Dumped Summary to: {summaryPath}");
+                }
+
+                if (_options.DumpJsonMetadata)
+                {
+                    string jsonPath = Path.Combine(_options.OutputDirectory, $"{asmBaseName}_Signatures.json");
+                    WriteJsonMetadata(jsonPath, infos);
+                    Console.WriteLine($"[SignatureDumper] Dumped JSON metadata to: {jsonPath}");
                 }
             }
-
-            Directory.CreateDirectory(_options.OutputDirectory);
-            string asmBaseName = Path.GetFileNameWithoutExtension(assemblyPath);
-
-            if (_options.DumpCSharpSignatures)
+            finally
             {
-                string csPath = Path.Combine(_options.OutputDirectory, $"{asmBaseName}_Signatures.cs");
-                WriteCSharpSignatures(csPath, asmBaseName, infos);
-                Console.WriteLine($"[SignatureDumper] Dumped single C# signature file to: {csPath}");
-            }
-
-            if (_options.DumpIndividualFiles)
-            {
-                string decompileDir = Path.Combine(_options.OutputDirectory, _options.DecompileFolderName);
-                WriteIndividualFiles(decompileDir, infos);
-                Console.WriteLine($"[SignatureDumper] Generated {infos.Count} individual C# files in folder: {decompileDir}");
-            }
-
-            if (_options.DumpSummaryText)
-            {
-                string summaryPath = Path.Combine(_options.OutputDirectory, $"{asmBaseName}_Summary.txt");
-                WriteSummaryText(summaryPath, asmBaseName, infos);
-                Console.WriteLine($"[SignatureDumper] Dumped Summary to: {summaryPath}");
-            }
-
-            if (_options.DumpJsonMetadata)
-            {
-                string jsonPath = Path.Combine(_options.OutputDirectory, $"{asmBaseName}_Signatures.json");
-                WriteJsonMetadata(jsonPath, infos);
-                Console.WriteLine($"[SignatureDumper] Dumped JSON metadata to: {jsonPath}");
+                AppDomain.CurrentDomain.AssemblyResolve -= resolveHandler;
             }
         }
 
@@ -378,12 +399,18 @@ namespace SignatureDumper
             if (t == null) return "void";
             if (t == typeof(void)) return "void";
             if (t == typeof(int)) return "int";
+            if (t == typeof(uint)) return "uint";
             if (t == typeof(long)) return "long";
+            if (t == typeof(ulong)) return "ulong";
             if (t == typeof(short)) return "short";
+            if (t == typeof(ushort)) return "ushort";
             if (t == typeof(byte)) return "byte";
+            if (t == typeof(sbyte)) return "sbyte";
+            if (t == typeof(char)) return "char";
             if (t == typeof(bool)) return "bool";
             if (t == typeof(float)) return "float";
             if (t == typeof(double)) return "double";
+            if (t == typeof(decimal)) return "decimal";
             if (t == typeof(string)) return "string";
             if (t == typeof(object)) return "object";
 
@@ -504,11 +531,10 @@ namespace SignatureDumper
 
         private string SanitizeFileName(string fileName)
         {
-            var invalidChars = Path.GetInvalidFileNameChars();
-            var sb = new StringBuilder();
+            var sb = new StringBuilder(fileName.Length);
             foreach (char c in fileName)
             {
-                if (invalidChars.Contains(c) || c == '<' || c == '>' || c == ':' || c == '*' || c == '?' || c == '"' || c == '|' || c == '/')
+                if (InvalidFileNameChars.Contains(c))
                 {
                     sb.Append('_');
                 }

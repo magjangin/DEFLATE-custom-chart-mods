@@ -20,7 +20,30 @@ namespace DEFLATE_custom_chart.Core
         public string AlbumFolderName { get; private set; }
 
         /// <summary>폴더 이름 (앨범 폴더 판별 및 기본 제목/로그용).</summary>
-        public string FolderName => string.IsNullOrEmpty(FolderPath) ? string.Empty : new DirectoryInfo(FolderPath).Name;
+        public string FolderName { get; private set; }
+
+        /// <summary>디렉터리 경로에서 DirectoryInfo 할당 없이 마지막 폴더 이름만 추출합니다.</summary>
+        public static string GetDirectoryName(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return string.Empty;
+            string trimmed = path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string name = Path.GetFileName(trimmed);
+            return string.IsNullOrEmpty(name) ? trimmed : name;
+        }
+
+        /// <summary>로컬 파일 경로를 특수문자(#, % 등)가 안전하게 인코딩된 file:// URI로 변환합니다.</summary>
+        public static string BuildFileUri(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath)) return string.Empty;
+            try
+            {
+                return new Uri(Path.GetFullPath(filePath)).AbsoluteUri;
+            }
+            catch
+            {
+                return "file:///" + filePath.Replace('\\', '/');
+            }
+        }
 
         // 에셋 파일 경로
         public string BgmFilePath { get; private set; }
@@ -47,11 +70,23 @@ namespace DEFLATE_custom_chart.Core
         public bool IsBgmLoading => _isBgmLoading;
 
         private static readonly char[] InfoSeparators = { ':', '=' };
+        private static readonly string[] BgmKeywords = { "music", "bgm", "song", "track", "audio" };
 
         private CustomSongEntry(string folderPath, string albumFolderName)
         {
             FolderPath = folderPath;
             AlbumFolderName = albumFolderName;
+            FolderName = GetDirectoryName(folderPath);
+        }
+
+        private static bool HasBgmKeyword(string fileNameWithoutExt)
+        {
+            if (string.IsNullOrEmpty(fileNameWithoutExt)) return false;
+            foreach (var kw in BgmKeywords)
+            {
+                if (fileNameWithoutExt.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -77,7 +112,7 @@ namespace DEFLATE_custom_chart.Core
             return entry;
         }
 
-        /// <summary>폴더 안의 파일들을 BGM/BGA/커버/info/BMS로 분류합니다 (하위 폴더는 보지 않습니다).</summary>
+        /// <summary>폴더 안의 파일들을 단일 패스로 BGM/BGA/커버/info/BMS로 분류합니다 (하위 폴더는 보지 않습니다).</summary>
         public void ScanFiles()
         {
             BgmFilePath = null;
@@ -93,7 +128,6 @@ namespace DEFLATE_custom_chart.Core
             Array.Sort(files, StringComparer.OrdinalIgnoreCase);
 
             // BGM 음원 파일 선별 (.ogg 최우선 채택 ➔ music/bgm 키워드 ➔ 최대 용량 오디오 순)
-            // 파일 정렬 순서와 상관없이 이 우선순위가 지켜지도록 전체 후보를 비교한다.
             // (.flac은 UnityWebRequestMultimedia가 읽지 못하므로 후보에서 제외)
             string bestBgm = null;
             bool bestIsOgg = false, bestHasKeyword = false;
@@ -101,58 +135,66 @@ namespace DEFLATE_custom_chart.Core
 
             foreach (var f in files)
             {
-                string ext = Path.GetExtension(f).ToLowerInvariant();
-                if (ext != ".wav" && ext != ".mp3" && ext != ".ogg") continue;
+                string ext = Path.GetExtension(f);
+                if (string.IsNullOrEmpty(ext)) continue;
 
-                string name = Path.GetFileNameWithoutExtension(f).ToLowerInvariant();
-
-                // 1. .ogg 확장자 (BMS용 단품 .wav 키음들과 명확히 분리)
-                bool isOgg = ext == ".ogg";
-                // 2. music, bgm, song, track, audio 이름 포함
-                bool hasKeyword = name.Contains("music") || name.Contains("bgm") || name.Contains("song") || name.Contains("track") || name.Contains("audio");
-                // 3. 파일 용량 (.ogg 키음이 여럿인 폴더에서도 가장 큰 곡 파일이 잡히도록)
-                long size = new FileInfo(f).Length;
-
-                bool better = bestBgm == null
-                    || (isOgg != bestIsOgg ? isOgg
-                    : hasKeyword != bestHasKeyword ? hasKeyword
-                    : size > bestSize);
-
-                if (better)
+                bool isOgg = string.Equals(ext, ".ogg", StringComparison.OrdinalIgnoreCase);
+                if (isOgg || string.Equals(ext, ".wav", StringComparison.OrdinalIgnoreCase) || string.Equals(ext, ".mp3", StringComparison.OrdinalIgnoreCase))
                 {
-                    bestBgm = f;
-                    bestIsOgg = isOgg;
-                    bestHasKeyword = hasKeyword;
-                    bestSize = size;
+                    // 이미 .ogg가 확정되었으면 비-.ogg 키음 파일(.wav 등)은 즉시 건너뛰어 FileInfo/문자열 할당을 피한다.
+                    if (bestBgm != null && bestIsOgg && !isOgg) continue;
+
+                    bool hasKeyword = HasBgmKeyword(Path.GetFileNameWithoutExtension(f));
+                    if (bestBgm != null && isOgg == bestIsOgg && bestHasKeyword && !hasKeyword) continue;
+
+                    bool better;
+                    long size = -1;
+                    if (bestBgm == null || isOgg != bestIsOgg || hasKeyword != bestHasKeyword)
+                    {
+                        better = bestBgm == null || (isOgg != bestIsOgg ? isOgg : hasKeyword);
+                    }
+                    else
+                    {
+                        if (bestSize < 0) bestSize = new FileInfo(bestBgm).Length;
+                        size = new FileInfo(f).Length;
+                        better = size > bestSize;
+                    }
+
+                    if (better)
+                    {
+                        bestBgm = f;
+                        bestIsOgg = isOgg;
+                        bestHasKeyword = hasKeyword;
+                        bestSize = size;
+                    }
+                    continue;
                 }
-            }
-            BgmFilePath = bestBgm;
 
-            foreach (var f in files)
-            {
-                string ext = Path.GetExtension(f).ToLowerInvariant();
-                string name = Path.GetFileName(f).ToLowerInvariant();
-
-                if (BgaFilePath == null && ext == ".mp4")
+                if (BgaFilePath == null && string.Equals(ext, ".mp4", StringComparison.OrdinalIgnoreCase))
                 {
                     BgaFilePath = f;
-                    BgaFileUrl = "file:///" + f.Replace('\\', '/');
+                    BgaFileUrl = BuildFileUri(f);
                 }
-                else if (CoverFilePath == null && ext == ".png")
+                else if (CoverFilePath == null && string.Equals(ext, ".png", StringComparison.OrdinalIgnoreCase))
                 {
                     CoverFilePath = f;
                 }
-                else if (ext == ".txt" && (InfoFilePath == null || name == "info.txt"))
+                else if (string.Equals(ext, ".txt", StringComparison.OrdinalIgnoreCase) &&
+                    (InfoFilePath == null || string.Equals(Path.GetFileName(f), "info.txt", StringComparison.OrdinalIgnoreCase)))
                 {
                     // info.txt가 있으면 그것을, 없으면 처음 나온 .txt를 메타데이터 파일로 쓴다
                     // (정렬상 info.txt보다 앞서는 readme.txt 등이 먼저 잡히는 것 방지).
                     InfoFilePath = f;
                 }
-                else if (BmsFilePath == null && (ext == ".bms" || ext == ".bme" || ext == ".bml"))
+                else if (BmsFilePath == null &&
+                    (string.Equals(ext, ".bms", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(ext, ".bme", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(ext, ".bml", StringComparison.OrdinalIgnoreCase)))
                 {
                     BmsFilePath = f;
                 }
             }
+            BgmFilePath = bestBgm;
         }
 
         /// <summary>
@@ -302,11 +344,12 @@ namespace DEFLATE_custom_chart.Core
                 yield break;
             }
 
-            // 이미 다른 곳에서 로딩 중이면 그 결과를 기다렸다가 동일하게 적용/콜백한다. (타임아웃 300프레임 가드)
+            // 이미 다른 곳에서 로딩 중이면 그 결과를 기다렸다가 동일하게 적용/콜백한다. (고주사율 환경 대응 10초 + 3000프레임 가드)
             if (_isBgmLoading)
             {
+                float startTime = Time.realtimeSinceStartup;
                 int waitFrames = 0;
-                while (_isBgmLoading && waitFrames < 300)
+                while (_isBgmLoading && (Time.realtimeSinceStartup - startTime) < 10.0f && waitFrames < 3000)
                 {
                     waitFrames++;
                     yield return null;
@@ -322,7 +365,7 @@ namespace DEFLATE_custom_chart.Core
 
             try
             {
-                string uri = "file:///" + BgmFilePath.Replace('\\', '/');
+                string uri = BuildFileUri(BgmFilePath);
                 AudioType audioType = GetAudioType(BgmFilePath);
                 www = UnityWebRequestMultimedia.GetAudioClip(uri, audioType);
 

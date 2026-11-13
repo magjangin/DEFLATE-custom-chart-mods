@@ -49,7 +49,14 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prefix(ref string key)
             {
-                MelonLogger.Msg($"[에셋 매니저 BGA] VideoClip 로드 요청 Key: '{key}'");
+                try
+                {
+                    MelonLogger.Msg($"[에셋 매니저 BGA] VideoClip 로드 요청 Key: '{key}'");
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[TrackAssetManager.LoadVideoClip] Prefix 처리 중 예외: {ex.Message}");
+                }
                 return true;
             }
         }
@@ -59,7 +66,14 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prefix(ref string key)
             {
-                MelonLogger.Msg($"[에셋 매니저 BGA] VideoURL 로드 요청 Key: '{key}'");
+                try
+                {
+                    MelonLogger.Msg($"[에셋 매니저 BGA] VideoURL 로드 요청 Key: '{key}'");
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[TrackAssetManager.LoadVideoURL] Prefix 처리 중 예외: {ex.Message}");
+                }
                 return true;
             }
         }
@@ -69,14 +83,21 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prefix(Bank_PV_Ctrl __instance, ref string pvKey)
             {
-                MelonLogger.Msg($"[PV 메뉴 BGA 재생] pvKey: '{pvKey}'");
-
-                if (HwaAssetManager.IsTargetTrackActive && __instance != null && __instance.videoPlayer != null)
+                try
                 {
-                    if (HwaAssetManager.ApplyCustomBga(__instance.videoPlayer, true))
+                    MelonLogger.Msg($"[PV 메뉴 BGA 재생] pvKey: '{pvKey}'");
+
+                    if (HwaAssetManager.IsTargetTrackActive && __instance != null && __instance.videoPlayer != null)
                     {
-                        return false;
+                        if (HwaAssetManager.ApplyCustomBga(__instance.videoPlayer, true))
+                        {
+                            return false;
+                        }
                     }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[Bank_PV_Ctrl.PlayPVVideo] Prefix 처리 중 예외: {ex.Message}");
                 }
                 return true;
             }
@@ -87,11 +108,18 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prefix(Bank_PV_Ctrl __instance, ref string videoKey, ref string audioKey)
             {
-                MelonLogger.Msg($"[PV 메뉴 미디어 로드] videoKey: '{videoKey}', audioKey: '{audioKey}'");
-
-                if (HwaAssetManager.IsTargetTrackActive && __instance != null && __instance.videoPlayer != null)
+                try
                 {
-                    HwaAssetManager.ApplyCustomBga(__instance.videoPlayer, false);
+                    MelonLogger.Msg($"[PV 메뉴 미디어 로드] videoKey: '{videoKey}', audioKey: '{audioKey}'");
+
+                    if (HwaAssetManager.IsTargetTrackActive && __instance != null && __instance.videoPlayer != null)
+                    {
+                        HwaAssetManager.ApplyCustomBga(__instance.videoPlayer, false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[Bank_PV_Ctrl.LoadVideoAndAudio] Prefix 처리 중 예외: {ex.Message}");
                 }
                 return true;
             }
@@ -106,11 +134,18 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prefix(string pvKey, VideoPlayer videoPlayer, float pvOffset, bool autoPlay)
             {
-                MelonLogger.Msg($"[★ SimpleRandomVideo.LoadVideoSmart 호출 ★] pvKey: '{pvKey}' | videoPlayer: '{(videoPlayer != null ? videoPlayer.name : "null")}'");
-
-                if (HwaAssetManager.IsTargetTrackActive && videoPlayer != null && HwaAssetManager.ApplyCustomBga(videoPlayer, autoPlay))
+                try
                 {
-                    return false; // 원본 Addressable 비디오 로드 스킵
+                    MelonLogger.Msg($"[★ SimpleRandomVideo.LoadVideoSmart 호출 ★] pvKey: '{pvKey}' | videoPlayer: '{(videoPlayer != null ? videoPlayer.name : "null")}'");
+
+                    if (HwaAssetManager.IsTargetTrackActive && videoPlayer != null && HwaAssetManager.ApplyCustomBga(videoPlayer, autoPlay))
+                    {
+                        return false; // 원본 Addressable 비디오 로드 스킵
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[SimpleRandomVideo.LoadVideoSmart] Prefix 처리 중 예외: {ex.Message}");
                 }
                 return true;
             }
@@ -121,11 +156,18 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prefix(string addressKey, VideoPlayer videoPlayer, float pvOffset, bool autoPlay)
             {
-                MelonLogger.Msg($"[★ SimpleRandomVideo.LoadVideo 호출 ★] addressKey: '{addressKey}' | videoPlayer: '{(videoPlayer != null ? videoPlayer.name : "null")}'");
-
-                if (HwaAssetManager.IsTargetTrackActive && videoPlayer != null && HwaAssetManager.ApplyCustomBga(videoPlayer, autoPlay))
+                try
                 {
-                    return false;
+                    MelonLogger.Msg($"[★ SimpleRandomVideo.LoadVideo 호출 ★] addressKey: '{addressKey}' | videoPlayer: '{(videoPlayer != null ? videoPlayer.name : "null")}'");
+
+                    if (HwaAssetManager.IsTargetTrackActive && videoPlayer != null && HwaAssetManager.ApplyCustomBga(videoPlayer, autoPlay))
+                    {
+                        return false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[SimpleRandomVideo.LoadVideo] Prefix 처리 중 예외: {ex.Message}");
                 }
                 return true;
             }
@@ -179,27 +221,33 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(MainTrackList), nameof(MainTrackList.Start))]
         public static class MainTrackList_Start_Patch
         {
-            // SongInjectorHooks의 MainTrackList.Start 패치(사본 생성 및 TargetTrackID 등록)가
-            // 먼저 실행되도록 우선순위를 낮춰서 실행 순서를 보장한다.
-            [HarmonyPriority(Priority.Last)]
+            // SongInjectorHooks(Priority.High) 실행 후, SongListHooks(Priority.Last) 로깅 전에 실행한다.
+            [HarmonyPriority(Priority.Normal)]
             public static void Postfix(MainTrackList __instance)
             {
-                if (__instance == null || __instance.tracks == null) return;
-                MelonLogger.Msg($"[★ MainTrackList.Start 감지 ★] 총 곡 수: {__instance.tracks.Count}개");
-
-                // 주입된 커스텀 곡 사본 블록에만 각자의 PNG 커버 적용 (원본 곡들은 건드리지 않음)
-                foreach (var trackBlock in __instance.tracks)
+                try
                 {
-                    if (trackBlock == null) continue;
+                    if (__instance == null || __instance.tracks == null) return;
+                    MelonLogger.Msg($"[★ MainTrackList.Start 감지 ★] 총 곡 수: {__instance.tracks.Count}개");
 
-                    var entry = CustomSongLibrary.FindByTrackID(trackBlock.uniqueID);
-                    if (entry == null) continue;
+                    // 주입된 커스텀 곡 사본 블록에만 각자의 PNG 커버 적용 (원본 곡들은 건드리지 않음)
+                    foreach (var trackBlock in __instance.tracks)
+                    {
+                        if (trackBlock == null) continue;
 
-                    var customCover = entry.LoadCoverSprite();
-                    if (customCover == null) continue;
+                        var entry = CustomSongLibrary.FindByTrackID(trackBlock.uniqueID);
+                        if (entry == null) continue;
 
-                    trackBlock.TrackCover = customCover;
-                    MelonLogger.Msg($"  [★ MainTrackListBlock 데이터 커버 교체 성공 (사본 전용) ★] 앨범: '{entry.Meta.Album}' | 제목: '{trackBlock.TrackTitle}' | 커버: '{customCover.name}'");
+                        var customCover = entry.LoadCoverSprite();
+                        if (customCover == null) continue;
+
+                        trackBlock.TrackCover = customCover;
+                        MelonLogger.Msg($"  [★ MainTrackListBlock 데이터 커버 교체 성공 (사본 전용) ★] 앨범: '{entry.Meta.Album}' | 제목: '{trackBlock.TrackTitle}' | 커버: '{customCover.name}'");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[MainTrackList.Start] 커버 적용 중 예외: {ex.Message}");
                 }
             }
         }
@@ -215,12 +263,20 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prefix(Panel_Result __instance, ref AudioClip __result)
             {
-                if (__instance == null || !HwaAssetManager.IsTargetTrackActive) return true;
-                if (HwaAssetManager.CustomBgmClip == null) return true;
+                try
+                {
+                    if (__instance == null || !HwaAssetManager.IsTargetTrackActive) return true;
+                    if (HwaAssetManager.CustomBgmClip == null) return true;
 
-                __result = HwaAssetManager.CustomBgmClip;
-                MelonLogger.Msg($"[HwaAssetManager] ★ 결과 화면 파형/재생 미리듣기 Custom BGM 오버라이드 ★: '{__result.name}' ({__result.length:F2}초)");
-                return false;
+                    __result = HwaAssetManager.CustomBgmClip;
+                    MelonLogger.Msg($"[HwaAssetManager] ★ 결과 화면 파형/재생 미리듣기 Custom BGM 오버라이드 ★: '{__result.name}' ({__result.length:F2}초)");
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[Panel_Result.GetPreviewClip] Prefix 처리 중 예외: {ex.Message}");
+                    return true;
+                }
             }
         }
 
@@ -261,22 +317,29 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(Panel_Result __instance)
             {
-                if (__instance == null) return;
-                MelonLogger.Msg("[★ Panel_Result.ApplyText 감지 ★] 점수 표출 시작!");
-
-                if (!HwaAssetManager.IsTargetTrackActive) return;
-
-                var players = __instance.GetComponentsInChildren<VideoPlayer>(true);
-                if (players == null || players.Length == 0)
+                try
                 {
-                    players = UnityEngine.Object.FindObjectsOfType<VideoPlayer>();
-                }
-                if (players != null)
-                {
-                    foreach (var vp in players)
+                    if (__instance == null) return;
+                    MelonLogger.Msg("[★ Panel_Result.ApplyText 감지 ★] 점수 표출 시작!");
+
+                    if (!HwaAssetManager.IsTargetTrackActive) return;
+
+                    var players = __instance.GetComponentsInChildren<VideoPlayer>(true);
+                    if (players == null || players.Length == 0)
                     {
-                        HwaAssetManager.ApplyCustomBga(vp, true);
+                        players = UnityEngine.Object.FindObjectsOfType<VideoPlayer>();
                     }
+                    if (players != null)
+                    {
+                        foreach (var vp in players)
+                        {
+                            HwaAssetManager.ApplyCustomBga(vp, true);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[Panel_Result.ApplyText] Postfix 처리 중 예외: {ex.Message}");
                 }
             }
         }
