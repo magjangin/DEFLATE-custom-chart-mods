@@ -44,6 +44,9 @@ namespace DEFLATE_custom_chart.Core
         public string VideoKey { get; set; }
 
         private bool _isBgmLoading;
+        public bool IsBgmLoading => _isBgmLoading;
+
+        private static readonly char[] InfoSeparators = { ':', '=' };
 
         private CustomSongEntry(string folderPath, string albumFolderName)
         {
@@ -87,6 +90,7 @@ namespace DEFLATE_custom_chart.Core
             if (!Directory.Exists(FolderPath)) return;
 
             string[] files = Directory.GetFiles(FolderPath, "*.*", SearchOption.TopDirectoryOnly);
+            Array.Sort(files, StringComparer.OrdinalIgnoreCase);
 
             // BGM 음원 파일 선별 (.ogg 최우선 채택 ➔ music/bgm 키워드 ➔ 최대 용량 오디오 순)
             // 파일 정렬 순서와 상관없이 이 우선순위가 지켜지도록 전체 후보를 비교한다.
@@ -170,7 +174,7 @@ namespace DEFLATE_custom_chart.Core
                     {
                         if (string.IsNullOrWhiteSpace(line)) continue;
 
-                        string[] parts = line.Split(new char[] { ':', '=' }, 2);
+                        string[] parts = line.Split(InfoSeparators, 2);
                         if (parts.Length < 2) continue;
 
                         string key = parts[0].Trim().ToLowerInvariant();
@@ -248,6 +252,10 @@ namespace DEFLATE_custom_chart.Core
                     CoverSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
                     CoverSprite.name = Path.GetFileNameWithoutExtension(CoverFilePath);
                     MelonLogger.Msg($"[커스텀 곡] PNG 커버 로드: '{Meta.Title}' ({tex.width}x{tex.height})");
+                }
+                else
+                {
+                    UnityEngine.Object.Destroy(tex);
                 }
             }
             catch (Exception ex)
@@ -327,6 +335,7 @@ namespace DEFLATE_custom_chart.Core
             catch (Exception ex)
             {
                 MelonLogger.Error($"[커스텀 곡] BGM UnityWebRequest 생성 실패 ('{Meta.Title}'): {ex.Message}");
+                www?.Dispose();
                 _isBgmLoading = false;
                 onFailed?.Invoke();
                 yield break;
@@ -386,8 +395,22 @@ namespace DEFLATE_custom_chart.Core
 
         public void ResetLoadedAssets()
         {
-            CoverSprite = null;
-            BgmClip = null;
+            if (CoverSprite != null)
+            {
+                if (CoverSprite.texture != null)
+                {
+                    UnityEngine.Object.Destroy(CoverSprite.texture);
+                }
+                UnityEngine.Object.Destroy(CoverSprite);
+                CoverSprite = null;
+            }
+
+            if (BgmClip != null)
+            {
+                UnityEngine.Object.Destroy(BgmClip);
+                BgmClip = null;
+            }
+
             _isBgmLoading = false;
         }
     }

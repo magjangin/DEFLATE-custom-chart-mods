@@ -70,7 +70,11 @@ namespace DEFLATE_custom_chart.Core
             if (active != null)
             {
                 // 곡 선택 씬에서 커스텀 트랙이 선택되는 즉시 BGM 비동기 스트리밍 사전 로딩(Preload) 개시
-                MelonCoroutines.Start(active.LoadBgmCoroutine(null, false));
+                // 이미 로드되었거나 로딩 중이면 중복 코루틴을 시작하지 않는다.
+                if (active.BgmClip == null && !active.IsBgmLoading && !string.IsNullOrEmpty(active.BgmFilePath))
+                {
+                    MelonCoroutines.Start(active.LoadBgmCoroutine(null, false));
+                }
                 return true;
             }
             return false;
@@ -143,8 +147,10 @@ namespace DEFLATE_custom_chart.Core
             foreach (var img in images)
             {
                 if (img == null) continue;
-                string lowerName = img.name.ToLower();
-                if (lowerName.Contains("cover") || lowerName.Contains("track") || lowerName.Contains("jacket"))
+                string name = img.name;
+                if (name.IndexOf("cover", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    name.IndexOf("track", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    name.IndexOf("jacket", StringComparison.OrdinalIgnoreCase) >= 0)
                 {
                     if (img.sprite != sprite)
                     {
@@ -166,6 +172,16 @@ namespace DEFLATE_custom_chart.Core
 
             try
             {
+                if (videoPlayer.source == VideoSource.Url &&
+                    string.Equals(videoPlayer.url, url, StringComparison.Ordinal))
+                {
+                    if (autoPlay && !videoPlayer.isPlaying)
+                    {
+                        videoPlayer.Play();
+                    }
+                    return true;
+                }
+
                 videoPlayer.source = VideoSource.Url;
                 videoPlayer.url = url;
                 videoPlayer.Prepare();

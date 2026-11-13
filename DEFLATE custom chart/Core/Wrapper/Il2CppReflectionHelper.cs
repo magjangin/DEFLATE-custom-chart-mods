@@ -12,8 +12,8 @@ namespace DEFLATE_custom_chart.Core.Wrapper
     /// </summary>
     public static class Il2CppReflectionHelper
     {
-        private static readonly ConcurrentDictionary<string, PropertyInfo> PropertyCache = new ConcurrentDictionary<string, PropertyInfo>();
-        private static readonly ConcurrentDictionary<string, FieldInfo> FieldCache = new ConcurrentDictionary<string, FieldInfo>();
+        private static readonly ConcurrentDictionary<(Type, string), PropertyInfo> PropertyCache = new ConcurrentDictionary<(Type, string), PropertyInfo>();
+        private static readonly ConcurrentDictionary<(Type, string), FieldInfo> FieldCache = new ConcurrentDictionary<(Type, string), FieldInfo>();
 
         /// <summary>
         /// Il2CppObjectBase 인스턴스 또는 object를 안전하게 T 타입으로 Cast합니다.
@@ -50,7 +50,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 try
                 {
                     T result = directGetter();
-                    if (result != null) return result;
+                    return result != null ? result : defaultValue;
                 }
                 catch (Exception ex)
                 {
@@ -66,9 +66,8 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 if (string.IsNullOrEmpty(name)) continue;
 
                 // 2-1. Property 읽기 시도
-                string propKey = $"{targetType.FullName}.P.{name}";
-                PropertyInfo prop = PropertyCache.GetOrAdd(propKey, _ =>
-                    targetType.GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase));
+                PropertyInfo prop = PropertyCache.GetOrAdd((targetType, name), key =>
+                    key.Item1.GetProperty(key.Item2, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase));
 
                 if (prop != null && prop.CanRead)
                 {
@@ -83,9 +82,8 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 }
 
                 // 2-2. Field 읽기 시도
-                string fieldKey = $"{targetType.FullName}.F.{name}";
-                FieldInfo field = FieldCache.GetOrAdd(fieldKey, _ =>
-                    targetType.GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase));
+                FieldInfo field = FieldCache.GetOrAdd((targetType, name), key =>
+                    key.Item1.GetField(key.Item2, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase));
 
                 if (field != null)
                 {
@@ -132,9 +130,8 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 if (string.IsNullOrEmpty(name)) continue;
 
                 // 2-1. Property 주입 시도
-                string propKey = $"{targetType.FullName}.P.{name}";
-                PropertyInfo prop = PropertyCache.GetOrAdd(propKey, _ =>
-                    targetType.GetProperty(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase));
+                PropertyInfo prop = PropertyCache.GetOrAdd((targetType, name), key =>
+                    key.Item1.GetProperty(key.Item2, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase));
 
                 if (prop != null && prop.CanWrite)
                 {
@@ -147,9 +144,8 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 }
 
                 // 2-2. Field 주입 시도
-                string fieldKey = $"{targetType.FullName}.F.{name}";
-                FieldInfo field = FieldCache.GetOrAdd(fieldKey, _ =>
-                    targetType.GetField(name, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase));
+                FieldInfo field = FieldCache.GetOrAdd((targetType, name), key =>
+                    key.Item1.GetField(key.Item2, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.IgnoreCase));
 
                 if (field != null)
                 {
