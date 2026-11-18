@@ -116,10 +116,11 @@ namespace DEFLATE_custom_chart.Core
             }
         }
 
-        private static readonly string[] GameDataTitleFallbacks = { "trackTitle", "Title" };
+        private static readonly string[] GameDataTitleFallbacks = { "trackTitle", "Title", "nowTrackTitle" };
         private static readonly string[] GameDataAuthorFallbacks = { "NowTrackAuthor", "TrackAuthor", "nowTrackAuthor" };
-        private static readonly string[] GameDataPvAuthorFallbacks = { "NowTrackPvAuthor", "TrackPVAuthor" };
-        private static readonly string[] GameDataLabelFallbacks = { "NowTrackLabel", "TrackLabel", "TrackAlbum" };
+        private static readonly string[] GameDataPvAuthorFallbacks = { "NowTrackPvAuthor", "TrackPVAuthor", "nowTrackPVAuthor" };
+        private static readonly string[] GameDataScoreFallbacks = { "TrackScore", "nowTrackScore", "ChartAuthor", "ChartMaker" };
+        private static readonly string[] GameDataLabelFallbacks = { "NowTrackLabel", "TrackLabel", "TrackAlbum", "nowTrackLabel" };
         private static readonly string[] GameDataLevelFallbacks = { "TrackLevel", "nowTrackLevel" };
         private static readonly string[] GameDataCoverFallbacks = { "TrackCover", "nowTrackCover" };
 
@@ -135,6 +136,7 @@ namespace DEFLATE_custom_chart.Core
             Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackTitle = meta.Title, "NowTrackTitle", GameDataTitleFallbacks, meta.Title);
             Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackAurthor = meta.Artist, "NowTrackAurthor", GameDataAuthorFallbacks, meta.Artist);
             Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackPVAuthor = meta.BgaAuthor, "NowTrackPVAuthor", GameDataPvAuthorFallbacks, meta.BgaAuthor);
+            Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackScore = meta.ChartAuthor, "NowTrackScore", GameDataScoreFallbacks, meta.ChartAuthor);
             Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTracLabel = meta.Album, "NowTracLabel", GameDataLabelFallbacks, meta.Album);
 
             if (targetStar.HasValue)

@@ -356,8 +356,8 @@ namespace DEFLATE_custom_chart.Core.Bms
                 }
             }
 
-            // Tick 순서대로 정렬 후 시간(TimeSeconds) 누적 계산
-            chart.BpmEvents = chart.BpmEvents.OrderBy(e => e.Tick).ToList();
+            // Tick 순서대로 정렬 후 시간(TimeSeconds) 누적 계산 (LINQ 할당 없이 In-place 정렬)
+            chart.BpmEvents.Sort(CompareBpmEventsByTick);
 
             double prevTick = 0.0;
             double prevTime = 0.0;
@@ -375,6 +375,11 @@ namespace DEFLATE_custom_chart.Core.Bms
                 prevTick = bpmEv.Tick;
                 if (bpmEv.Bpm > 0f) currentBpm = bpmEv.Bpm;
             }
+        }
+
+        private static int CompareBpmEventsByTick(BmsBpmEvent a, BmsBpmEvent b)
+        {
+            return a.Tick.CompareTo(b.Tick);
         }
 
         /// <summary>
@@ -420,7 +425,7 @@ namespace DEFLATE_custom_chart.Core.Bms
             chart.BarLines.Clear();
             if (measureStartTicks.Count == 0) return;
 
-            int lastMeasure = measureStartTicks.Keys.Max();
+            int lastMeasure = measureStartTicks.Count - 1;
             for (int m = 0; m <= lastMeasure; m++)
             {
                 double measureStart = measureStartTicks[m];

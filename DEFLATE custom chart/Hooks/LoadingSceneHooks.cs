@@ -10,6 +10,10 @@ namespace DEFLATE_custom_chart.Hooks
 {
     public static class LoadingSceneHooks
     {
+        private static readonly string[] LoadingAuthorFallbacks = { "NowTrackAuthor", "nowTrackAuthor", "TrackAuthor" };
+        private static readonly string[] LoadingLabelFallbacks = { "NowTrackLabel", "nowTrackLabel", "TrackLabel" };
+        private static readonly string[] GameDataAuthorReadFallbacks = { "NowTrackAuthor", "nowTrackAuthor" };
+
         private static void ApplyLoadingUiMetadata(LoadingGamePlay instance)
         {
             try
@@ -31,7 +35,7 @@ namespace DEFLATE_custom_chart.Hooks
                     instance,
                     () => instance.NowTrackAurthor,
                     "NowTrackAurthor",
-                    new[] { "NowTrackAuthor", "nowTrackAuthor", "TrackAuthor" },
+                    LoadingAuthorFallbacks,
                     null);
                 if (authorText != null) authorText.text = meta.Artist;
 
@@ -41,7 +45,7 @@ namespace DEFLATE_custom_chart.Hooks
                     instance,
                     () => instance.NowTracLabel,
                     "NowTracLabel",
-                    new[] { "NowTrackLabel", "nowTrackLabel", "TrackLabel" },
+                    LoadingLabelFallbacks,
                     null);
                 if (labelText != null) labelText.text = meta.Album;
 
@@ -91,7 +95,7 @@ namespace DEFLATE_custom_chart.Hooks
                         gd,
                         () => gd.NowTrackAurthor,
                         "NowTrackAurthor",
-                        new[] { "NowTrackAuthor", "nowTrackAuthor" },
+                        GameDataAuthorReadFallbacks,
                         string.Empty);
 
                     MelonLogger.Msg("==================================================");

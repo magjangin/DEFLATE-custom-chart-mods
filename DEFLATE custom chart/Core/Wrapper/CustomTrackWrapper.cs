@@ -38,6 +38,25 @@ namespace DEFLATE_custom_chart.Core.Wrapper
         // 원본 Il2Cpp 참조 (안전한 캐스팅 지원)
         public MainTrackListBlock NativeBlock { get; private set; }
 
+        // 정적 캐시 폴백 배열 (매 호출 시 힙 할당 제거)
+        private static readonly string[] UniqueIdFallbacks = { "UniqueID", "id", "m_UniqueID", "trackID", "_uniqueID" };
+        private static readonly string[] TitleFallbacks = { "trackTitle", "Title", "title", "m_TrackTitle", "_trackTitle" };
+        private static readonly string[] ArtistFallbacks = { "trackAuthor", "Artist", "artist", "Author", "author", "m_TrackAuthor" };
+        private static readonly string[] AlbumFallbacks = { "trackAlbum", "Album", "album", "AlbumName", "m_TrackAlbum" };
+        private static readonly string[] AudioKeyFallbacks = { "audioClipKey", "audioKey", "AudioKey", "m_audioClip_Key" };
+        private static readonly string[] VideoKeyFallbacks = { "videoClipKey", "videoKey", "VideoKey", "m_videoClip_Key", "pv_Key" };
+        private static readonly string[] EzKoreKeyFallbacks = { "ez_TrackKore_Key", "ezTrackKoreKey", "ezKoreKey", "EZ_KoreKey" };
+        private static readonly string[] NmKoreKeyFallbacks = { "nm_TrackKore_Key", "nmTrackKoreKey", "nmKoreKey", "NM_KoreKey" };
+        private static readonly string[] HdKoreKeyFallbacks = { "hd_TrackKore_Key", "hdTrackKoreKey", "hdKoreKey", "HD_KoreKey" };
+        private static readonly string[] CoverFallbacks = { "trackCover", "Cover", "cover", "m_TrackCover", "CoverSprite" };
+        private static readonly string[] EzStarFallbacks = { "ez_Star", "ezStar", "EasyStar", "m_EZ_Star" };
+        private static readonly string[] NmStarFallbacks = { "nm_Star", "nmStar", "NormalStar", "m_NM_Star" };
+        private static readonly string[] HdStarFallbacks = { "hd_Star", "hdStar", "HardStar", "m_HD_Star" };
+        private static readonly string[] DescriptionFallbacks = { "description", "Desc", "desc", "m_Description" };
+        private static readonly string[] PvAuthorFallbacks = { "trackPVAuthor", "PVAuthor", "pvAuthor", "BgaAuthor", "m_TrackPVAuthor" };
+        private static readonly string[] ChartMakerFallbacks = { "trackScore", "ChartAuthor", "ChartMaker", "ScoreAuthor", "m_TrackScore" };
+        private static readonly string[] TrackLabelFallbacks = { "trackLabel", "Label", "label", "m_TrackLabel" };
+
         public CustomTrackWrapper() { }
 
         public CustomTrackWrapper(object block)
@@ -61,7 +80,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock?.uniqueID,
                 "uniqueID",
-                new[] { "UniqueID", "id", "m_UniqueID", "trackID", "_uniqueID" },
+                UniqueIdFallbacks,
                 string.Empty);
 
             // 2. Title
@@ -69,7 +88,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock?.TrackTitle,
                 "TrackTitle",
-                new[] { "trackTitle", "Title", "title", "m_TrackTitle", "_trackTitle" },
+                TitleFallbacks,
                 string.Empty);
 
             // 3. Artist / Author
@@ -77,7 +96,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock?.TrackAuthor,
                 "TrackAuthor",
-                new[] { "trackAuthor", "Artist", "artist", "Author", "author", "m_TrackAuthor" },
+                ArtistFallbacks,
                 string.Empty);
 
             // 4. AlbumName
@@ -85,7 +104,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock?.TrackAlbum,
                 "TrackAlbum",
-                new[] { "trackAlbum", "Album", "album", "AlbumName", "m_TrackAlbum" },
+                AlbumFallbacks,
                 string.Empty);
 
             // 5. AudioKey
@@ -93,7 +112,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock?.audioClip_Key,
                 "audioClip_Key",
-                new[] { "audioClipKey", "audioKey", "AudioKey", "m_audioClip_Key" },
+                AudioKeyFallbacks,
                 string.Empty);
 
             // 6. VideoKey
@@ -101,7 +120,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock?.videoClip_Key,
                 "videoClip_Key",
-                new[] { "videoClipKey", "videoKey", "VideoKey", "m_videoClip_Key" },
+                VideoKeyFallbacks,
                 string.Empty);
 
             // 7. EZ Kore Key
@@ -109,7 +128,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock?.EZ_TrackKore_Key,
                 "EZ_TrackKore_Key",
-                new[] { "ez_TrackKore_Key", "ezTrackKoreKey", "ezKoreKey", "EZ_KoreKey" },
+                EzKoreKeyFallbacks,
                 string.Empty);
 
             // 8. NM Kore Key
@@ -117,7 +136,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock?.NM_TrackKore_Key,
                 "NM_TrackKore_Key",
-                new[] { "nm_TrackKore_Key", "nmTrackKoreKey", "nmKoreKey", "NM_KoreKey" },
+                NmKoreKeyFallbacks,
                 string.Empty);
 
             // 9. HD Kore Key
@@ -125,7 +144,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock?.HD_TrackKore_Key,
                 "HD_TrackKore_Key",
-                new[] { "hd_TrackKore_Key", "hdTrackKoreKey", "hdKoreKey", "HD_KoreKey" },
+                HdKoreKeyFallbacks,
                 string.Empty);
 
             // 10. CoverSprite
@@ -133,7 +152,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock?.TrackCover,
                 "TrackCover",
-                new[] { "trackCover", "Cover", "cover", "m_TrackCover", "CoverSprite" },
+                CoverFallbacks,
                 null);
 
             // 11. EZ_Star
@@ -141,7 +160,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock != null ? NativeBlock.EZ_Star : 0,
                 "EZ_Star",
-                new[] { "ez_Star", "ezStar", "EasyStar", "m_EZ_Star" },
+                EzStarFallbacks,
                 0);
 
             // 12. NM_Star
@@ -149,7 +168,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock != null ? NativeBlock.NM_Star : 0,
                 "NM_Star",
-                new[] { "nm_Star", "nmStar", "NormalStar", "m_NM_Star" },
+                NmStarFallbacks,
                 0);
 
             // 13. HD_Star
@@ -157,7 +176,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock != null ? NativeBlock.HD_Star : 0,
                 "HD_Star",
-                new[] { "hd_Star", "hdStar", "HardStar", "m_HD_Star" },
+                HdStarFallbacks,
                 0);
 
             // 14. Description
@@ -165,7 +184,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock?.Description,
                 "Description",
-                new[] { "description", "Desc", "desc", "m_Description" },
+                DescriptionFallbacks,
                 string.Empty);
 
             // 15. PVAuthor (TrackPVAuthor)
@@ -173,7 +192,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock?.TrackPVAuthor,
                 "TrackPVAuthor",
-                new[] { "trackPVAuthor", "PVAuthor", "pvAuthor", "BgaAuthor", "m_TrackPVAuthor" },
+                PvAuthorFallbacks,
                 string.Empty);
 
             // 16. ChartMaker (TrackScore)
@@ -181,7 +200,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock?.TrackScore,
                 "TrackScore",
-                new[] { "trackScore", "ChartAuthor", "ChartMaker", "ScoreAuthor", "m_TrackScore" },
+                ChartMakerFallbacks,
                 string.Empty);
 
             // 17. TrackLabel
@@ -189,7 +208,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => NativeBlock?.TrackLabel,
                 "TrackLabel",
-                new[] { "trackLabel", "Label", "label", "m_TrackLabel" },
+                TrackLabelFallbacks,
                 string.Empty);
         }
 
@@ -232,7 +251,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.uniqueID = UniqueID; },
                 "uniqueID",
-                new[] { "UniqueID", "id", "m_UniqueID", "trackID", "_uniqueID" },
+                UniqueIdFallbacks,
                 UniqueID);
 
             // 2. Title
@@ -240,7 +259,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.TrackTitle = Title; },
                 "TrackTitle",
-                new[] { "trackTitle", "Title", "title", "m_TrackTitle", "_trackTitle" },
+                TitleFallbacks,
                 Title);
 
             // 3. Artist
@@ -248,7 +267,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.TrackAuthor = Artist; },
                 "TrackAuthor",
-                new[] { "trackAuthor", "Artist", "artist", "Author", "author", "m_TrackAuthor" },
+                ArtistFallbacks,
                 Artist);
 
             // 4. AlbumName
@@ -256,7 +275,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.TrackAlbum = AlbumName; },
                 "TrackAlbum",
-                new[] { "trackAlbum", "Album", "album", "AlbumName", "m_TrackAlbum" },
+                AlbumFallbacks,
                 AlbumName);
 
             // 5. AudioKey
@@ -264,7 +283,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.audioClip_Key = AudioKey; },
                 "audioClip_Key",
-                new[] { "audioClipKey", "audioKey", "AudioKey", "m_audioClip_Key" },
+                AudioKeyFallbacks,
                 AudioKey);
 
             // 6. VideoKey
@@ -272,7 +291,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.videoClip_Key = VideoKey; },
                 "videoClip_Key",
-                new[] { "videoClipKey", "videoKey", "VideoKey", "m_videoClip_Key" },
+                VideoKeyFallbacks,
                 VideoKey);
 
             // 7. EZ Kore Key
@@ -280,7 +299,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.EZ_TrackKore_Key = EZ_KoreKey; },
                 "EZ_TrackKore_Key",
-                new[] { "ez_TrackKore_Key", "ezTrackKoreKey", "ezKoreKey", "EZ_KoreKey" },
+                EzKoreKeyFallbacks,
                 EZ_KoreKey);
 
             // 8. NM Kore Key
@@ -288,7 +307,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.NM_TrackKore_Key = NM_KoreKey; },
                 "NM_TrackKore_Key",
-                new[] { "nm_TrackKore_Key", "nmTrackKoreKey", "nmKoreKey", "NM_KoreKey" },
+                NmKoreKeyFallbacks,
                 NM_KoreKey);
 
             // 9. HD Kore Key
@@ -296,7 +315,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.HD_TrackKore_Key = HD_KoreKey; },
                 "HD_TrackKore_Key",
-                new[] { "hd_TrackKore_Key", "hdTrackKoreKey", "hdKoreKey", "HD_KoreKey" },
+                HdKoreKeyFallbacks,
                 HD_KoreKey);
 
             // 10. CoverSprite
@@ -306,7 +325,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                     targetObj,
                     () => { if (targetBlock != null) targetBlock.TrackCover = CoverSprite; },
                     "TrackCover",
-                    new[] { "trackCover", "Cover", "cover", "m_TrackCover", "CoverSprite" },
+                    CoverFallbacks,
                     CoverSprite);
             }
 
@@ -315,7 +334,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.EZ_Star = EZ_Star; },
                 "EZ_Star",
-                new[] { "ez_Star", "ezStar", "EasyStar", "m_EZ_Star" },
+                EzStarFallbacks,
                 EZ_Star);
 
             // 12. NM_Star
@@ -323,7 +342,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.NM_Star = NM_Star; },
                 "NM_Star",
-                new[] { "nm_Star", "nmStar", "NormalStar", "m_NM_Star" },
+                NmStarFallbacks,
                 NM_Star);
 
             // 13. HD_Star
@@ -331,7 +350,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.HD_Star = HD_Star; },
                 "HD_Star",
-                new[] { "hd_Star", "hdStar", "HardStar", "m_HD_Star" },
+                HdStarFallbacks,
                 HD_Star);
 
             // 14. Description
@@ -339,7 +358,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.Description = Description; },
                 "Description",
-                new[] { "description", "Desc", "desc", "m_Description" },
+                DescriptionFallbacks,
                 Description);
 
             // 15. PVAuthor (TrackPVAuthor)
@@ -347,7 +366,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.TrackPVAuthor = PVAuthor; },
                 "TrackPVAuthor",
-                new[] { "trackPVAuthor", "PVAuthor", "pvAuthor", "BgaAuthor", "m_TrackPVAuthor" },
+                PvAuthorFallbacks,
                 PVAuthor);
 
             // 16. ChartMaker (TrackScore)
@@ -355,7 +374,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.TrackScore = ChartMaker; },
                 "TrackScore",
-                new[] { "trackScore", "ChartAuthor", "ChartMaker", "ScoreAuthor", "m_TrackScore" },
+                ChartMakerFallbacks,
                 ChartMaker);
 
             // 17. TrackLabel
@@ -363,7 +382,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 targetObj,
                 () => { if (targetBlock != null) targetBlock.TrackLabel = TrackLabel; },
                 "TrackLabel",
-                new[] { "trackLabel", "Label", "label", "m_TrackLabel" },
+                TrackLabelFallbacks,
                 TrackLabel);
         }
     }

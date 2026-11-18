@@ -12,11 +12,16 @@ using UnityEngine.Networking;
 using UnityEngine.Video;
 using DEFLATE_custom_chart.Core;
 using DEFLATE_custom_chart.Core.Bms;
+using DEFLATE_custom_chart.Core.Wrapper;
 
 namespace DEFLATE_custom_chart.Hooks
 {
     public static class InGameRhythmHooks
     {
+        private static readonly string[] GameDataAuthorReadFallbacks = { "NowTrackAuthor", "nowTrackAuthor", "TrackAuthor" };
+        private static readonly string[] GameDataTitleReadFallbacks = { "trackTitle", "Title", "nowTrackTitle" };
+        private static readonly string[] GameDataIdReadFallbacks = { "nowTrackID", "TrackID", "uniqueID" };
+
         private static int ResolveSamplePosition(double timeSeconds, int precomputedSample, int chartSampleRate, int targetSampleRate)
         {
             if (targetSampleRate > 0 && chartSampleRate > 0 && targetSampleRate != chartSampleRate)
@@ -75,13 +80,18 @@ namespace DEFLATE_custom_chart.Hooks
                     bool isTargetTrack = false;
                     if (__instance.gameData != null)
                     {
-                        MelonLogger.Msg($"  - 곡 ID:        {__instance.gameData.NowTrackID}");
-                        MelonLogger.Msg($"  - 곡 제목:      {__instance.gameData.NowTrackTitle}");
-                        MelonLogger.Msg($"  - 곡 아티스트:   {__instance.gameData.NowTrackAurthor}");
-                        MelonLogger.Msg($"  - 타겟 차트 Key: {__instance.gameData.targetKorePath}");
+                        var gd = __instance.gameData;
+                        string nowTrackId = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackID, "NowTrackID", GameDataIdReadFallbacks, string.Empty);
+                        string nowTrackTitle = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackTitle, "NowTrackTitle", GameDataTitleReadFallbacks, string.Empty);
+                        string nowTrackAuthor = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackAurthor, "NowTrackAurthor", GameDataAuthorReadFallbacks, string.Empty);
+
+                        MelonLogger.Msg($"  - 곡 ID:        {nowTrackId}");
+                        MelonLogger.Msg($"  - 곡 제목:      {nowTrackTitle}");
+                        MelonLogger.Msg($"  - 곡 아티스트:   {nowTrackAuthor}");
+                        MelonLogger.Msg($"  - 타겟 차트 Key: {gd.targetKorePath}");
 
                         // hwa/ 커스텀 png·bga·bgm 에셋을 사본(테스트 곡)에만 적용하기 위한 활성 트랙 갱신
-                        isTargetTrack = HwaAssetManager.SetActiveTrack(__instance.gameData.NowTrackID, __instance.gameData.NowTrackTitle);
+                        isTargetTrack = HwaAssetManager.SetActiveTrack(nowTrackId, nowTrackTitle);
                         MelonLogger.Msg($"  - 커스텀 에셋 사본 여부: {isTargetTrack}");
                     }
                     if (DEFLATE_custom_chart.Core.ModConfig.Instance.AutoMode)
@@ -250,7 +260,10 @@ namespace DEFLATE_custom_chart.Hooks
 
             if (HwaAssetManager.Active == null && instance != null && instance.gameData != null)
             {
-                HwaAssetManager.SetActiveTrack(instance.gameData.NowTrackID, instance.gameData.NowTrackTitle);
+                var gd = instance.gameData;
+                string nowTrackId = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackID, "NowTrackID", GameDataIdReadFallbacks, string.Empty);
+                string nowTrackTitle = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackTitle, "NowTrackTitle", GameDataTitleReadFallbacks, string.Empty);
+                HwaAssetManager.SetActiveTrack(nowTrackId, nowTrackTitle);
             }
 
             if (!HwaAssetManager.IsTargetTrackActive) return null;
@@ -270,7 +283,7 @@ namespace DEFLATE_custom_chart.Hooks
                 // =========================================================
                 // 1. 사용자 지정 규격 BMS ➔ DEFLATE 레인 노트 변환 주입 (O(1) 레인 인덱스 조회)
                 // =========================================================
-                string targetLane = BmsLaneMapper.ResolveLaneId(trackID, lane.laneType.ToString());
+                string targetLane = BmsLaneMapper.ResolveLaneId(trackID, lane.laneType);
 
                 if (targetLane != null)
                 {
@@ -323,7 +336,7 @@ namespace DEFLATE_custom_chart.Hooks
             }
 
             bool isTargetLane = string.Equals(trackID, "hihat_3", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(lane.laneType.ToString(), "HiHat_3", StringComparison.OrdinalIgnoreCase);
+                || lane.laneType == LaneType.HiHat_3;
 
             if (isTargetLane && globalFirstStart != int.MaxValue)
             {
