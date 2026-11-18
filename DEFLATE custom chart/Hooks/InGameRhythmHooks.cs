@@ -14,10 +14,6 @@ namespace DEFLATE_custom_chart.Hooks
 {
     public static class InGameRhythmHooks
     {
-        private static readonly string[] GameDataAuthorReadFallbacks = { "NowTrackAuthor", "nowTrackAuthor", "TrackAuthor" };
-        private static readonly string[] GameDataTitleReadFallbacks = { "trackTitle", "Title", "nowTrackTitle" };
-        private static readonly string[] GameDataIdReadFallbacks = { "nowTrackID", "TrackID", "uniqueID" };
-
         private static int ResolveSamplePosition(double timeSeconds, int precomputedSample, int chartSampleRate, int targetSampleRate)
         {
             if (targetSampleRate > 0 && chartSampleRate > 0 && targetSampleRate != chartSampleRate)
@@ -78,9 +74,9 @@ namespace DEFLATE_custom_chart.Hooks
                     if (__instance.gameData != null)
                     {
                         var gd = __instance.gameData;
-                        string nowTrackId = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackID, "NowTrackID", GameDataIdReadFallbacks, string.Empty);
-                        string nowTrackTitle = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackTitle, "NowTrackTitle", GameDataTitleReadFallbacks, string.Empty);
-                        string nowTrackAuthor = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackAurthor, "NowTrackAurthor", GameDataAuthorReadFallbacks, string.Empty);
+                        string nowTrackId = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackID, "NowTrackID", MemberFallbacks.GameData.TrackId, string.Empty);
+                        string nowTrackTitle = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackTitle, "NowTrackTitle", MemberFallbacks.GameData.Title, string.Empty);
+                        string nowTrackAuthor = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackAurthor, "NowTrackAurthor", MemberFallbacks.GameData.Author, string.Empty);
 
                         MelonLogger.Msg($"  - 곡 ID:        {nowTrackId}");
                         MelonLogger.Msg($"  - 곡 제목:      {nowTrackTitle}");
@@ -176,6 +172,8 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), "InitializeKoreographyTracks")]
         public static class RhythmGameController_InitializeKoreographyTracks_Patch
         {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "InitializeKoreographyTracks");
+
             public static void Postfix(RhythmGameController __instance)
             {
                 try
@@ -258,8 +256,8 @@ namespace DEFLATE_custom_chart.Hooks
             if (HwaAssetManager.Active == null && instance != null && instance.gameData != null)
             {
                 var gd = instance.gameData;
-                string nowTrackId = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackID, "NowTrackID", GameDataIdReadFallbacks, string.Empty);
-                string nowTrackTitle = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackTitle, "NowTrackTitle", GameDataTitleReadFallbacks, string.Empty);
+                string nowTrackId = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackID, "NowTrackID", MemberFallbacks.GameData.TrackId, string.Empty);
+                string nowTrackTitle = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackTitle, "NowTrackTitle", MemberFallbacks.GameData.Title, string.Empty);
                 HwaAssetManager.SetActiveTrack(nowTrackId, nowTrackTitle);
             }
 
@@ -375,8 +373,8 @@ namespace DEFLATE_custom_chart.Hooks
                         if (HwaAssetManager.Active == null && __instance != null && __instance.gameData != null)
                         {
                             var gd = __instance.gameData;
-                            string nowTrackId = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackID, "NowTrackID", GameDataIdReadFallbacks, string.Empty);
-                            string nowTrackTitle = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackTitle, "NowTrackTitle", GameDataTitleReadFallbacks, string.Empty);
+                            string nowTrackId = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackID, "NowTrackID", MemberFallbacks.GameData.TrackId, string.Empty);
+                            string nowTrackTitle = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackTitle, "NowTrackTitle", MemberFallbacks.GameData.Title, string.Empty);
                             HwaAssetManager.SetActiveTrack(nowTrackId, nowTrackTitle);
                         }
                         if (!HwaAssetManager.IsTargetTrackActive) return;
@@ -622,6 +620,8 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), "UpdateSongDurationScrollbar")]
         public static class RhythmGameController_UpdateSongDurationScrollbar_Patch
         {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "UpdateSongDurationScrollbar");
+
             private static float lastLoggedTime = -10f;
 
             public static void ResetTimer() => lastLoggedTime = -10f;
@@ -676,6 +676,8 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), "TriggerAudioStartIfReady")]
         public static class RhythmGameController_TriggerAudioStartIfReady_Patch
         {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "TriggerAudioStartIfReady");
+
             public static void Prefix(RhythmGameController __instance)
             {
                 try
@@ -701,6 +703,8 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), "LoadVideo")]
         public static class RhythmGameController_LoadVideo_Patch
         {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "LoadVideo");
+
             public static bool Prefix(RhythmGameController __instance, ref string addresskey, VideoPlayer thisplayer)
             {
                 try
@@ -724,6 +728,8 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), "PlayVideoWithOffset")]
         public static class RhythmGameController_PlayVideoWithOffset_Patch
         {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "PlayVideoWithOffset");
+
             public static bool Prefix(RhythmGameController __instance, VideoPlayer player, float offsetSeconds)
             {
                 try
@@ -746,6 +752,8 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), "OnVideoStarted")]
         public static class RhythmGameController_OnVideoStarted_Patch
         {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "OnVideoStarted");
+
             public static void Postfix(RhythmGameController __instance, VideoPlayer source)
             {
                 try

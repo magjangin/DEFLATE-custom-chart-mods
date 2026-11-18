@@ -11,9 +11,6 @@ namespace DEFLATE_custom_chart.Hooks
 {
     public static class AssetManagerHooks
     {
-        private static readonly string[] UniqueIdFallbacks = { "UniqueID", "id", "m_UniqueID", "trackID", "_uniqueID" };
-        private static readonly string[] CoverFallbacks = { "trackCover", "Cover", "cover", "m_TrackCover", "CoverSprite" };
-        private static readonly string[] TitleFallbacks = { "trackTitle", "Title", "title", "m_TrackTitle", "_trackTitle" };
         [HarmonyPatch(typeof(TrackAssetManager), nameof(TrackAssetManager.LoadAudioClip))]
         public static class TrackAssetManager_LoadAudioClip_Patch
         {
@@ -108,6 +105,8 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(Bank_PV_Ctrl), "LoadVideoAndAudio")]
         public static class Bank_PV_Ctrl_LoadVideoAndAudio_Patch
         {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(Bank_PV_Ctrl), "LoadVideoAndAudio");
+
             public static bool Prefix(Bank_PV_Ctrl __instance, ref string videoKey, ref string audioKey)
             {
                 try
@@ -237,15 +236,15 @@ namespace DEFLATE_custom_chart.Hooks
                     {
                         if (trackBlock == null) continue;
 
-                        string uniqueId = Il2CppReflectionHelper.GetValueResilient(trackBlock, () => trackBlock.uniqueID, "uniqueID", UniqueIdFallbacks, string.Empty);
+                        string uniqueId = Il2CppReflectionHelper.GetValueResilient(trackBlock, () => trackBlock.uniqueID, "uniqueID", MemberFallbacks.TrackBlock.UniqueId, string.Empty);
                         var entry = CustomSongLibrary.FindByTrackID(uniqueId);
                         if (entry == null) continue;
 
                         var customCover = entry.LoadCoverSprite();
                         if (customCover == null) continue;
 
-                        Il2CppReflectionHelper.SetValueResilient(trackBlock, () => trackBlock.TrackCover = customCover, "TrackCover", CoverFallbacks, customCover);
-                        string title = Il2CppReflectionHelper.GetValueResilient(trackBlock, () => trackBlock.TrackTitle, "TrackTitle", TitleFallbacks, entry.Meta.Title);
+                        Il2CppReflectionHelper.SetValueResilient(trackBlock, () => trackBlock.TrackCover = customCover, "TrackCover", MemberFallbacks.TrackBlock.Cover, customCover);
+                        string title = Il2CppReflectionHelper.GetValueResilient(trackBlock, () => trackBlock.TrackTitle, "TrackTitle", MemberFallbacks.TrackBlock.Title, entry.Meta.Title);
                         MelonLogger.Msg($"  [★ MainTrackListBlock 데이터 커버 교체 성공 (사본 전용) ★] 앨범: '{entry.Meta.Album}' | 제목: '{title}' | 커버: '{customCover.name}'");
                     }
                 }

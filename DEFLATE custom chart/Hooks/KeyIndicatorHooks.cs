@@ -1,6 +1,7 @@
 using HarmonyLib;
 using Il2Cppdizzylab.castor;
 using MelonLoader;
+using DEFLATE_custom_chart.Core.Wrapper;
 
 namespace DEFLATE_custom_chart.Hooks
 {
@@ -12,6 +13,8 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(Key_indicator), nameof(Key_indicator.Start))]
         public static class Key_indicator_Start_Patch
         {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(Key_indicator), nameof(Key_indicator.Start));
+
             public static bool Prefix(Key_indicator __instance)
             {
                 try

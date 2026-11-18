@@ -10,12 +10,6 @@ namespace DEFLATE_custom_chart.Hooks
 {
     public static class LoadingSceneHooks
     {
-        private static readonly string[] LoadingAuthorFallbacks = { "NowTrackAuthor", "nowTrackAuthor", "TrackAuthor" };
-        private static readonly string[] LoadingLabelFallbacks = { "NowTrackLabel", "nowTrackLabel", "TrackLabel" };
-        private static readonly string[] GameDataAuthorReadFallbacks = { "NowTrackAuthor", "nowTrackAuthor", "TrackAuthor" };
-        private static readonly string[] GameDataTitleReadFallbacks = { "trackTitle", "Title", "nowTrackTitle" };
-        private static readonly string[] GameDataIdReadFallbacks = { "nowTrackID", "TrackID", "uniqueID" };
-
         private static void ApplyLoadingUiMetadata(LoadingGamePlay instance)
         {
             try
@@ -37,7 +31,7 @@ namespace DEFLATE_custom_chart.Hooks
                     instance,
                     () => instance.NowTrackAurthor,
                     "NowTrackAurthor",
-                    LoadingAuthorFallbacks,
+                    MemberFallbacks.LoadingUi.Author,
                     null);
                 if (authorText != null) authorText.text = meta.Artist;
 
@@ -47,7 +41,7 @@ namespace DEFLATE_custom_chart.Hooks
                     instance,
                     () => instance.NowTracLabel,
                     "NowTracLabel",
-                    LoadingLabelFallbacks,
+                    MemberFallbacks.LoadingUi.Label,
                     null);
                 if (labelText != null) labelText.text = meta.Album;
 
@@ -97,19 +91,19 @@ namespace DEFLATE_custom_chart.Hooks
                         gd,
                         () => gd.NowTrackTitle,
                         "NowTrackTitle",
-                        GameDataTitleReadFallbacks,
+                        MemberFallbacks.GameData.Title,
                         string.Empty);
                     string trackAuthor = Il2CppReflectionHelper.GetValueResilient(
                         gd,
                         () => gd.NowTrackAurthor,
                         "NowTrackAurthor",
-                        GameDataAuthorReadFallbacks,
+                        MemberFallbacks.GameData.Author,
                         string.Empty);
                     string trackId = Il2CppReflectionHelper.GetValueResilient(
                         gd,
                         () => gd.NowTrackID,
                         "NowTrackID",
-                        GameDataIdReadFallbacks,
+                        MemberFallbacks.GameData.TrackId,
                         string.Empty);
 
                     MelonLogger.Msg("==================================================");

@@ -115,14 +115,6 @@ namespace DEFLATE_custom_chart.Core
             }
         }
 
-        private static readonly string[] GameDataTitleFallbacks = { "trackTitle", "Title", "nowTrackTitle" };
-        private static readonly string[] GameDataAuthorFallbacks = { "NowTrackAuthor", "TrackAuthor", "nowTrackAuthor" };
-        private static readonly string[] GameDataPvAuthorFallbacks = { "NowTrackPvAuthor", "TrackPVAuthor", "nowTrackPVAuthor" };
-        private static readonly string[] GameDataScoreFallbacks = { "TrackScore", "nowTrackScore", "ChartAuthor", "ChartMaker" };
-        private static readonly string[] GameDataLabelFallbacks = { "NowTrackLabel", "TrackLabel", "TrackAlbum", "nowTrackLabel" };
-        private static readonly string[] GameDataLevelFallbacks = { "TrackLevel", "nowTrackLevel" };
-        private static readonly string[] GameDataCoverFallbacks = { "TrackCover", "nowTrackCover" };
-
         /// <summary>
         /// 활성 커스텀 곡 메타데이터와 커버를 GameData에 안전하게 주입합니다.
         /// 원본 오타 필드(NowTrackAurthor / NowTracLabel)가 향후 게임 패치에서 교정되더라도 폴백 리플렉션으로 동작합니다.
@@ -132,21 +124,21 @@ namespace DEFLATE_custom_chart.Core
             if (gd == null) return;
             var meta = CurrentMeta;
 
-            Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackTitle = meta.Title, "NowTrackTitle", GameDataTitleFallbacks, meta.Title);
-            Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackAurthor = meta.Artist, "NowTrackAurthor", GameDataAuthorFallbacks, meta.Artist);
-            Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackPVAuthor = meta.BgaAuthor, "NowTrackPVAuthor", GameDataPvAuthorFallbacks, meta.BgaAuthor);
-            Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackScore = meta.ChartAuthor, "NowTrackScore", GameDataScoreFallbacks, meta.ChartAuthor);
-            Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTracLabel = meta.Album, "NowTracLabel", GameDataLabelFallbacks, meta.Album);
+            Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackTitle = meta.Title, "NowTrackTitle", MemberFallbacks.GameData.Title, meta.Title);
+            Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackAurthor = meta.Artist, "NowTrackAurthor", MemberFallbacks.GameData.Author, meta.Artist);
+            Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackPVAuthor = meta.BgaAuthor, "NowTrackPVAuthor", MemberFallbacks.GameData.PvAuthor, meta.BgaAuthor);
+            Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackScore = meta.ChartAuthor, "NowTrackScore", MemberFallbacks.GameData.Score, meta.ChartAuthor);
+            Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTracLabel = meta.Album, "NowTracLabel", MemberFallbacks.GameData.Label, meta.Album);
 
             if (targetStar.HasValue)
             {
                 string levelStr = targetStar.Value.ToString();
-                Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackLevel = levelStr, "NowTrackLevel", GameDataLevelFallbacks, levelStr);
+                Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackLevel = levelStr, "NowTrackLevel", MemberFallbacks.GameData.Level, levelStr);
             }
 
             if (customCover != null)
             {
-                Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackCover = customCover, "NowTrackCover", GameDataCoverFallbacks, customCover);
+                Il2CppReflectionHelper.SetValueResilient(gd, () => gd.NowTrackCover = customCover, "NowTrackCover", MemberFallbacks.GameData.Cover, customCover);
             }
         }
 
