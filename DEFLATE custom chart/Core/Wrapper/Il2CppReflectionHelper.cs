@@ -18,6 +18,15 @@ namespace DEFLATE_custom_chart.Core.Wrapper
         private static readonly ConcurrentDictionary<(Type, string), PropertyInfo> PropertyCache = new ConcurrentDictionary<(Type, string), PropertyInfo>();
         private static readonly ConcurrentDictionary<(Type, string), FieldInfo> FieldCache = new ConcurrentDictionary<(Type, string), FieldInfo>();
         private static readonly ConcurrentDictionary<(Type, string), MethodInfo> MethodCache = new ConcurrentDictionary<(Type, string), MethodInfo>();
+        private static readonly ConcurrentDictionary<string, byte> LoggedWarnings = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
+
+        private static void WarnOnce(string warnKey, string message)
+        {
+            if (LoggedWarnings.TryAdd(warnKey, 0))
+            {
+                MelonLogger.Warning(message);
+            }
+        }
 
         /// <summary>
         /// Il2CppObjectBase 인스턴스 또는 object를 안전하게 T 타입으로 Cast합니다.
@@ -58,7 +67,8 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 }
                 catch (Exception ex)
                 {
-                    MelonLogger.Warning($"[GetValueResilient] 직접 접근 '{directPropertyName}' 실패 ({ex.GetType().Name}), 백업 리플렉션을 시도합니다.");
+                    WarnOnce($"get:{target.GetType().FullName}:{directPropertyName}",
+                        $"[GetValueResilient] 직접 접근 '{directPropertyName}' 실패 ({ex.GetType().Name}), 백업 리플렉션을 시도합니다.");
                 }
             }
 
@@ -100,7 +110,8 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 }
                 catch (Exception ex)
                 {
-                    MelonLogger.Warning($"[SetValueResilient] 직접 접근 '{directPropertyName}' 주입 실패 ({ex.GetType().Name}), 백업 리플렉션을 시도합니다.");
+                    WarnOnce($"set:{target.GetType().FullName}:{directPropertyName}",
+                        $"[SetValueResilient] 직접 접근 '{directPropertyName}' 주입 실패 ({ex.GetType().Name}), 백업 리플렉션을 시도합니다.");
                 }
             }
 
@@ -122,7 +133,8 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 }
             }
 
-            MelonLogger.Warning($"[SetValueResilient] '{targetType.Name}' 객체에서 '{directPropertyName}' 프로퍼티/필드를 찾지 못해 값 주입에 실패했습니다.");
+            WarnOnce($"setfail:{targetType.FullName}:{directPropertyName}",
+                $"[SetValueResilient] '{targetType.Name}' 객체에서 '{directPropertyName}' 프로퍼티/필드를 찾지 못해 값 주입에 실패했습니다.");
             return false;
         }
 
@@ -142,7 +154,8 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 }
                 catch (Exception ex)
                 {
-                    MelonLogger.Warning($"[InvokeMethodResilient] 직접 호출 '{methodName}' 실패 ({ex.GetType().Name}), 백업 리플렉션을 시도합니다.");
+                    WarnOnce($"invoke:{target.GetType().FullName}:{methodName}",
+                        $"[InvokeMethodResilient] 직접 호출 '{methodName}' 실패 ({ex.GetType().Name}), 백업 리플렉션을 시도합니다.");
                 }
             }
 
@@ -164,7 +177,8 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 }
             }
 
-            MelonLogger.Warning($"[InvokeMethodResilient] '{targetType.Name}' 객체에서 '{methodName}' 메서드를 호출하지 못했습니다.");
+            WarnOnce($"invokefail:{targetType.FullName}:{methodName}",
+                $"[InvokeMethodResilient] '{targetType.Name}' 객체에서 '{methodName}' 메서드를 호출하지 못했습니다.");
             return false;
         }
 
@@ -207,24 +221,76 @@ namespace DEFLATE_custom_chart.Core.Wrapper
             {
                 try
                 {
-                    prop.SetValue(target, value);
-                    return true;
+                    if (TryAdaptValueForTargetType(value, prop.PropertyType, out object adapted))
+                    {
+                        prop.SetValue(target, adapted);
+                        return true;
+                    }
                 }
                 catch { }
             }
 
             FieldInfo field = FindFieldResilient(targetType, name);
-            if (field != null)
+            if (field != null && !field.IsInitOnly && !field.IsLiteral)
             {
                 try
                 {
-                    field.SetValue(target, value);
-                    return true;
+                    if (TryAdaptValueForTargetType(value, field.FieldType, out object adapted))
+                    {
+                        field.SetValue(target, adapted);
+                        return true;
+                    }
                 }
                 catch { }
             }
 
             return false;
+        }
+
+        private static bool TryAdaptValueForTargetType(object value, Type memberType, out object adapted)
+        {
+            if (value == null)
+            {
+                if (!memberType.IsValueType || Nullable.GetUnderlyingType(memberType) != null)
+                {
+                    adapted = null;
+                    return true;
+                }
+                adapted = null;
+                return false;
+            }
+
+            if (memberType.IsInstanceOfType(value))
+            {
+                adapted = value;
+                return true;
+            }
+
+            if (memberType == typeof(string))
+            {
+                adapted = value.ToString();
+                return true;
+            }
+
+            try
+            {
+                Type underlying = Nullable.GetUnderlyingType(memberType) ?? memberType;
+                if (underlying.IsEnum)
+                {
+                    adapted = value is string s
+                        ? Enum.Parse(underlying, s, true)
+                        : Enum.ToObject(underlying, value);
+                    return true;
+                }
+
+                adapted = Convert.ChangeType(value, underlying, System.Globalization.CultureInfo.InvariantCulture);
+                return true;
+            }
+            catch
+            {
+                adapted = null;
+                return false;
+            }
         }
 
         private static bool TryInvokeParameterlessMethod(object target, Type targetType, string name)
@@ -261,7 +327,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 }
 
                 Type underlying = Nullable.GetUnderlyingType(typeof(T)) ?? typeof(T);
-                result = (T)Convert.ChangeType(val, underlying);
+                result = (T)Convert.ChangeType(val, underlying, System.Globalization.CultureInfo.InvariantCulture);
                 return true;
             }
 

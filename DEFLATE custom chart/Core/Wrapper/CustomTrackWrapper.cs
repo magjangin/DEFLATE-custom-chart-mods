@@ -64,8 +64,21 @@ namespace DEFLATE_custom_chart.Core.Wrapper
             Wrap(block);
         }
 
+        private static T ReadBlockMember<T>(MainTrackListBlock nativeBlock, object targetObj, Func<MainTrackListBlock, T> directAccessor, string propertyName, string[] fallbacks, T defaultValue)
+        {
+            Func<T> directGetter = nativeBlock != null ? (Func<T>)(() => directAccessor(nativeBlock)) : null;
+            return Il2CppReflectionHelper.GetValueResilient(targetObj, directGetter, propertyName, fallbacks, defaultValue);
+        }
+
+        private static void WriteBlockMember(MainTrackListBlock targetBlock, object targetObj, Action<MainTrackListBlock> directMutator, string propertyName, string[] fallbacks, object value)
+        {
+            Action directSetter = targetBlock != null ? (Action)(() => directMutator(targetBlock)) : null;
+            Il2CppReflectionHelper.SetValueResilient(targetObj, directSetter, propertyName, fallbacks, value);
+        }
+
         /// <summary>
         /// Il2Cpp 객체(MainTrackListBlock 등)를 안전하게 캐스트하고 백업 리플렉션을 포함하여 래퍼로 캡슐화합니다.
+        /// SafeCast가 실패해 NativeBlock이 null이어도 directGetter를 null로 넘겨 백업 리플렉션 경로가 실제로 동작합니다.
         /// </summary>
         public void Wrap(object blockObj)
         {
@@ -75,141 +88,23 @@ namespace DEFLATE_custom_chart.Core.Wrapper
             NativeBlock = Il2CppReflectionHelper.SafeCast<MainTrackListBlock>(blockObj);
             object targetObj = (object)NativeBlock ?? blockObj;
 
-            // 1. UniqueID
-            UniqueID = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock?.uniqueID,
-                "uniqueID",
-                UniqueIdFallbacks,
-                string.Empty);
-
-            // 2. Title
-            Title = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock?.TrackTitle,
-                "TrackTitle",
-                TitleFallbacks,
-                string.Empty);
-
-            // 3. Artist / Author
-            Artist = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock?.TrackAuthor,
-                "TrackAuthor",
-                ArtistFallbacks,
-                string.Empty);
-
-            // 4. AlbumName
-            AlbumName = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock?.TrackAlbum,
-                "TrackAlbum",
-                AlbumFallbacks,
-                string.Empty);
-
-            // 5. AudioKey
-            AudioKey = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock?.audioClip_Key,
-                "audioClip_Key",
-                AudioKeyFallbacks,
-                string.Empty);
-
-            // 6. VideoKey
-            VideoKey = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock?.videoClip_Key,
-                "videoClip_Key",
-                VideoKeyFallbacks,
-                string.Empty);
-
-            // 7. EZ Kore Key
-            EZ_KoreKey = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock?.EZ_TrackKore_Key,
-                "EZ_TrackKore_Key",
-                EzKoreKeyFallbacks,
-                string.Empty);
-
-            // 8. NM Kore Key
-            NM_KoreKey = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock?.NM_TrackKore_Key,
-                "NM_TrackKore_Key",
-                NmKoreKeyFallbacks,
-                string.Empty);
-
-            // 9. HD Kore Key
-            HD_KoreKey = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock?.HD_TrackKore_Key,
-                "HD_TrackKore_Key",
-                HdKoreKeyFallbacks,
-                string.Empty);
-
-            // 10. CoverSprite
-            CoverSprite = Il2CppReflectionHelper.GetValueResilient<Sprite>(
-                targetObj,
-                () => NativeBlock?.TrackCover,
-                "TrackCover",
-                CoverFallbacks,
-                null);
-
-            // 11. EZ_Star
-            EZ_Star = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock != null ? NativeBlock.EZ_Star : 0,
-                "EZ_Star",
-                EzStarFallbacks,
-                0);
-
-            // 12. NM_Star
-            NM_Star = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock != null ? NativeBlock.NM_Star : 0,
-                "NM_Star",
-                NmStarFallbacks,
-                0);
-
-            // 13. HD_Star
-            HD_Star = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock != null ? NativeBlock.HD_Star : 0,
-                "HD_Star",
-                HdStarFallbacks,
-                0);
-
-            // 14. Description
-            Description = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock?.Description,
-                "Description",
-                DescriptionFallbacks,
-                string.Empty);
-
-            // 15. PVAuthor (TrackPVAuthor)
-            PVAuthor = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock?.TrackPVAuthor,
-                "TrackPVAuthor",
-                PvAuthorFallbacks,
-                string.Empty);
-
-            // 16. ChartMaker (TrackScore)
-            ChartMaker = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock?.TrackScore,
-                "TrackScore",
-                ChartMakerFallbacks,
-                string.Empty);
-
-            // 17. TrackLabel
-            TrackLabel = Il2CppReflectionHelper.GetValueResilient(
-                targetObj,
-                () => NativeBlock?.TrackLabel,
-                "TrackLabel",
-                TrackLabelFallbacks,
-                string.Empty);
+            UniqueID = ReadBlockMember(NativeBlock, targetObj, b => b.uniqueID, "uniqueID", UniqueIdFallbacks, string.Empty);
+            Title = ReadBlockMember(NativeBlock, targetObj, b => b.TrackTitle, "TrackTitle", TitleFallbacks, string.Empty);
+            Artist = ReadBlockMember(NativeBlock, targetObj, b => b.TrackAuthor, "TrackAuthor", ArtistFallbacks, string.Empty);
+            AlbumName = ReadBlockMember(NativeBlock, targetObj, b => b.TrackAlbum, "TrackAlbum", AlbumFallbacks, string.Empty);
+            AudioKey = ReadBlockMember(NativeBlock, targetObj, b => b.audioClip_Key, "audioClip_Key", AudioKeyFallbacks, string.Empty);
+            VideoKey = ReadBlockMember(NativeBlock, targetObj, b => b.videoClip_Key, "videoClip_Key", VideoKeyFallbacks, string.Empty);
+            EZ_KoreKey = ReadBlockMember(NativeBlock, targetObj, b => b.EZ_TrackKore_Key, "EZ_TrackKore_Key", EzKoreKeyFallbacks, string.Empty);
+            NM_KoreKey = ReadBlockMember(NativeBlock, targetObj, b => b.NM_TrackKore_Key, "NM_TrackKore_Key", NmKoreKeyFallbacks, string.Empty);
+            HD_KoreKey = ReadBlockMember(NativeBlock, targetObj, b => b.HD_TrackKore_Key, "HD_TrackKore_Key", HdKoreKeyFallbacks, string.Empty);
+            CoverSprite = ReadBlockMember<Sprite>(NativeBlock, targetObj, b => b.TrackCover, "TrackCover", CoverFallbacks, null);
+            EZ_Star = ReadBlockMember(NativeBlock, targetObj, b => b.EZ_Star, "EZ_Star", EzStarFallbacks, 0);
+            NM_Star = ReadBlockMember(NativeBlock, targetObj, b => b.NM_Star, "NM_Star", NmStarFallbacks, 0);
+            HD_Star = ReadBlockMember(NativeBlock, targetObj, b => b.HD_Star, "HD_Star", HdStarFallbacks, 0);
+            Description = ReadBlockMember(NativeBlock, targetObj, b => b.Description, "Description", DescriptionFallbacks, string.Empty);
+            PVAuthor = ReadBlockMember(NativeBlock, targetObj, b => b.TrackPVAuthor, "TrackPVAuthor", PvAuthorFallbacks, string.Empty);
+            ChartMaker = ReadBlockMember(NativeBlock, targetObj, b => b.TrackScore, "TrackScore", ChartMakerFallbacks, string.Empty);
+            TrackLabel = ReadBlockMember(NativeBlock, targetObj, b => b.TrackLabel, "TrackLabel", TrackLabelFallbacks, string.Empty);
         }
 
         /// <summary>
@@ -237,7 +132,8 @@ namespace DEFLATE_custom_chart.Core.Wrapper
 
         /// <summary>
         /// 래퍼 데이터를 타겟 Il2Cpp 객체로 안전하게 다시 캐스팅 및 주입(Apply)합니다.
-        /// 게임 패치로 일부 프로퍼티가 수정되어도 예외가 격리되어 정상 속성들은 모두 유지됩니다.
+        /// 게임 패치로 일부 프로퍼티가 수정되거나 SafeCast가 실패해도 directSetter를 null로 넘겨
+        /// 백업 리플렉션으로 안전하게 주입하며, 예외가 격리되어 정상 속성들은 모두 유지됩니다.
         /// </summary>
         public void ApplyTo(object blockObj)
         {
@@ -246,144 +142,28 @@ namespace DEFLATE_custom_chart.Core.Wrapper
             var targetBlock = Il2CppReflectionHelper.SafeCast<MainTrackListBlock>(blockObj);
             object targetObj = (object)targetBlock ?? blockObj;
 
-            // 1. UniqueID
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.uniqueID = UniqueID; },
-                "uniqueID",
-                UniqueIdFallbacks,
-                UniqueID);
+            WriteBlockMember(targetBlock, targetObj, b => b.uniqueID = UniqueID, "uniqueID", UniqueIdFallbacks, UniqueID);
+            WriteBlockMember(targetBlock, targetObj, b => b.TrackTitle = Title, "TrackTitle", TitleFallbacks, Title);
+            WriteBlockMember(targetBlock, targetObj, b => b.TrackAuthor = Artist, "TrackAuthor", ArtistFallbacks, Artist);
+            WriteBlockMember(targetBlock, targetObj, b => b.TrackAlbum = AlbumName, "TrackAlbum", AlbumFallbacks, AlbumName);
+            WriteBlockMember(targetBlock, targetObj, b => b.audioClip_Key = AudioKey, "audioClip_Key", AudioKeyFallbacks, AudioKey);
+            WriteBlockMember(targetBlock, targetObj, b => b.videoClip_Key = VideoKey, "videoClip_Key", VideoKeyFallbacks, VideoKey);
+            WriteBlockMember(targetBlock, targetObj, b => b.EZ_TrackKore_Key = EZ_KoreKey, "EZ_TrackKore_Key", EzKoreKeyFallbacks, EZ_KoreKey);
+            WriteBlockMember(targetBlock, targetObj, b => b.NM_TrackKore_Key = NM_KoreKey, "NM_TrackKore_Key", NmKoreKeyFallbacks, NM_KoreKey);
+            WriteBlockMember(targetBlock, targetObj, b => b.HD_TrackKore_Key = HD_KoreKey, "HD_TrackKore_Key", HdKoreKeyFallbacks, HD_KoreKey);
 
-            // 2. Title
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.TrackTitle = Title; },
-                "TrackTitle",
-                TitleFallbacks,
-                Title);
-
-            // 3. Artist
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.TrackAuthor = Artist; },
-                "TrackAuthor",
-                ArtistFallbacks,
-                Artist);
-
-            // 4. AlbumName
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.TrackAlbum = AlbumName; },
-                "TrackAlbum",
-                AlbumFallbacks,
-                AlbumName);
-
-            // 5. AudioKey
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.audioClip_Key = AudioKey; },
-                "audioClip_Key",
-                AudioKeyFallbacks,
-                AudioKey);
-
-            // 6. VideoKey
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.videoClip_Key = VideoKey; },
-                "videoClip_Key",
-                VideoKeyFallbacks,
-                VideoKey);
-
-            // 7. EZ Kore Key
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.EZ_TrackKore_Key = EZ_KoreKey; },
-                "EZ_TrackKore_Key",
-                EzKoreKeyFallbacks,
-                EZ_KoreKey);
-
-            // 8. NM Kore Key
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.NM_TrackKore_Key = NM_KoreKey; },
-                "NM_TrackKore_Key",
-                NmKoreKeyFallbacks,
-                NM_KoreKey);
-
-            // 9. HD Kore Key
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.HD_TrackKore_Key = HD_KoreKey; },
-                "HD_TrackKore_Key",
-                HdKoreKeyFallbacks,
-                HD_KoreKey);
-
-            // 10. CoverSprite
             if (CoverSprite != null)
             {
-                Il2CppReflectionHelper.SetValueResilient(
-                    targetObj,
-                    () => { if (targetBlock != null) targetBlock.TrackCover = CoverSprite; },
-                    "TrackCover",
-                    CoverFallbacks,
-                    CoverSprite);
+                WriteBlockMember(targetBlock, targetObj, b => b.TrackCover = CoverSprite, "TrackCover", CoverFallbacks, CoverSprite);
             }
 
-            // 11. EZ_Star
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.EZ_Star = EZ_Star; },
-                "EZ_Star",
-                EzStarFallbacks,
-                EZ_Star);
-
-            // 12. NM_Star
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.NM_Star = NM_Star; },
-                "NM_Star",
-                NmStarFallbacks,
-                NM_Star);
-
-            // 13. HD_Star
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.HD_Star = HD_Star; },
-                "HD_Star",
-                HdStarFallbacks,
-                HD_Star);
-
-            // 14. Description
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.Description = Description; },
-                "Description",
-                DescriptionFallbacks,
-                Description);
-
-            // 15. PVAuthor (TrackPVAuthor)
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.TrackPVAuthor = PVAuthor; },
-                "TrackPVAuthor",
-                PvAuthorFallbacks,
-                PVAuthor);
-
-            // 16. ChartMaker (TrackScore)
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.TrackScore = ChartMaker; },
-                "TrackScore",
-                ChartMakerFallbacks,
-                ChartMaker);
-
-            // 17. TrackLabel
-            Il2CppReflectionHelper.SetValueResilient(
-                targetObj,
-                () => { if (targetBlock != null) targetBlock.TrackLabel = TrackLabel; },
-                "TrackLabel",
-                TrackLabelFallbacks,
-                TrackLabel);
+            WriteBlockMember(targetBlock, targetObj, b => b.EZ_Star = EZ_Star, "EZ_Star", EzStarFallbacks, EZ_Star);
+            WriteBlockMember(targetBlock, targetObj, b => b.NM_Star = NM_Star, "NM_Star", NmStarFallbacks, NM_Star);
+            WriteBlockMember(targetBlock, targetObj, b => b.HD_Star = HD_Star, "HD_Star", HdStarFallbacks, HD_Star);
+            WriteBlockMember(targetBlock, targetObj, b => b.Description = Description, "Description", DescriptionFallbacks, Description);
+            WriteBlockMember(targetBlock, targetObj, b => b.TrackPVAuthor = PVAuthor, "TrackPVAuthor", PvAuthorFallbacks, PVAuthor);
+            WriteBlockMember(targetBlock, targetObj, b => b.TrackScore = ChartMaker, "TrackScore", ChartMakerFallbacks, ChartMaker);
+            WriteBlockMember(targetBlock, targetObj, b => b.TrackLabel = TrackLabel, "TrackLabel", TrackLabelFallbacks, TrackLabel);
         }
     }
 }

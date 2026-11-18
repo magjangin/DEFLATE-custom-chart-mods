@@ -39,8 +39,10 @@
 ### ③ 내성 강화 리플렉션 래퍼 및 오타/인덱싱 최적화 (`CustomTrackWrapper` & `Il2CppReflectionHelper`)
 - **이유:** Unity Il2Cpp 게임은 버전 패치 시 필드/프로퍼티의 이름이나 대소문자, 접두사(`_`, `m_`), 메서드 시그니처가 변경되거나 상속 계층 구조가 바뀔 수 있습니다. 또한 게임 원본 코드(`GameData`, `LoadingGamePlay`)에 `NowTrackAurthor`, `NowTracLabel` 같은 오타 필드가 존재합니다.
 - **해결책:**
-  - `Il2CppReflectionHelper`: `GetValueResilient`/`SetValueResilient`/`InvokeMethodResilient`로 `BaseType` 상속 체인까지 캐시 기반 리플렉션 탐색을 수행하며(`DeclaredOnly` 계층 순회, 파라미터 없는 메서드 캐싱, 정적 폴백 배열 캐싱으로 힙 할당 제거), `NowTrackAuthor`/`NowTrackLabel`/`NowTrackScore` 등 정정 표기 폴백으로 패치 내성을 확보합니다.
+  - `Il2CppReflectionHelper`: `GetValueResilient`/`SetValueResilient`/`InvokeMethodResilient`로 `BaseType` 상속 체인까지 캐시 기반 리플렉션 탐색을 수행하며(`DeclaredOnly` 계층 순회, 파라미터 없는 메서드 캐싱, 정적 폴백 배열 캐싱으로 힙 할당 제거, `WarnOnce` 중복 경고 억제, `TryAdaptValueForTargetType` 타입 안전 변환), `NowTrackAuthor`/`NowTrackLabel`/`NowTrackScore` 등 정정 표기 폴백으로 패치 내성을 확보합니다.
+  - `CustomTrackWrapper`: `SafeCast<MainTrackListBlock>` 실패(`null`) 시에도 `directGetter`/`directSetter`에 `null`을 전달하여 백업 리플렉션 경로가 실제로 동작하도록 보장합니다(`ReadBlockMember`/`WriteBlockMember`).
   - `HwaAssetManager.ApplyMetaToGameData` & `CustomTrackWrapper.ApplySongMetadata`: 곡 메타데이터(제목/아티스트/매퍼 `NowTrackScore`/BGA 제작자/앨범)/커버/난이도 별 표기를 `MainTrackListBlock`과 `GameData`에 일관 주입합니다.
+  - **엣지 케이스 & 파서 안전성:** `ModConfig`와 `CustomSongEntry.ParseInfoTxt`에서 UTF-8 BOM(`\uFEFF`)을 자동 제거하며, `InGameRhythmHooks`에서는 `playingKoreo.SampleRate <= 0` 방어 및 곡 시작 시 `NoteObject_UpdateNotePosition_Patch.ResetFrameCache()`로 프레임 캐시를 초기화합니다. `SongListHooks`의 카탈로그 스캔도 `CustomTrackWrapper` + 트랙 단위 예외 격리로 보호됩니다.
   - **성능 & 메모리 최적화:** `CustomSongLibrary`는 `TrackID`/`Title` O(1) 딕셔너리 인덱스를 유지하고 `Scan()` 재스캔 시 기존 `Texture2D`/`Sprite`/`AudioClip`을 `ResetLoadedAssets()`로 즉시 해제합니다. `BmsChart`는 파싱 시 레인별 노트 인덱스(`_notesByLane`)를 미리 구축하고(`GetNotesForLane` O(1)), `BmsLaneMapper.ResolveLaneId(trackID, LaneType)`로 열거형 박싱/문자열 할당 없이 레인을 판별하며, `CustomSongEntry.LoadBgmCoroutine`은 `Time.realtimeSinceStartup` 실시간 타임아웃 가드로 고프레임 환경에서의 조기 타임아웃을 방지합니다.
 
 ### ④ BMS 시간 계산 공식

@@ -110,6 +110,13 @@ namespace DEFLATE_custom_chart.Hooks
             private static float _cachedSample;
             private static int _cachedSampleRate = 44100;
 
+            public static void ResetFrameCache()
+            {
+                _cachedFrame = -1;
+                _cachedSample = 0f;
+                _cachedSampleRate = 44100;
+            }
+
             public static void Postfix(NoteObject __instance)
             {
                 try
