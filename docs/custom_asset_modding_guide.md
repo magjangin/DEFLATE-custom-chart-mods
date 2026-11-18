@@ -103,10 +103,13 @@ player.Play();
   - `RhythmGameController.TriggerAudioStartIfReady` 시점에 커스텀 BGM 클립 할당을 보장합니다 (아직 로딩 중이면 음소거 후 로드되면 재생).
   - `RhythmGameController.LoadVideo` 및 `PlayVideoWithOffset` 시점에 BGA 비디오 URL을 연동합니다.
 
-### 4) 결과 화면 (Result Scene)
-- **타겟 클래스**: `Panel_Result`
+### 4) 결과 화면 (Result Scene) & 전역 BGA 인터셉터
+- **타겟 클래스**: `Panel_Result`, `SimpleRandomVideo`, `VideoPlayer`
 - **주입 메커니즘**:
-  - `Panel_Result.Awake` 시점에 자식 렌더러 계층구조 스캔(`ApplyCustomCoverToHierarchy`) 및 내부 `VideoPlayer` URL 바인딩을 실행합니다.
+  - `Panel_Result.GetPreviewClip` Prefix에서 결과 화면 파형/재생 미리듣기 위젯이 커스텀 BGM `AudioClip`을 직접 받도록 오버라이드합니다.
+  - `Panel_Result.Awake` Postfix에서 자식 렌더러 계층구조 스캔(`ApplyCustomCoverToHierarchy`) 및 내부 `VideoPlayer` URL 바인딩을 실행합니다.
+  - `Panel_Result.ApplyText` Postfix에서 점수 표출 시점의 `VideoPlayer`에 커스텀 BGA를 재바인딩하여 배경 영상이 원본으로 되돌아가는 것을 막습니다.
+  - `SimpleRandomVideo.LoadVideoSmart` / `LoadVideo` 및 전역 `VideoPlayer.Play` / `Prepare` Prefix에서 커스텀 곡이 활성 상태일 때 외부 MP4 URL을 일관되게 강제 적용합니다.
 
 ---
 
@@ -119,3 +122,4 @@ player.Play();
 | **인게임/로딩 씬 커버 복원 현상** | 게임 내 비동기 처리가 후속으로 원본 `GameData` 커버를 재할당함 | 로딩 씬은 `Start` / `InitializeAndPlayAnimations` / `HandleEmptyFields` Postfix에서 재적용, 인게임은 `RhythmGameController.Start` / `CoverArtController.Initialize` Postfix에서 재적용 |
 | **곡 리스트 전체 커버 교체 문제** | `SetSelected` 혹은 전역 `TrackCover` Getter에 무차별 훅을 걺 | `MainTrackList.tracks` 타겟 데이터 객체의 `MainTrackListBlock.TrackCover` 핀포인트 주입으로 변경 |
 | **HUD 갱신 시 이미지 떨림/프레임 드랍** | `RefreshSongMetaUI` 등 매 프레임 실행 루프에서 스프라이트 재할당 | `if (targetImage.sprite == sprite) return;` 중복 세팅 방지 검사 적용 |
+| **`info.txt` / `config.txt` 첫 줄 키 무시** | 메모장 등에서 UTF-8 BOM(`\uFEFF`)이 파일 선두에 기록됨 | 파서에서 `TrimStart('\uFEFF')`로 BOM을 자동 제거하여 정상 인식 |

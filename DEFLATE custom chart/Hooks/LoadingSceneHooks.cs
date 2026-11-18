@@ -12,7 +12,9 @@ namespace DEFLATE_custom_chart.Hooks
     {
         private static readonly string[] LoadingAuthorFallbacks = { "NowTrackAuthor", "nowTrackAuthor", "TrackAuthor" };
         private static readonly string[] LoadingLabelFallbacks = { "NowTrackLabel", "nowTrackLabel", "TrackLabel" };
-        private static readonly string[] GameDataAuthorReadFallbacks = { "NowTrackAuthor", "nowTrackAuthor" };
+        private static readonly string[] GameDataAuthorReadFallbacks = { "NowTrackAuthor", "nowTrackAuthor", "TrackAuthor" };
+        private static readonly string[] GameDataTitleReadFallbacks = { "trackTitle", "Title", "nowTrackTitle" };
+        private static readonly string[] GameDataIdReadFallbacks = { "nowTrackID", "TrackID", "uniqueID" };
 
         private static void ApplyLoadingUiMetadata(LoadingGamePlay instance)
         {
@@ -91,20 +93,32 @@ namespace DEFLATE_custom_chart.Hooks
                     var gd = __instance.gameData;
 
                     var meta = HwaAssetManager.CurrentMeta ?? new HwaAssetManager.HwaMetaInfo();
+                    string trackTitle = Il2CppReflectionHelper.GetValueResilient(
+                        gd,
+                        () => gd.NowTrackTitle,
+                        "NowTrackTitle",
+                        GameDataTitleReadFallbacks,
+                        string.Empty);
                     string trackAuthor = Il2CppReflectionHelper.GetValueResilient(
                         gd,
                         () => gd.NowTrackAurthor,
                         "NowTrackAurthor",
                         GameDataAuthorReadFallbacks,
                         string.Empty);
+                    string trackId = Il2CppReflectionHelper.GetValueResilient(
+                        gd,
+                        () => gd.NowTrackID,
+                        "NowTrackID",
+                        GameDataIdReadFallbacks,
+                        string.Empty);
 
                     MelonLogger.Msg("==================================================");
                     MelonLogger.Msg($"[로딩 씬 진입 감지] TargetActive: {HwaAssetManager.IsTargetTrackActive}");
-                    MelonLogger.Msg($"  - 곡 제목:      '{gd.NowTrackTitle}'");
+                    MelonLogger.Msg($"  - 곡 제목:      '{trackTitle}'");
                     MelonLogger.Msg($"  - 곡 아티스트:   '{trackAuthor}'");
                     MelonLogger.Msg($"  - 채보 매퍼:    '{meta.ChartAuthor}'");
                     MelonLogger.Msg($"  - PV/BGA 제작자: '{meta.BgaAuthor}'");
-                    MelonLogger.Msg($"  - 곡 ID:        '{gd.NowTrackID}'");
+                    MelonLogger.Msg($"  - 곡 ID:        '{trackId}'");
                     MelonLogger.Msg("==================================================");
                 }
                 catch (Exception ex)

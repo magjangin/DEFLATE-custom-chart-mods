@@ -108,7 +108,7 @@ namespace DEFLATE_custom_chart.Core
             string[] lines = File.ReadAllLines(ConfigFilePath);
             foreach (var line in lines)
             {
-                string trimmed = line.Trim();
+                string trimmed = line.Trim().TrimStart('\uFEFF');
                 if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("#") || !trimmed.Contains("=")) continue;
 
                 string[] parts = trimmed.Split(KeyValueSeparators, 2);

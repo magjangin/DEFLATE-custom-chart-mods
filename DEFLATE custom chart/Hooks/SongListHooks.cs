@@ -37,25 +37,33 @@ namespace DEFLATE_custom_chart.Hooks
                         var track = __instance.tracks[i];
                         if (track == null) continue;
 
-                        string coverInfoStr = "없음";
-                        if (track.TrackCover != null)
+                        try
                         {
-                            var sprite = track.TrackCover;
-                            string texInfo = sprite.texture != null ? $"{sprite.texture.width}x{sprite.texture.height}" : "NoTexture";
-                            coverInfoStr = $"'{sprite.name}' ({texInfo})";
+                            var wrapped = new CustomTrackWrapper(track);
+                            string coverInfoStr = "없음";
+                            if (wrapped.CoverSprite != null)
+                            {
+                                var sprite = wrapped.CoverSprite;
+                                string texInfo = sprite.texture != null ? $"{sprite.texture.width}x{sprite.texture.height}" : "NoTexture";
+                                coverInfoStr = $"'{sprite.name}' ({texInfo})";
+                            }
+
+                            sb.Clear();
+                            sb.AppendLine($"[트랙 #{i + 1}] ID: {wrapped.UniqueID} | 제목: {wrapped.Title} | 아티스트: {wrapped.Artist}");
+                            sb.AppendLine($"  - 앨범: {wrapped.AlbumName} | 디스크: {track.DiscID}");
+                            sb.AppendLine($"  - 자켓 이미지: {coverInfoStr}");
+                            sb.AppendLine($"  - 오디오 Key: {wrapped.AudioKey}");
+                            sb.AppendLine($"  - 비디오 Key: {wrapped.VideoKey}");
+                            sb.AppendLine($"  - Easy 차트 Key: {wrapped.EZ_KoreKey} (★{wrapped.EZ_Star})");
+                            sb.AppendLine($"  - Normal 차트 Key: {wrapped.NM_KoreKey} (★{wrapped.NM_Star})");
+                            sb.AppendLine($"  - Hard 차트 Key: {wrapped.HD_KoreKey} (★{wrapped.HD_Star})");
+
+                            MelonLogger.Msg(sb.ToString().TrimEnd());
                         }
-
-                        sb.Clear();
-                        sb.AppendLine($"[트랙 #{i + 1}] ID: {track.uniqueID} | 제목: {track.TrackTitle} | 아티스트: {track.TrackAuthor}");
-                        sb.AppendLine($"  - 앨범: {track.TrackAlbum} | 디스크: {track.DiscID}");
-                        sb.AppendLine($"  - 자켓 이미지: {coverInfoStr}");
-                        sb.AppendLine($"  - 오디오 Key: {track.audioClip_Key}");
-                        sb.AppendLine($"  - 비디오 Key: {track.videoClip_Key}");
-                        sb.AppendLine($"  - Easy 차트 Key: {track.EZ_TrackKore_Key} (★{track.EZ_Star})");
-                        sb.AppendLine($"  - Normal 차트 Key: {track.NM_TrackKore_Key} (★{track.NM_Star})");
-                        sb.AppendLine($"  - Hard 차트 Key: {track.HD_TrackKore_Key} (★{track.HD_Star})");
-
-                        MelonLogger.Msg(sb.ToString().TrimEnd());
+                        catch (Exception trackEx)
+                        {
+                            MelonLogger.Warning($"[곡 목록 스캔] 트랙 #{i + 1} 로깅 중 예외: {trackEx.Message}");
+                        }
                     }
                     MelonLogger.Msg("--------------------------------------------------");
                 }

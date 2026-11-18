@@ -1,6 +1,5 @@
 using System;
 using System.Collections;
-using System.IO;
 using Il2Cppdizzylab.castor;
 using MelonLoader;
 using UnityEngine;

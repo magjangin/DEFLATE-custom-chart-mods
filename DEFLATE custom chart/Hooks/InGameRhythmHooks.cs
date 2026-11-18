@@ -1,14 +1,10 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.IO;
 using MelonLoader;
-using MelonLoader.Utils;
 using HarmonyLib;
 using Il2Cppdizzylab.castor;
 using Il2CppSonicBloom.Koreo;
 using UnityEngine;
-using UnityEngine.Networking;
 using UnityEngine.Video;
 using DEFLATE_custom_chart.Core;
 using DEFLATE_custom_chart.Core.Bms;
@@ -74,6 +70,7 @@ namespace DEFLATE_custom_chart.Hooks
                 {
                     if (__instance == null) return;
                     RhythmGameController_UpdateSongDurationScrollbar_Patch.ResetTimer();
+                    NoteHooks.NoteObject_UpdateNotePosition_Patch.ResetFrameCache();
 
                     MelonLogger.Msg("==================================================");
                     MelonLogger.Msg("[★ 핵심 훅: RhythmGameController.Start ★] 인게임 리듬게임 씬 진입!");
@@ -211,7 +208,7 @@ namespace DEFLATE_custom_chart.Hooks
                         if (bmsChart != null && bmsChart.Notes.Count > 0 && __instance.dropEventSamples != null)
                         {
                             var dropNotes = bmsChart.GetNotesForLane(BmsLaneMapper.Drop);
-                            int targetSampleRate = koreo.SampleRate;
+                            int targetSampleRate = koreo.SampleRate > 0 ? koreo.SampleRate : bmsChart.SampleRate;
                             for (int i = 0; i < dropNotes.Count; i++)
                             {
                                 var n = dropNotes[i];
@@ -289,7 +286,7 @@ namespace DEFLATE_custom_chart.Hooks
                 {
                     var laneNotes = bmsChart.GetNotesForLane(targetLane);
                     int holdCount = 0;
-                    int targetSampleRate = koreo.SampleRate;
+                    int targetSampleRate = koreo.SampleRate > 0 ? koreo.SampleRate : bmsChart.SampleRate;
                     int tapDurationSamples = (int)(targetSampleRate * 0.1f);
 
                     for (int i = 0; i < laneNotes.Count; i++)
@@ -377,7 +374,10 @@ namespace DEFLATE_custom_chart.Hooks
                     {
                         if (HwaAssetManager.Active == null && __instance != null && __instance.gameData != null)
                         {
-                            HwaAssetManager.SetActiveTrack(__instance.gameData.NowTrackID, __instance.gameData.NowTrackTitle);
+                            var gd = __instance.gameData;
+                            string nowTrackId = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackID, "NowTrackID", GameDataIdReadFallbacks, string.Empty);
+                            string nowTrackTitle = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackTitle, "NowTrackTitle", GameDataTitleReadFallbacks, string.Empty);
+                            HwaAssetManager.SetActiveTrack(nowTrackId, nowTrackTitle);
                         }
                         if (!HwaAssetManager.IsTargetTrackActive) return;
 
@@ -513,7 +513,7 @@ namespace DEFLATE_custom_chart.Hooks
             // 2. BMS 마디선/박자선 ➔ KoreographyEvent
             var events = new Il2CppSystem.Collections.Generic.List<KoreographyEvent>();
             int measureLines = 0;
-            int targetSampleRate = lane.gameController != null && lane.gameController.playingKoreo != null
+            int targetSampleRate = lane.gameController != null && lane.gameController.playingKoreo != null && lane.gameController.playingKoreo.SampleRate > 0
                 ? lane.gameController.playingKoreo.SampleRate
                 : bmsChart.SampleRate;
             foreach (var bar in bmsChart.BarLines)

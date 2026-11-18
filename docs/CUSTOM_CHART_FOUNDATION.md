@@ -122,7 +122,7 @@ $$\text{Time} = \text{prevTime} + \frac{(\text{tick} - \text{prevTick}) \times 2
 오디오 샘플 연동 변환 공식:
 $$\text{StartSample} = \text{Time (seconds)} \times \text{SampleRate}$$
 
-*(현재 `BmsParser`는 `SampleRate = 44100`으로 고정해 `SamplePosition`을 계산합니다.)*
+*(파싱 단계에서는 `BmsParser`가 기본 `SampleRate = 44100`으로 `SamplePosition`을 사전 계산하고, 인게임 주입 단계(`InGameRhythmHooks.ResolveSamplePosition`)에서 `playingKoreo.SampleRate`가 44100Hz와 다르면 `TimeSeconds × playingKoreo.SampleRate`로 동적 재계산합니다. `playingKoreo.SampleRate <= 0`인 비정상 상황에서는 차트의 기본 샘플레이트로 안전 폴백합니다.)*
 
 ---
 
@@ -158,6 +158,7 @@ $$\text{StartSample} = \text{Time (seconds)} \times \text{SampleRate}$$
 - `RhythmGameController.InitializeKoreographyTracks` (Postfix): 트랙 수/총 노트 수 로그. 커스텀 곡이면 `dropEventSamples`를 비우고 BMS 14번 채널 드롭 노트를 다시 채움 (BMS가 없는 곡은 `hihat_3` 외 원본 트랙 이벤트를 비움).
   > ⚠️ **실측 확인:** 이 메서드의 **Prefix 시점에는 `__instance.playingKoreo`가 아직 `null`**이다. `playingKoreo`는 `InitializeKoreographyTracks` 메서드 내부에서 세팅되므로, Prefix에서 `playingKoreo`를 읽거나 트랙을 미리 조작하려는 시도는 전부 조용히 실패한다(예외 없이 null 체크에 걸려 리턴됨). 노트 데이터를 만지려면 4.5.1의 `LoadKoreographyEvents`를 노려야 한다.
 - `RhythmGameController.LoadKoreographyEvents` (Postfix): 레인 노트를 BMS 노트로 교체 (4.5.1).
+- `RhythmGameController.ReplaceLaneEventsFromTrack` / `ReplaceLaneEventsFromTrackAtSample` (Postfix): 재시작·모드 전환 등 레인 이벤트 재로드 시 원본 차트로 되돌아가지 않도록 커스텀 BMS 노트를 다시 주입.
 - `RhythmGameController.LoadLineBarEvents` / `ReplaceLineBarEventsFromTrack` / `ReplaceLineBarEventsFromTrackAtSample` (Postfix): 라인바를 BMS 마디선/박자선으로 교체.
 - `RhythmGameController.TriggerAudioStartIfReady` (Prefix): BGM 재생 직전에 커스텀 BGM 클립 할당 (아직 로딩 중이면 음소거 후 로드되면 재생).
 - `RhythmGameController.LoadVideo` (Prefix) / `PlayVideoWithOffset` (Prefix) / `OnVideoStarted` (Postfix): BGA 비디오 URL을 커스텀 BGA로 교체, 재생 로그.
@@ -222,7 +223,7 @@ Koreography 엔진 기반의 DEFLATE에서 일반 단타(숏노트)와 롱노트
 ```csharp
 // 실전 검증 완료: 특정 레인(hihat_3)에 1.5초 롱노트 10연발 런타임 주입 (BMS가 없는 곡의 대체 경로)
 bool isTargetLane = string.Equals(trackID, "hihat_3", StringComparison.OrdinalIgnoreCase)
-    || string.Equals(lane.laneType.ToString(), "HiHat_3", StringComparison.OrdinalIgnoreCase);
+    || lane.laneType == LaneType.HiHat_3;
 
 lane.laneEvents?.Clear();
 

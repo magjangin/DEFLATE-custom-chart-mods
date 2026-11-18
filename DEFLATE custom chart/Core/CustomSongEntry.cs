@@ -219,7 +219,7 @@ namespace DEFLATE_custom_chart.Core
                         string[] parts = line.Split(InfoSeparators, 2);
                         if (parts.Length < 2) continue;
 
-                        string key = parts[0].Trim().ToLowerInvariant();
+                        string key = parts[0].Trim().TrimStart('\uFEFF').ToLowerInvariant();
                         string val = parts[1].Trim();
                         if (string.IsNullOrEmpty(val)) continue;
 

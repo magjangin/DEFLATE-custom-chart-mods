@@ -1,7 +1,5 @@
 using System;
-using System.IO;
 using MelonLoader;
-using MelonLoader.Utils;
 using HarmonyLib;
 using Il2Cppdizzylab.castor;
 using UnityEngine;
