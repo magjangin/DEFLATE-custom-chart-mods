@@ -4,6 +4,7 @@ using HarmonyLib;
 using Il2Cppdizzylab.castor;
 using UnityEngine;
 using DEFLATE_custom_chart.Core;
+using DEFLATE_custom_chart.Core.Wrapper;
 
 namespace DEFLATE_custom_chart.Hooks
 {
@@ -12,6 +13,8 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), "RecalculateAllNoteCount")]
         public static class RhythmGameController_RecalculateAllNoteCount_Patch
         {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "RecalculateAllNoteCount");
+
             public static void Postfix(RhythmGameController __instance)
             {
                 try
@@ -106,6 +109,8 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(NoteObject), "UpdateNotePosition")]
         public static class NoteObject_UpdateNotePosition_Patch
         {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(NoteObject), "UpdateNotePosition");
+
             private static int _cachedFrame = -1;
             private static float _cachedSample;
             private static int _cachedSampleRate = 44100;

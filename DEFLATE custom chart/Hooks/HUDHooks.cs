@@ -2,6 +2,7 @@ using System;
 using MelonLoader;
 using HarmonyLib;
 using Il2Cppdizzylab.castor;
+using DEFLATE_custom_chart.Core.Wrapper;
 
 namespace DEFLATE_custom_chart.Hooks
 {
@@ -17,6 +18,8 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(HUDControl), nameof(HUDControl.RefreshSongMetaUI))]
         public static class HUDControl_RefreshSongMetaUI_Patch
         {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(HUDControl), nameof(HUDControl.RefreshSongMetaUI));
+
             private static string _lastCoverName;
             private static string _lastTitle;
 

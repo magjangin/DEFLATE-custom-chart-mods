@@ -39,8 +39,9 @@
 ### ③ 내성 강화 리플렉션 래퍼 및 오타/인덱싱 최적화 (`CustomTrackWrapper` & `Il2CppReflectionHelper`)
 - **이유:** Unity Il2Cpp 게임은 버전 패치 시 필드/프로퍼티의 이름이나 대소문자, 접두사(`_`, `m_`), 메서드 시그니처가 변경되거나 상속 계층 구조가 바뀔 수 있습니다. 또한 게임 원본 코드(`GameData`, `LoadingGamePlay`)에 `NowTrackAurthor`, `NowTracLabel` 같은 오타 필드가 존재합니다.
 - **해결책:**
-  - `Il2CppReflectionHelper`: `GetValueResilient`/`SetValueResilient`/`InvokeMethodResilient`로 `BaseType` 상속 체인까지 캐시 기반 리플렉션 탐색을 수행하며(`DeclaredOnly` 계층 순회, 파라미터 없는 메서드 캐싱, 정적 폴백 배열 캐싱으로 힙 할당 제거, `WarnOnce` 중복 경고 억제, `TryAdaptValueForTargetType` 타입 안전 변환), `NowTrackAuthor`/`NowTrackLabel`/`NowTrackScore` 등 정정 표기 폴백으로 패치 내성을 확보합니다.
-  - `CustomTrackWrapper`: `SafeCast<MainTrackListBlock>` 실패(`null`) 시에도 `directGetter`/`directSetter`에 `null`을 전달하여 백업 리플렉션 경로가 실제로 동작하도록 보장합니다(`ReadBlockMember`/`WriteBlockMember`).
+  - `Il2CppReflectionHelper` & `MemberFallbacks`: `GetValueResilient`/`SetValueResilient`/`InvokeMethodResilient`로 `BaseType` 상속 체인까지 캐시 기반 리플렉션 탐색을 수행하며(`DeclaredOnly` 계층 순회, 파라미터 없는 메서드 캐싱, `WarnOnce` 중복 경고 억제, `TryAdaptValueForTargetType` 타입 안전 변환), 모든 백업 리플렉션 후보군을 `Core/Wrapper/MemberFallbacks.cs` 한 곳에 단일화(Single Source of Truth)하여 패치 시 수정 지점을 1곳으로 집약했습니다.
+  - **Harmony 패치 등록 격리 (`Il2CppReflectionHelper.HasPatchTarget`)**: 문자열 기반(`[HarmonyPatch(typeof(...), "...")]`) 훅 9곳과 보조 UI/로깅 훅(`HUDHooks`, `KeyIndicatorHooks`)에 `Prepare()` 가드를 적용해, 게임 업데이트로 비핵심 메서드가 삭제·개명되더라도 MelonLoader `PatchAll()` 전체가 중단되지 않고 `[HarmonyGuard]` 경고 1회 후 해당 훅만 안전하게 건너뜁니다.
+  - `CustomTrackWrapper`: `SafeCast<MainTrackListBlock>` 실패(`null`) 시에도 `directGetter`/`directSetter`에 `null`을 전달하여 백업 리플렉션 경로가 실제로 동작하도록 보장합니다(`ReadBlockMember`/`WriteBlockMember`). `DiscID`를 포함한 전체 `MainTrackListBlock` 메타데이터를 래핑합니다.
   - `HwaAssetManager.ApplyMetaToGameData` & `CustomTrackWrapper.ApplySongMetadata`: 곡 메타데이터(제목/아티스트/매퍼 `NowTrackScore`/BGA 제작자/앨범)/커버/난이도 별 표기를 `MainTrackListBlock`과 `GameData`에 일관 주입합니다.
   - **엣지 케이스 & 파서 안전성:** `ModConfig`와 `CustomSongEntry.ParseInfoTxt`에서 UTF-8 BOM(`\uFEFF`)을 자동 제거하며, `InGameRhythmHooks`에서는 `playingKoreo.SampleRate <= 0` 방어 및 곡 시작 시 `NoteObject_UpdateNotePosition_Patch.ResetFrameCache()`로 프레임 캐시를 초기화합니다. `SongListHooks`의 카탈로그 스캔도 `CustomTrackWrapper` + 트랙 단위 예외 격리로 보호됩니다.
   - **성능 & 메모리 최적화:** `CustomSongLibrary`는 `TrackID`/`Title` O(1) 딕셔너리 인덱스를 유지하고 `Scan()` 재스캔 시 기존 `Texture2D`/`Sprite`/`AudioClip`을 `ResetLoadedAssets()`로 즉시 해제합니다. `BmsChart`는 파싱 시 레인별 노트 인덱스(`_notesByLane`)를 미리 구축하고(`GetNotesForLane` O(1)), `BmsLaneMapper.ResolveLaneId(trackID, LaneType)`로 열거형 박싱/문자열 할당 없이 레인을 판별하며, `CustomSongEntry.LoadBgmCoroutine`은 `Time.realtimeSinceStartup` 실시간 타임아웃 가드로 고프레임 환경에서의 조기 타임아웃을 방지합니다.
@@ -91,7 +92,42 @@
 
 ---
 
-## 6. 빌드 명령 및 배포 경로
+## 6. 게임 업데이트 대응 & 복구 플레이북 (Update Survival Playbook)
+
+게임 패치 이후 일부 기능이 동작하지 않거나 경고가 뜰 때 다음 순서대로 복구합니다.
+
+1. **로그 1차 진단 (`<GameDir>/MelonLoader/Latest.log`):**
+   - `[HarmonyGuard]` 검색 → 이름이 바뀌었거나 삭제된 훅 대상 메서드를 즉시 특정합니다.
+   - `[GetValueResilient]` / `[SetValueResilient]` / `[InvokeMethodResilient]` 검색 → `WarnOnce`로 1회만 기록된 변경 필드/프로퍼티를 특정합니다.
+2. **어셈블리 갱신 & 시그니처 재덤프:**
+   - 패치된 게임을 **1회 실행**해 MelonLoader가 `MelonLoader/Il2CppAssemblies/`를 재생성하게 합니다.
+   - `dotnet run --project SignatureDumper` 실행으로 `Decompiled/` 스켈레톤을 최신화합니다.
+3. **단일 지점 수정:**
+   - 필드/프로퍼티 이름 변경 → `DEFLATE custom chart/Core/Wrapper/MemberFallbacks.cs`의 해당 후보 배열에 새 이름 추가 (모든 래퍼/훅에 자동 전파).
+   - 메서드 이름/시그니처 변경 → 해당 훅의 `[HarmonyPatch]` 및 `Prepare()` 대상명 갱신.
+4. **빌드 & 해시 대조 검증:**
+   - `dotnet build -c Release` 후 `Get-FileHash "<GameDir>Mods\DEFLATE custom chart.dll"`과 `Latest.log`의 `SHA256 Hash:` 일치 여부 확인.
+
+---
+
+## 7. 주요 수정 이력 감사 요약 (Audit Trail)
+
+| 커밋 | 초점 | 핵심 개선 내역 |
+| :--- | :--- | :--- |
+| `830728d` | 내성/문서 기반 구축 | 전역 훅 예외 가드, `AGENTS.md`·`CLAUDE.md` 핸드오버 최초 구축 |
+| `252d68f` | 성능·메모리 최적화 | 프레임당 IL2CPP/GC 병목 제거, BMS O(N²) 파싱 개선, 에셋 누수 방지 |
+| `ac9c671` | 핫패스·인덱스 최적화 | O(1) `TrackID`/`Title`·레인별 노트 인덱스, `Time.realtimeSinceStartup` 타임아웃 가드 |
+| `8222cc3` | 내성·할당 제거 | `BmsLaneMapper` 열거형 박싱 제거, `InvokeMethodResilient`, `DeclaredOnly` 상속 체인 탐색 |
+| `02341bd` | 래퍼 폴백 버그 수정 | `CustomTrackWrapper` `SafeCast` 실패 시 폴백 우회 버그 수정, `WarnOnce`, `TryAdaptValueForTargetType`, UTF-8 BOM 대응, `SampleRate <= 0` 가드 |
+| 현재 | 감사·단일화·패치 격리 | `MemberFallbacks.cs` 단일화, 문자열/보조 훅 `Prepare()`(`HasPatchTarget`) 패치 격리 가드, `DiscID` 래핑, 인수인계 플레이북 추가 |
+
+---
+
+## 8. 빌드 명령, 사전 조건 및 배포 경로
+
+### 빌드 사전 조건
+- `<GameDir>MelonLoader\Il2CppAssemblies\` 폴더가 존재해야 모드 DLL이 컴파일됩니다.
+- MelonLoader를 새로 설치하거나 게임을 재설치한 직후에는 **게임을 최소 1회 실행**해야 해당 폴더가 자동 생성됩니다.
 
 ### 빌드 명령
 ```powershell
@@ -100,6 +136,9 @@ dotnet build -c Release
 
 # 다른 게임 설치 경로 지정 빌드
 dotnet build -c Release -p:GameDir="D:\SteamLibrary\steamapps\common\DEFLATE\"
+
+# 독립 시그니처 덤퍼 빌드/실행
+dotnet build SignatureDumper/SignatureDumper.csproj -c Release
 ```
 
 ### 배포 경로

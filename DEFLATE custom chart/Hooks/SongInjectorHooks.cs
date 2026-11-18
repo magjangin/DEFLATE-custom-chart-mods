@@ -22,9 +22,6 @@ namespace DEFLATE_custom_chart.Hooks
         /// <summary>사본 GameObject 이름에 붙는 표식. 원곡 블록과 사본 블록을 구분하는 데 쓴다.</summary>
         private const string CloneNameMarker = "_Custom_";
 
-        private static readonly string[] RegenerateIdFallbacks = { "GenerateID", "RefreshID", "ResetID" };
-        private static readonly string[] UniqueIdFallbacks = { "UniqueID", "id", "m_UniqueID", "trackID", "_uniqueID" };
-
         [HarmonyPatch(typeof(MainTrackList), nameof(MainTrackList.Start))]
         public static class MainTrackList_Start_InjectCopy_Patch
         {
@@ -180,7 +177,7 @@ namespace DEFLATE_custom_chart.Hooks
                     cloneBlock,
                     () => cloneBlock.RegenerateID(),
                     "RegenerateID",
-                    RegenerateIdFallbacks);
+                    MemberFallbacks.TrackBlock.RegenerateIdMethod);
 
                 // 4) 사본 래퍼 갱신 및 커스텀 info.txt 메타데이터 / PNG 커버 자켓 주입
                 var cloneWrapper = new CustomTrackWrapper(cloneBlock);
@@ -196,13 +193,13 @@ namespace DEFLATE_custom_chart.Hooks
                         cloneBlock,
                         () => cloneBlock.uniqueID = fallbackId,
                         "uniqueID",
-                        UniqueIdFallbacks,
+                        MemberFallbacks.TrackBlock.UniqueId,
                         fallbackId);
                     cloneWrapper.UniqueID = Il2CppReflectionHelper.GetValueResilient(
                         cloneBlock,
                         () => cloneBlock.uniqueID,
                         "uniqueID",
-                        UniqueIdFallbacks,
+                        MemberFallbacks.TrackBlock.UniqueId,
                         fallbackId);
                 }
 

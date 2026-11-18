@@ -29,6 +29,44 @@ namespace DEFLATE_custom_chart.Core.Wrapper
         }
 
         /// <summary>
+        /// Harmony 패치 클래스의 Prepare()에서 대상 메서드의 실제 존재 여부를 사전 확인합니다.
+        /// 게임 업데이트로 비핵심/문자열 바인딩 메서드가 삭제되거나 이름이 바뀌어도
+        /// MelonLoader의 PatchAll() 전체가 중단되지 않고 해당 훅만 안전하게 건너뛰도록 보호합니다.
+        /// </summary>
+        public static bool HasPatchTarget(Type targetType, string methodName)
+        {
+            if (targetType == null || string.IsNullOrEmpty(methodName)) return false;
+
+            const BindingFlags anyMethodFlags =
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly;
+
+            try
+            {
+                for (Type t = targetType; t != null && t != typeof(object); t = t.BaseType)
+                {
+                    var methods = t.GetMethods(anyMethodFlags);
+                    for (int i = 0; i < methods.Length; i++)
+                    {
+                        if (string.Equals(methods[i].Name, methodName, StringComparison.Ordinal))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                WarnOnce($"harmony_err:{targetType.FullName}:{methodName}",
+                    $"[HarmonyGuard] '{targetType.Name}.{methodName}' 탐색 중 예외 ({ex.GetType().Name}): {ex.Message}");
+                return false;
+            }
+
+            WarnOnce($"harmony_miss:{targetType.FullName}:{methodName}",
+                $"[HarmonyGuard] 패치 대상 메서드를 찾지 못해 훅을 건너뜁니다: '{targetType.Name}.{methodName}' (게임 업데이트로 시그니처가 변경되었을 수 있습니다)");
+            return false;
+        }
+
+        /// <summary>
         /// Il2CppObjectBase 인스턴스 또는 object를 안전하게 T 타입으로 Cast합니다.
         /// </summary>
         public static T SafeCast<T>(object obj) where T : Il2CppObjectBase
