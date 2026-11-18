@@ -131,18 +131,18 @@ $$\text{StartSample} = \text{Time (seconds)} \times \text{SampleRate}$$
 본 레포지토리 모드(`DEFLATE_custom_chart`)는 다음과 같은 훅 클래스들로 모듈화되어 구성되어 있습니다:
 
 ### 4.1 `SongListHooks.cs` (곡 목록 및 패널 모니터링)
-- `MainTrackList.Start` (Postfix): 수록된 모든 트랙 카탈로그 정보를 스캔하여 제목, 아티스트, 각 에셋 Key 로그 출력. 곡 목록 프리뷰 컨텍스트(`IsInSongSelectContext`)를 다시 켬.
+- `MainTrackList.Start` (Postfix, `Priority.Last`): 수록된 모든 트랙 카탈로그 정보를 스캔하여 제목, 아티스트, 각 에셋 Key 로그 출력. 곡 목록 프리뷰 컨텍스트(`IsInSongSelectContext`)를 다시 켬.
 - `MainTrackList.GoToTrack` / `TrackListBlockCtrl.OnPointerClick`: 곡 탐색 커서/클릭 로그.
-- `TrackListBlockCtrl.SetSelected` (Postfix): 선택된 블록의 ID로 활성 커스텀 곡(`Active`)을 갱신하고, 커스텀 곡이면 목록 UI 자켓을 교체.
-- `MainTrackList.GotoSceneData` (Prefix): 플레이 확정 시 커스텀 곡이면 `gameData`의 제목/아티스트/BGA 제작자/앨범/커버를 커스텀 값으로 미리 주입.
-- `DiffCtrl.UpdateStarDisplay` / `SelectNextDifficulty` / `SelectPreviousDifficulty` (Postfix): 커스텀 곡의 난이도 별 개수(info.txt의 easy/normal/hard)를 UI에 반영.
+- `TrackListBlockCtrl.SetSelected` (Postfix): 선택된 블록의 ID(및 UI 제목 폴백)로 활성 커스텀 곡(`Active`)을 O(1) 갱신하고, 커스텀 곡이면 목록 UI 자켓을 교체하며 BGM 비동기 스트리밍 사전 로드(Preload)를 개시.
+- `MainTrackList.GotoSceneData` (Prefix): 플레이 확정 시 커스텀 곡이면 `ApplyMetaToGameData`로 `gameData`의 제목/아티스트/매퍼(`NowTrackScore`)/BGA 제작자/앨범/난이도/커버를 커스텀 값으로 미리 주입.
+- `DiffCtrl.UpdateStarDisplay` / `SelectNextDifficulty` / `SelectPreviousDifficulty` (Postfix): 커스텀 곡의 난이도 별 개수(info.txt의 easy/normal/hard)를 UI 및 `gameData.NowTrackLevel`에 내성 리플렉션으로 반영.
 
 ### 4.2 `SongInjectorHooks.cs` (커스텀 곡 사본 주입)
-- `MainTrackList.Start` (Postfix): `WindShifter` 트랙을 복제해 `hwa/` 커스텀 곡 수만큼 `MainTrackListBlock` 사본을 만들고 `tracks` 배열을 확장. 사본마다 `RegenerateID()`로 새 ID를 받고(원본과 같으면 사본을 버림), 메타데이터/커버/난이도 별을 입힘. 사본 GameObject 이름에는 `_Custom_`이 붙고, `tracks`에 이미 같은 곡의 사본이 있으면 새로 만들지 않고 재사용함 (원곡은 제목+앨범이 같아도 재사용 대상이 아님).
+- `MainTrackList.Start` (Postfix, `Priority.High`): `WindShifter` 트랙(없으면 첫 번째 유효 원곡 블록 자동 폴백)을 복제해 `hwa/` 커스텀 곡 수만큼 `MainTrackListBlock` 사본을 만들고 `tracks` 배열을 확장. 사본마다 `RegenerateID()`로 새 ID를 받고(미작동 시 `CUSTOM_<Guid>` 고유 폴백 ID 자동 할당), 메타데이터/커버/난이도 별을 입힘. 사본 GameObject 이름에는 `_Custom_`이 붙고, `tracks`에 이미 같은 곡의 사본이 있으면 새로 만들지 않고 재사용함 (원곡은 제목+앨범이 같아도 재사용 대상이 아님).
 
 ### 4.3 `LoadingSceneHooks.cs` (로딩 및 씬 전환)
 - `LoadingGamePlay.Start` (Postfix): 곡 목록 프리뷰 컨텍스트를 끄고, 커스텀 곡이면 로딩 UI 메타데이터 주입 + BGM 사전 로딩 시작.
-- `LoadingGamePlay.InitializeAndPlayAnimations` / `HandleEmptyFields` (Postfix): 로딩 UI가 원본 값으로 되돌아가지 않도록 커스텀 메타데이터(제목/아티스트/매퍼/앨범/난이도/커버)를 다시 적용.
+- `LoadingGamePlay.InitializeAndPlayAnimations` / `HandleEmptyFields` (Postfix): 로딩 UI가 원본 값으로 되돌아가지 않도록 커스텀 메타데이터(제목/아티스트/매퍼/앨범/난이도/커버)를 내성 리플렉션(`NowTrackAurthor`/`NowTracLabel` 오타 필드 폴백 포함)으로 다시 적용.
 - `LoadingManager.LoadScene` (Prefix): 전환되는 씬 이름 로그.
 
 ### 4.4 `AssetManagerHooks.cs` (에셋 관리자 인터셉터)
@@ -150,7 +150,7 @@ $$\text{StartSample} = \text{Time (seconds)} \times \text{SampleRate}$$
 - `TrackAssetManager.LoadVideoClip` / `LoadVideoURL` (Prefix): BGA 비디오 로드 요청 key 로그.
 - `Bank_PV_Ctrl.PlayPVVideo` / `LoadVideoAndAudio`, `SimpleRandomVideo.LoadVideoSmart` / `LoadVideo` (Prefix): 커스텀 곡이면 커스텀 BGA로 교체.
 - `VideoPlayer.Play` / `Prepare` (Prefix, 전역): 커스텀 곡이 활성 상태면 모든 VideoPlayer의 소스를 커스텀 BGA URL로 강제.
-- `MainTrackList.Start` (Postfix, `Priority.Last`): 사본 블록의 `TrackCover`를 각자의 커스텀 PNG로 교체.
+- `MainTrackList.Start` (Postfix, `Priority.Normal`): 사본 블록의 `TrackCover`를 각자의 커스텀 PNG로 교체.
 - `Panel_Result.GetPreviewClip` / `Awake` / `ApplyText`: 결과 화면 미리듣기 BGM, 자켓, BGA를 커스텀 에셋으로 교체.
 
 ### 4.5 `InGameRhythmHooks.cs` (인게임 리듬 게임 제어)
@@ -175,35 +175,36 @@ $$\text{StartSample} = \text{Time (seconds)} \times \text{SampleRate}$$
 - `laneEvents`의 실제 타입은 `Il2CppSystem.Collections.Generic.List<KoreographyEvent>`다 (Il2CppInterop은 mscorlib 타입을 `Il2CppSystem.*`으로 생성한다. 예전 디컴파일 덤프는 네임스페이스를 지운 채 `List<KoreographyEvent>`로 출력해서 `System.Collections.Generic.List`처럼 보였다). `Clear()` / `Add()`는 그대로 동작하고, 리스트를 통째로 바꿀 때는 `new Il2CppSystem.Collections.Generic.List<KoreographyEvent>()`를 넣어야 한다 (라인바 교체 코드 참고).
 - `beat`(라인바) 트랙은 `LaneController`가 아닌 `LineBarController`가 처리하므로 이 훅으로는 안 잡힌다. 라인바는 `LoadLineBarEvents` 훅에서 따로 교체한다.
 
-현재 모드의 BMS 주입 부분 (요약):
+현재 모드의 BMS 주입 부분 (`BuildBmsLaneEvents` 요약):
 
 ```csharp
-// DEFLATE custom chart/Hooks/InGameRhythmHooks.cs — RhythmGameController_LoadKoreographyEvents_Patch.Postfix 중 BMS 분기
+// DEFLATE custom chart/Hooks/InGameRhythmHooks.cs — BuildBmsLaneEvents 중 BMS 분기
 var bmsChart = HwaAssetManager.LoadedBmsChart;
 if (bmsChart != null && bmsChart.Notes.Count > 0)
 {
-    lane.laneEvents?.Clear();
-
-    // trackID("hihat_2") 또는 laneType("Kick_Right") ➔ 레인 슬롯("lane_2")
-    string targetLane = BmsLaneMapper.ResolveLaneId(trackID, lane.laneType.ToString());
+    // trackID("hihat_2") 또는 LaneType 열거형 ➔ 레인 슬롯("lane_2")
+    string targetLane = BmsLaneMapper.ResolveLaneId(trackID, lane.laneType);
     if (targetLane != null)
     {
-        foreach (var bmsNote in bmsChart.Notes)
+        // 파싱 시점에 사전 인덱싱된 레인별 노트를 O(1)로 조회
+        var laneNotes = bmsChart.GetNotesForLane(targetLane);
+        int targetSampleRate = koreo.SampleRate;
+        int tapDurationSamples = (int)(targetSampleRate * 0.1f);
+
+        for (int i = 0; i < laneNotes.Count; i++)
         {
-            // BMS 채널 ➔ 레인 슬롯 (16/11/12/13 ➔ lane_1~4, 14 ➔ drop)
-            if (!string.Equals(BmsLaneMapper.ResolveNoteLane(bmsNote), targetLane, StringComparison.OrdinalIgnoreCase)) continue;
-
-            int startSample = bmsNote.SamplePosition;
+            var bmsNote = laneNotes[i];
+            int startSample = ResolveSamplePosition(bmsNote.TimeSeconds, bmsNote.SamplePosition, bmsChart.SampleRate, targetSampleRate);
             int endSample = bmsNote.IsLongNote
-                ? bmsNote.LongNoteEndSamplePosition                      // 홀드: 짝이 맞은 Tail 위치
-                : startSample + (int)(koreo.SampleRate * 0.1f);          // 단타: 0.1초 길이
+                ? ResolveSamplePosition(bmsNote.LongNoteEndTimeSeconds, bmsNote.LongNoteEndSamplePosition, bmsChart.SampleRate, targetSampleRate)
+                : startSample + tapDurationSamples;
 
-            var newEvt = new KoreographyEvent();
-            newEvt.StartSample = startSample;
-            newEvt.EndSample = endSample;
-            lane.laneEvents.Add(newEvt);
+            var newEvt = new KoreographyEvent { StartSample = startSample, EndSample = endSample };
+            events.Add(newEvt);
         }
     }
+    lane.laneEvents = events;
+    lane.pendingEventIdx = 0;
 }
 ```
 
@@ -299,9 +300,9 @@ public static class MainTrackList_Start_Patch
 ```
 
 > 위 코드는 원리 설명용 최소 예제입니다. 실제 구현(`SongInjectorHooks`)은 다음이 다릅니다:
-> - **Postfix**에서 실행하고, 복제 원본은 `tracks[0]`이 아니라 제목/ID에 `WindShifter`가 들어간 트랙입니다.
+> - **Postfix(`Priority.High`)**에서 실행하고, 복제 원본은 제목/ID에 `WindShifter`가 들어간 트랙(없으면 첫 번째 유효 원곡 블록 폴백)입니다.
 > - `hwa/`에서 스캔된 커스텀 곡 **수만큼** 사본을 만들고, 원본과 같은 부모(`sourceBlock.transform.parent`) 아래에 둡니다.
-> - ID는 하드코딩하지 않고 `RegenerateID()`로 새로 받습니다. 차트/오디오/비디오 Key는 원본(WindShifter) 값을 그대로 씁니다.
+> - ID는 하드코딩하지 않고 `RegenerateID()`로 새로 받으며, 패치로 `RegenerateID()`가 동작하지 않을 경우 `CUSTOM_<Guid>` 폴백 고유 ID를 자동 부여합니다. 차트/오디오/비디오 Key는 원본 값을 그대로 씁니다.
 
 ### 단계 1: 커스텀 에셋 준비
 - **오디오:** OGG / WAV / MP3 파일

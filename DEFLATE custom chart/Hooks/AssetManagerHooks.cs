@@ -7,11 +7,15 @@ using Il2Cppdizzylab.castor;
 using UnityEngine;
 using UnityEngine.Video;
 using DEFLATE_custom_chart.Core;
+using DEFLATE_custom_chart.Core.Wrapper;
 
 namespace DEFLATE_custom_chart.Hooks
 {
     public static class AssetManagerHooks
     {
+        private static readonly string[] UniqueIdFallbacks = { "UniqueID", "id", "m_UniqueID", "trackID", "_uniqueID" };
+        private static readonly string[] CoverFallbacks = { "trackCover", "Cover", "cover", "m_TrackCover", "CoverSprite" };
+        private static readonly string[] TitleFallbacks = { "trackTitle", "Title", "title", "m_TrackTitle", "_trackTitle" };
         [HarmonyPatch(typeof(TrackAssetManager), nameof(TrackAssetManager.LoadAudioClip))]
         public static class TrackAssetManager_LoadAudioClip_Patch
         {
@@ -235,14 +239,16 @@ namespace DEFLATE_custom_chart.Hooks
                     {
                         if (trackBlock == null) continue;
 
-                        var entry = CustomSongLibrary.FindByTrackID(trackBlock.uniqueID);
+                        string uniqueId = Il2CppReflectionHelper.GetValueResilient(trackBlock, () => trackBlock.uniqueID, "uniqueID", UniqueIdFallbacks, string.Empty);
+                        var entry = CustomSongLibrary.FindByTrackID(uniqueId);
                         if (entry == null) continue;
 
                         var customCover = entry.LoadCoverSprite();
                         if (customCover == null) continue;
 
-                        trackBlock.TrackCover = customCover;
-                        MelonLogger.Msg($"  [★ MainTrackListBlock 데이터 커버 교체 성공 (사본 전용) ★] 앨범: '{entry.Meta.Album}' | 제목: '{trackBlock.TrackTitle}' | 커버: '{customCover.name}'");
+                        Il2CppReflectionHelper.SetValueResilient(trackBlock, () => trackBlock.TrackCover = customCover, "TrackCover", CoverFallbacks, customCover);
+                        string title = Il2CppReflectionHelper.GetValueResilient(trackBlock, () => trackBlock.TrackTitle, "TrackTitle", TitleFallbacks, entry.Meta.Title);
+                        MelonLogger.Msg($"  [★ MainTrackListBlock 데이터 커버 교체 성공 (사본 전용) ★] 앨범: '{entry.Meta.Album}' | 제목: '{title}' | 커버: '{customCover.name}'");
                     }
                 }
                 catch (Exception ex)

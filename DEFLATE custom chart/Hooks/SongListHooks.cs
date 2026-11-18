@@ -5,11 +5,15 @@ using HarmonyLib;
 using Il2Cppdizzylab.castor;
 using UnityEngine.EventSystems;
 using DEFLATE_custom_chart.Core;
+using DEFLATE_custom_chart.Core.Wrapper;
 
 namespace DEFLATE_custom_chart.Hooks
 {
     public static class SongListHooks
     {
+        private static readonly string[] NowSongIdFallbacks = { "nowSongID", "NowTrackID", "CurrentSongID" };
+        private static readonly string[] BlockCtrlIdFallbacks = { "uniqueID", "m_UniqueID", "trackID" };
+        private static readonly string[] GameDataLevelFallbacks = { "TrackLevel", "nowTrackLevel" };
         [HarmonyPatch(typeof(MainTrackList), nameof(MainTrackList.Start))]
         public static class MainTrackList_Start_Patch
         {
@@ -98,14 +102,16 @@ namespace DEFLATE_custom_chart.Hooks
 
                     // 곡 목록에서 커서가 옮겨갈 때마다 hwa/ 커스텀 에셋(사본 전용) 활성 상태를 갱신
                     // → 목록 PV 프리뷰(BGA)에서도 사본에서만 커스텀 비디오/오디오가 적용되도록 함
-                    bool isTargetTrack = HwaAssetManager.SetActiveTrack(__instance.UniqueID, __instance.UI_TrackTitle?.text);
+                    string uniqueId = Il2CppReflectionHelper.GetValueResilient(__instance, () => __instance.UniqueID, "UniqueID", BlockCtrlIdFallbacks, string.Empty);
+                    string titleText = __instance.UI_TrackTitle != null ? __instance.UI_TrackTitle.text : null;
+                    bool isTargetTrack = HwaAssetManager.SetActiveTrack(uniqueId, titleText);
                     if (isTargetTrack)
                     {
                         HwaAssetManager.ApplyCustomCover(__instance.cover);
                     }
 
                     string coverName = __instance.cover != null && __instance.cover.sprite != null ? __instance.cover.sprite.name : "null";
-                    MelonLogger.Msg($"[곡 블록 선택 감지] 인덱스: {__instance.IndexInTrackList} | 제목: '{__instance.UI_TrackTitle?.text}' (ID: {__instance.UniqueID}) | UI 자켓: '{coverName}' | 커스텀 에셋 사본 여부: {isTargetTrack}");
+                    MelonLogger.Msg($"[곡 블록 선택 감지] 인덱스: {__instance.IndexInTrackList} | 제목: '{titleText}' (ID: {uniqueId}) | UI 자켓: '{coverName}' | 커스텀 에셋 사본 여부: {isTargetTrack}");
                 }
                 catch (Exception ex)
                 {
@@ -140,22 +146,25 @@ namespace DEFLATE_custom_chart.Hooks
                 {
                     if (__instance == null) return;
 
-                    bool isTargetTrack = HwaAssetManager.SetActiveTrack(__instance.NowSongID);
+                    string nowSongId = Il2CppReflectionHelper.GetValueResilient(__instance, () => __instance.NowSongID, "NowSongID", NowSongIdFallbacks, string.Empty);
+                    string uiTitle = __instance.UI_TrackTitle != null ? __instance.UI_TrackTitle.text : null;
+                    bool isTargetTrack = HwaAssetManager.SetActiveTrack(nowSongId, uiTitle);
 
                     if (isTargetTrack && __instance.gameData != null)
                     {
                         var meta = HwaAssetManager.CurrentMeta ?? new HwaAssetManager.HwaMetaInfo();
                         var customCover = HwaAssetManager.LoadCoverSprite();
+                        int targetStar = meta.GetLevelForDifficulty((int)__instance.gameData.nowDifficulty);
 
-                        HwaAssetManager.ApplyMetaToGameData(__instance.gameData, customCover);
+                        HwaAssetManager.ApplyMetaToGameData(__instance.gameData, customCover, targetStar);
 
-                        MelonLogger.Msg($"[GameData 사전 주입] 제목: '{meta.Title}', 아티스트: '{meta.Artist}', BGA: '{meta.BgaAuthor}', 앨범: '{meta.Album}', 커버: '{(customCover != null ? customCover.name : "null")}' 주입 완료");
+                        MelonLogger.Msg($"[GameData 사전 주입] 제목: '{meta.Title}', 아티스트: '{meta.Artist}', 매퍼: '{meta.ChartAuthor}', BGA: '{meta.BgaAuthor}', 앨범: '{meta.Album}', 난이도: ★{targetStar}, 커버: '{(customCover != null ? customCover.name : "null")}' 주입 완료");
                     }
 
                     MelonLogger.Msg("==================================================");
                     MelonLogger.Msg($"[곡 플레이 선택 확정!] 사용자가 플레이를 시작합니다!");
                     MelonLogger.Msg($"  - 선택된 인덱스: {__instance.NowIndex}");
-                    MelonLogger.Msg($"  - 선택된 곡 ID:  '{__instance.NowSongID}'");
+                    MelonLogger.Msg($"  - 선택된 곡 ID:  '{nowSongId}'");
                     MelonLogger.Msg($"  - 커스텀 에셋 사본 여부: {isTargetTrack}");
                     MelonLogger.Msg("==================================================");
                 }
@@ -193,7 +202,8 @@ namespace DEFLATE_custom_chart.Hooks
 
                 if (diffCtrl.gameData != null)
                 {
-                    diffCtrl.gameData.NowTrackLevel = targetStar.ToString();
+                    string levelStr = targetStar.ToString();
+                    Il2CppReflectionHelper.SetValueResilient(diffCtrl.gameData, () => diffCtrl.gameData.NowTrackLevel = levelStr, "NowTrackLevel", GameDataLevelFallbacks, levelStr);
                 }
 
                 MelonLogger.Msg($"[DiffCtrl UI 난이도 갱신] 난이도: {diffCtrl.myDifficulty} -> ★{targetStar}");

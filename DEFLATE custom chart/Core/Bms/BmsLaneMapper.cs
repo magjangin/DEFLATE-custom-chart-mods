@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Il2Cppdizzylab.castor;
 
 namespace DEFLATE_custom_chart.Core.Bms
 {
@@ -69,6 +70,53 @@ namespace DEFLATE_custom_chart.Core.Bms
         public static bool IsNoteChannel(string channel)
         {
             return !string.IsNullOrEmpty(channel) && ChannelToLane.ContainsKey(channel);
+        }
+
+        /// <summary>LaneType 열거형을 박싱/문자열 할당 없이 레인 슬롯 ID로 즉시 변환합니다.</summary>
+        public static string ResolveLaneFromType(LaneType laneType)
+        {
+            switch (laneType)
+            {
+                case LaneType.Kick_Left:
+                case LaneType.HiHat_1:
+                    return Lane1;
+                case LaneType.Kick_Right:
+                case LaneType.HiHat_2:
+                    return Lane2;
+                case LaneType.Snare_Left:
+                case LaneType.HiHat_3:
+                    return Lane3;
+                case LaneType.Snare_Right:
+                case LaneType.HiHat_4:
+                    return Lane4;
+                case LaneType.Drop:
+                    return Drop;
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>
+        /// 인게임 훅이 받은 Koreography trackID와 <see cref="LaneType"/> 열거형으로 레인 슬롯을 판정합니다.
+        /// (열거형 .ToString() 박싱/문자열 할당 제거 및 향후 열거형 확장 시 문자열 폴백 지원)
+        /// </summary>
+        public static string ResolveLaneId(string trackID, LaneType laneType)
+        {
+            if (!string.IsNullOrEmpty(trackID))
+            {
+                foreach (var (keyword, lane) in LaneNameKeywords)
+                {
+                    if (trackID.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        return lane;
+                    }
+                }
+            }
+
+            string fromEnum = ResolveLaneFromType(laneType);
+            if (fromEnum != null) return fromEnum;
+
+            return ResolveLaneId(null, laneType.ToString());
         }
 
         /// <summary>

@@ -22,6 +22,9 @@ namespace DEFLATE_custom_chart.Hooks
         /// <summary>사본 GameObject 이름에 붙는 표식. 원곡 블록과 사본 블록을 구분하는 데 쓴다.</summary>
         private const string CloneNameMarker = "_Custom_";
 
+        private static readonly string[] RegenerateIdFallbacks = { "GenerateID", "RefreshID", "ResetID" };
+        private static readonly string[] UniqueIdFallbacks = { "UniqueID", "id", "m_UniqueID", "trackID", "_uniqueID" };
+
         [HarmonyPatch(typeof(MainTrackList), nameof(MainTrackList.Start))]
         public static class MainTrackList_Start_InjectCopy_Patch
         {
@@ -67,15 +70,24 @@ namespace DEFLATE_custom_chart.Hooks
                         return;
                     }
 
-                    // 2) 복제 원본이 될 트랙 탐색
+                    // 2) 복제 원본이 될 트랙 탐색 (1순위: WindShifter, 2순위: 첫 번째 유효 원곡 블록 폴백)
                     MainTrackListBlock sourceBlock = null;
                     CustomTrackWrapper sourceWrapper = null;
+                    MainTrackListBlock firstValidBlock = null;
+                    CustomTrackWrapper firstValidWrapper = null;
 
                     foreach (var track in __instance.tracks)
                     {
-                        if (track == null) continue;
+                        if (track == null || track.gameObject == null) continue;
+                        if (track.gameObject.name.Contains(CloneNameMarker)) continue;
 
                         var tempWrapper = new CustomTrackWrapper(track);
+                        if (firstValidBlock == null && !string.IsNullOrEmpty(tempWrapper.NM_KoreKey))
+                        {
+                            firstValidBlock = track;
+                            firstValidWrapper = tempWrapper;
+                        }
+
                         bool titleMatch = !string.IsNullOrEmpty(tempWrapper.Title) &&
                             tempWrapper.Title.IndexOf(TargetKeyword, StringComparison.OrdinalIgnoreCase) >= 0;
                         bool idMatch = !string.IsNullOrEmpty(tempWrapper.UniqueID) &&
@@ -89,9 +101,16 @@ namespace DEFLATE_custom_chart.Hooks
                         }
                     }
 
+                    if (sourceBlock == null && firstValidBlock != null)
+                    {
+                        sourceBlock = firstValidBlock;
+                        sourceWrapper = firstValidWrapper;
+                        MelonLogger.Warning($"[곡 목록 주입] '{TargetKeyword}' 트랙을 찾지 못해 첫 번째 유효 원곡 '{sourceWrapper.Title}'(ID: {sourceWrapper.UniqueID})을 복제 템플릿으로 폴백 사용합니다.");
+                    }
+
                     if (sourceBlock == null || sourceWrapper == null)
                     {
-                        MelonLogger.Warning($"[곡 목록 주입] '{TargetKeyword}' 트랙을 찾지 못했습니다.");
+                        MelonLogger.Warning("[곡 목록 주입] 복제 템플릿으로 사용할 수 있는 원본 트랙을 찾지 못했습니다.");
                         return;
                     }
 
@@ -161,7 +180,7 @@ namespace DEFLATE_custom_chart.Hooks
                     cloneBlock,
                     () => cloneBlock.RegenerateID(),
                     "RegenerateID",
-                    new[] { "GenerateID", "RefreshID", "ResetID" });
+                    RegenerateIdFallbacks);
 
                 // 4) 사본 래퍼 갱신 및 커스텀 info.txt 메타데이터 / PNG 커버 자켓 주입
                 var cloneWrapper = new CustomTrackWrapper(cloneBlock);
@@ -177,13 +196,13 @@ namespace DEFLATE_custom_chart.Hooks
                         cloneBlock,
                         () => cloneBlock.uniqueID = fallbackId,
                         "uniqueID",
-                        new[] { "UniqueID", "id", "m_UniqueID", "trackID", "_uniqueID" },
+                        UniqueIdFallbacks,
                         fallbackId);
                     cloneWrapper.UniqueID = Il2CppReflectionHelper.GetValueResilient(
                         cloneBlock,
                         () => cloneBlock.uniqueID,
                         "uniqueID",
-                        new[] { "UniqueID", "id", "m_UniqueID", "trackID", "_uniqueID" },
+                        UniqueIdFallbacks,
                         fallbackId);
                 }
 

@@ -69,14 +69,16 @@ public static class RhythmGameController_InitializeKoreographyTracks_Patch
             if (__instance.processedDropSamples != null) __instance.processedDropSamples.Clear();
             __instance.nextDropEventIdx = 0;
 
-            // 2. BMS 14번 채널(드롭 레인) 노트를 dropEventSamples에 다시 채움
+            // 2. BMS 14번 채널(드롭 레인) 노트를 O(1) 레인 인덱스로 dropEventSamples에 다시 채움
             var bmsChart = HwaAssetManager.LoadedBmsChart;
             if (bmsChart != null && bmsChart.Notes.Count > 0 && __instance.dropEventSamples != null)
             {
-                foreach (var n in bmsChart.Notes)
+                var dropNotes = bmsChart.GetNotesForLane(BmsLaneMapper.Drop);
+                int targetSampleRate = koreo.SampleRate;
+                for (int i = 0; i < dropNotes.Count; i++)
                 {
-                    if (BmsLaneMapper.ResolveNoteLane(n) == BmsLaneMapper.Drop)
-                        __instance.dropEventSamples.Add(n.SamplePosition);
+                    var n = dropNotes[i];
+                    __instance.dropEventSamples.Add(ResolveSamplePosition(n.TimeSeconds, n.SamplePosition, bmsChart.SampleRate, targetSampleRate));
                 }
             }
 
