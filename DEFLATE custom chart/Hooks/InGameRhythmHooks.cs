@@ -245,6 +245,17 @@ namespace DEFLATE_custom_chart.Hooks
             }
         }
 
+        /// <summary>
+        /// <c>LaneController.laneType</c>를 열거형 <b>타입</b>에 컴파일 타임 의존 없이 박싱된 값으로 읽습니다.
+        /// 게임 1.2에서 <c>LaneType</c>이 최상위 → <c>LaneController.LaneType</c> 중첩으로 옮겨져, 타입을 직접 참조하면
+        /// 이 메서드를 호출하는 훅 전체가 JIT 단계에서 TypeLoadException으로 무력화되기 때문입니다.
+        /// 값의 ToString()(예: "HiHat_3")으로 <see cref="BmsLaneMapper"/>가 레인을 판정합니다.
+        /// </summary>
+        private static object ReadLaneTypeValue(LaneController lane)
+        {
+            return Il2CppReflectionHelper.GetValueResilient<object>(lane, null, "laneType", MemberFallbacks.Lane.LaneType, null);
+        }
+
         private static Il2CppSystem.Collections.Generic.List<KoreographyEvent> BuildBmsLaneEvents(
             RhythmGameController instance,
             string trackID,
@@ -278,7 +289,7 @@ namespace DEFLATE_custom_chart.Hooks
                 // =========================================================
                 // 1. 사용자 지정 규격 BMS ➔ DEFLATE 레인 노트 변환 주입 (O(1) 레인 인덱스 조회)
                 // =========================================================
-                string targetLane = BmsLaneMapper.ResolveLaneId(trackID, lane.laneType);
+                string targetLane = BmsLaneMapper.ResolveLaneId(trackID, ReadLaneTypeValue(lane));
 
                 if (targetLane != null)
                 {
@@ -331,7 +342,7 @@ namespace DEFLATE_custom_chart.Hooks
             }
 
             bool isTargetLane = string.Equals(trackID, "hihat_3", StringComparison.OrdinalIgnoreCase)
-                || lane.laneType == LaneType.HiHat_3;
+                || string.Equals(ReadLaneTypeValue(lane)?.ToString(), "HiHat_3", StringComparison.OrdinalIgnoreCase);
 
             if (isTargetLane && globalFirstStart != int.MaxValue)
             {
@@ -360,7 +371,8 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.LoadKoreographyEvents))]
         public static class RhythmGameController_LoadKoreographyEvents_Patch
         {
-            private const bool NoteManipulationEnabled = true;
+            // 디버그 스위치: false면 노트 주입 대신 원본 레인 노트(롱노트)만 로깅한다. readonly로 둬 CS0162 경고를 피한다.
+            private static readonly bool NoteManipulationEnabled = true;
 
             public static void Postfix(RhythmGameController __instance, string trackID, LaneController lane)
             {

@@ -26,7 +26,7 @@ DEFLATE는 `MainTrackList` 컴포넌트 내에 전체 곡 데이터 배열 (`Mai
 | `TrackTitle` | `string` | 곡 제목 |
 | `TrackAuthor` | `string` | 곡 아티스트 / 작곡가 |
 | `TrackAlbum` | `string` | 앨범명 |
-| `DiscID` | `int` | 디스크 번호 |
+| `DiscID` | `string` | 디스크 번호 (Il2Cpp 덤프 기준 `string`) |
 | `TrackCover` | `Sprite` | 곡 커버 / 자켓 이미지 스프라이트 (`sprite.name`, `texture`) |
 | `audioClip_Key` | `string` | BGM 오디오 에셋 키 (Addressables Key) |
 | `videoClip_Key` | `string` | BGA 비디오 에셋 키 (Addressables Key) |
@@ -183,8 +183,9 @@ $$\text{StartSample} = \text{Time (seconds)} \times \text{SampleRate}$$
 var bmsChart = HwaAssetManager.LoadedBmsChart;
 if (bmsChart != null && bmsChart.Notes.Count > 0)
 {
-    // trackID("hihat_2") 또는 LaneType 열거형 ➔ 레인 슬롯("lane_2")
-    string targetLane = BmsLaneMapper.ResolveLaneId(trackID, lane.laneType);
+    // trackID("hihat_2") 또는 laneType 열거형 '이름' ➔ 레인 슬롯("lane_2")
+    // 게임 1.2부터 LaneType은 LaneController.LaneType(중첩)이므로 타입을 직접 참조하지 않고 리플렉션으로 값만 읽는다.
+    string targetLane = BmsLaneMapper.ResolveLaneId(trackID, ReadLaneTypeValue(lane));
     if (targetLane != null)
     {
         // 파싱 시점에 사전 인덱싱된 레인별 노트를 O(1)로 조회
@@ -223,7 +224,7 @@ Koreography 엔진 기반의 DEFLATE에서 일반 단타(숏노트)와 롱노트
 ```csharp
 // 실전 검증 완료: 특정 레인(hihat_3)에 1.5초 롱노트 10연발 런타임 주입 (BMS가 없는 곡의 대체 경로)
 bool isTargetLane = string.Equals(trackID, "hihat_3", StringComparison.OrdinalIgnoreCase)
-    || lane.laneType == LaneType.HiHat_3;
+    || string.Equals(ReadLaneTypeValue(lane)?.ToString(), "HiHat_3", StringComparison.OrdinalIgnoreCase);
 
 lane.laneEvents?.Clear();
 

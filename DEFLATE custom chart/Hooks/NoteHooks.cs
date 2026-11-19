@@ -115,11 +115,19 @@ namespace DEFLATE_custom_chart.Hooks
             private static float _cachedSample;
             private static int _cachedSampleRate = 44100;
 
+            // 서킷 브레이커: 매 프레임·노트마다 호출되는 핫패스라 게임 업데이트로 필드가 깨지면
+            // 예외 비용이 프레임 드랍으로 직결된다. 연속 실패가 임계치를 넘으면 이번 곡 동안 흔들림을 끈다.
+            private const int MaxConsecutiveFailures = 32;
+            private static int _consecutiveFailures;
+            private static bool _tripped;
+
             public static void ResetFrameCache()
             {
                 _cachedFrame = -1;
                 _cachedSample = 0f;
                 _cachedSampleRate = 44100;
+                _consecutiveFailures = 0;
+                _tripped = false;
             }
 
             public static void Postfix(NoteObject __instance)
@@ -127,7 +135,7 @@ namespace DEFLATE_custom_chart.Hooks
                 try
                 {
                     var cfg = ModConfig.Instance;
-                    if (!cfg.NoteSway || __instance == null || __instance.isProcessed) return;
+                    if (_tripped || !cfg.NoteSway || __instance == null || __instance.isProcessed) return;
 
                     int frame = Time.frameCount;
                     if (_cachedFrame != frame)
@@ -172,10 +180,20 @@ namespace DEFLATE_custom_chart.Hooks
                     Vector3 pos = __instance.transform.localPosition;
                     pos.x += swayOffset;
                     __instance.transform.localPosition = pos;
+                    _consecutiveFailures = 0;
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // UpdateNotePosition은 매 프레임 다량 호출되므로 로그 부하 방지를 위해 조용히 무시
+                    // 매 프레임 다량 호출되므로 첫 실패만 기록하고, 연속 실패가 누적되면 이번 곡 동안 차단한다.
+                    if (_consecutiveFailures++ == 0)
+                    {
+                        MelonLogger.Warning($"[NoteSway] UpdateNotePosition Postfix 예외 (이후 동일 예외는 생략): {ex.GetType().Name}: {ex.Message}");
+                    }
+                    if (_consecutiveFailures >= MaxConsecutiveFailures && !_tripped)
+                    {
+                        _tripped = true;
+                        MelonLogger.Warning($"[NoteSway] 연속 {MaxConsecutiveFailures}회 실패로 이번 곡 동안 노트 흔들림을 비활성화합니다 (다음 곡 시작 시 재시도).");
+                    }
                 }
             }
         }

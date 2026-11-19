@@ -48,6 +48,12 @@ namespace DEFLATE_custom_chart.Core.Wrapper
             public static readonly string[] Label = { "NowTrackLabel", "nowTrackLabel", "TrackLabel" };
         }
 
+        public static class Lane
+        {
+            /// <summary>LaneController의 레인 종류 열거형 멤버. 열거형 타입 선언 위치가 바뀌어도 값은 이 이름으로 읽는다.</summary>
+            public static readonly string[] LaneType = { "LaneType", "m_laneType", "_laneType", "type" };
+        }
+
         public static class TrackList
         {
             public static readonly string[] NowSongId = { "nowSongID", "NowTrackID", "CurrentSongID" };

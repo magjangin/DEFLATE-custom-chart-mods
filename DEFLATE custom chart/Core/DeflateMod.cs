@@ -4,6 +4,9 @@ using DEFLATE_custom_chart.Core;
 
 [assembly: MelonInfo(typeof(DeflateMod), "DEFLATE Custom Chart & Song Logger Mod", "1.0.0", "Hwa-young-wang")]
 [assembly: MelonGame("dizzylab", "DEFLATE")]
+// MelonLoader의 자동 PatchAll()은 패치 클래스 하나만 실패해도 나머지 훅 적용이 전부 중단되므로 끄고,
+// OnInitializeMelon에서 SafePatcher로 패치 클래스 단위 격리 적용한다.
+[assembly: HarmonyDontPatchAll]
 
 namespace DEFLATE_custom_chart.Core
 {
@@ -18,6 +21,26 @@ namespace DEFLATE_custom_chart.Core
                 MelonLogger.Msg("  - Modular Architecture & Selection Interceptor");
                 MelonLogger.Msg("==================================================");
 
+                // 게임 버전/Unity/Steam Build ID 지문 기록 및 기준 빌드와 불일치 시 경고
+                GameCompat.LogFingerprint();
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Error($"[DeflateMod] 시작 배너/지문 기록 중 예외: {ex.Message}");
+            }
+
+            // 훅 적용은 설정/에셋 초기화 실패와 무관하게 반드시 시도한다.
+            try
+            {
+                SafePatcher.PatchAll(HarmonyInstance, MelonAssembly.Assembly);
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Error($"[DeflateMod] 훅 적용 중 치명적 예외: {ex.Message}\n{ex.StackTrace}");
+            }
+
+            try
+            {
                 // savecustomkey/config.txt 설정 로드 및 자동 생성 (디렉터리 생성 포함)
                 ModConfig.Initialize();
 
