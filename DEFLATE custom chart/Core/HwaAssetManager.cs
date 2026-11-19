@@ -202,16 +202,53 @@ namespace DEFLATE_custom_chart.Core
         }
 
         // =========================================================================
-        // BGA (.mp4) 에셋 적용
+        // 난이도 별 표시 안전 래퍼 (Il2CppSystem.Nullable<Color> 언박싱 NRE 방어)
         // =========================================================================
 
-        public static bool ApplyCustomBga(VideoPlayer videoPlayer, bool autoPlay = true)
+        /// <summary>
+        /// 게임 1.2의 <c>DiffStarsCtrl.GenerateStarImages(int, Il2CppSystem.Nullable&lt;Color&gt; = null)</c>은
+        /// C# <c>null</c>을 넘기면 Il2CppInterop 언박싱(<c>Il2CppObjectBaseToPtrNotNull</c>)에서
+        /// <see cref="NullReferenceException"/>이 발생합니다.
+        /// 반드시 <c>HasValue == false</c>인 빈 <c>Il2CppSystem.Nullable&lt;Color&gt;</c> 인스턴스를 전달합니다.
+        /// </summary>
+        public static void SafeGenerateStarImages(DiffStarsCtrl starsCtrl, int starCount)
+        {
+            if (starsCtrl == null) return;
+            starsCtrl.GenerateStarImages(starCount, new Il2CppSystem.Nullable<Color>());
+        }
+
+        // =========================================================================
+        // BGA (.mp4) 에셋 적용 및 인게임 오디오 음소거
+        // =========================================================================
+
+        /// <summary>
+        /// BGA용 VideoPlayer의 자체 오디오 트랙을 완전히 차단합니다.
+        /// 인게임(<c>RhythmGameController</c>)이나 결과 화면에서 <c>audioCom</c> BGM과
+        /// <c>video.mp4</c> 내부 오디오가 동시에 재생되는 이중 BGM 버그를 방지합니다.
+        /// </summary>
+        public static void MuteVideoPlayer(VideoPlayer videoPlayer)
+        {
+            if (videoPlayer == null) return;
+            try
+            {
+                videoPlayer.audioOutputMode = VideoAudioOutputMode.None;
+                videoPlayer.SetDirectAudioMute(0, true);
+            }
+            catch { }
+        }
+
+        public static bool ApplyCustomBga(VideoPlayer videoPlayer, bool autoPlay = true, bool muteAudio = false)
         {
             string url = BgaFileUrl;
             if (videoPlayer == null || string.IsNullOrEmpty(url)) return false;
 
             try
             {
+                if (muteAudio)
+                {
+                    MuteVideoPlayer(videoPlayer);
+                }
+
                 if (videoPlayer.source == VideoSource.Url &&
                     string.Equals(videoPlayer.url, url, StringComparison.Ordinal))
                 {
@@ -229,7 +266,7 @@ namespace DEFLATE_custom_chart.Core
                 {
                     videoPlayer.Play();
                 }
-                MelonLogger.Msg($"[HwaAssetManager] ★ Custom BGA 주입 성공 ★ 오브젝트: '{videoPlayer.name}' | URL: '{url}'");
+                MelonLogger.Msg($"[HwaAssetManager] ★ Custom BGA 주입 성공 ★ 오브젝트: '{videoPlayer.name}' | URL: '{url}'{(muteAudio ? " (음소거)" : "")}");
                 return true;
             }
             catch (Exception ex)
@@ -246,18 +283,67 @@ namespace DEFLATE_custom_chart.Core
         /// <param name="onFailed">선택된 커스텀 곡이 없거나 BGM 로드에 실패했을 때 호출됩니다.</param>
         public static IEnumerator LoadCustomBgmCoroutine(AudioSource targetAudioSource, bool forcePlay = true, Action<AudioClip> onLoaded = null, Action onFailed = null)
         {
-            var active = Active;
-            if (active == null)
+            return LoadCustomBgmForEntryCoroutine(Active, targetAudioSource, forcePlay, requireStillActive: false, onLoaded, onFailed);
+        }
+
+        /// <summary>
+        /// 특정 <paramref name="requestedEntry"/>의 BGM을 비동기 로드합니다.
+        /// <paramref name="requireStillActive"/>가 true이면 로드 완료 시점에 커서가 이미 다른 곡으로 이동한 경우
+        /// 재생/콜백을 취소하여 빠른 스크롤 중 이전 커스텀 곡 BGM이 겹쳐 들리는 경쟁 상태를 방지합니다.
+        /// </summary>
+        public static IEnumerator LoadCustomBgmForEntryCoroutine(
+            CustomSongEntry requestedEntry,
+            AudioSource targetAudioSource,
+            bool forcePlay = true,
+            bool requireStillActive = false,
+            Action<AudioClip> onLoaded = null,
+            Action onFailed = null)
+        {
+            if (requestedEntry == null)
             {
                 onFailed?.Invoke();
                 yield break;
             }
 
-            // 중첩 코루틴 지원 여부에 기대지 않고 내부 이터레이터를 직접 굴려 yield를 그대로 전달한다.
-            var inner = active.LoadBgmCoroutine(targetAudioSource, forcePlay, onLoaded, onFailed);
-            while (inner.MoveNext())
+            if (requireStillActive)
             {
-                yield return inner.Current;
+                // targetAudioSource를 직접 넘기지 않고 로드만 수행한 뒤, 여전히 활성 곡일 때만 적용한다.
+                AudioClip loadedClip = null;
+                bool failed = false;
+                var inner = requestedEntry.LoadBgmCoroutine(null, false, c => loadedClip = c, () => failed = true);
+                while (inner.MoveNext())
+                {
+                    yield return inner.Current;
+                }
+
+                if (!IsInSongSelectContext || !ReferenceEquals(Active, requestedEntry))
+                {
+                    yield break;
+                }
+
+                if (failed || loadedClip == null)
+                {
+                    onFailed?.Invoke();
+                    yield break;
+                }
+
+                if (targetAudioSource != null)
+                {
+                    targetAudioSource.Stop();
+                    targetAudioSource.clip = loadedClip;
+                    targetAudioSource.time = 0f;
+                    if (forcePlay) targetAudioSource.Play();
+                }
+
+                onLoaded?.Invoke(loadedClip);
+                yield break;
+            }
+
+            // 중첩 코루틴 지원 여부에 기대지 않고 내부 이터레이터를 직접 굴려 yield를 그대로 전달한다.
+            var direct = requestedEntry.LoadBgmCoroutine(targetAudioSource, forcePlay, onLoaded, onFailed);
+            while (direct.MoveNext())
+            {
+                yield return direct.Current;
             }
         }
 

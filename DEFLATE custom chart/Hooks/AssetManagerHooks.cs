@@ -20,15 +20,27 @@ namespace DEFLATE_custom_chart.Hooks
             {
                 try
                 {
-                    MelonLogger.Msg($"[★ 핵심 훅: TrackAssetManager.LoadAudioClip ★] BGM 오디오 클립 로드 요청! Key: '{key}'");
-
-                    // 곡 목록 프리뷰에서 사본("테스트 곡")이 선택된 상태로 자신의 오디오 Key가 요청된 경우에만
+                    // 곡 목록 프리뷰에서 커스텀 사본이 선택된 상태로 자신의 오디오 Key가 요청된 경우에만
                     // hwa/ 커스텀 BGM으로 오버라이드한다 (원본 WindShifter는 같은 Key를 써도 건드리지 않음).
+                    // 인접 곡 사전 로드(PreloadNearbyTracks) 로그 스팸을 피하기 위해 커스텀 오버라이드 시에만 기록한다.
                     if (HwaAssetManager.IsTargetAudioPreview(key) && !string.IsNullOrEmpty(HwaAssetManager.BgmFilePath))
                     {
+                        var requestedEntry = HwaAssetManager.Active;
+                        if (requestedEntry != null && requestedEntry.BgmClip != null)
+                        {
+                            MelonLogger.Msg($"[HwaAssetManager] ★ 곡 목록 프리뷰 Custom BGM 즉시 오버라이드(캐시) ★ Key: '{key}'");
+                            onSuccess?.Invoke(requestedEntry.BgmClip);
+                            return false;
+                        }
+
                         MelonLogger.Msg($"[HwaAssetManager] ★ 곡 목록 프리뷰 Custom BGM 오버라이드 ★ Key: '{key}'");
                         // 원본 로드를 건너뛰므로, 실패하면 onFail을 불러 게임이 계속 기다리지 않게 한다.
-                        MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(null, false,
+                        // 빠른 스크롤 중 커서가 이미 다른 곡으로 넘어갔다면 지연된 콜백을 취소한다.
+                        MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmForEntryCoroutine(
+                            requestedEntry,
+                            null,
+                            false,
+                            requireStillActive: true,
                             clip => onSuccess?.Invoke(clip),
                             () => onFail?.Invoke()));
                         return false;
@@ -48,14 +60,6 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prefix(ref string key)
             {
-                try
-                {
-                    MelonLogger.Msg($"[에셋 매니저 BGA] VideoClip 로드 요청 Key: '{key}'");
-                }
-                catch (Exception ex)
-                {
-                    MelonLogger.Warning($"[TrackAssetManager.LoadVideoClip] Prefix 처리 중 예외: {ex.Message}");
-                }
                 return true;
             }
         }
@@ -63,17 +67,113 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(TrackAssetManager), nameof(TrackAssetManager.LoadVideoURL))]
         public static class TrackAssetManager_LoadVideoURL_Patch
         {
-            public static bool Prefix(ref string key)
+            public static bool Prefix(ref string key, Il2CppSystem.Action<string> onSuccess, Il2CppSystem.Action onFail)
             {
                 try
                 {
-                    MelonLogger.Msg($"[에셋 매니저 BGA] VideoURL 로드 요청 Key: '{key}'");
+                    if (HwaAssetManager.IsInSongSelectContext &&
+                        HwaAssetManager.IsTargetTrackActive &&
+                        !string.IsNullOrEmpty(HwaAssetManager.BgaFileUrl))
+                    {
+                        MelonLogger.Msg($"[HwaAssetManager] ★ 곡 목록 프리뷰 Custom BGA URL 오버라이드 ★ Key: '{key}'");
+                        onSuccess?.Invoke(HwaAssetManager.BgaFileUrl);
+                        return false;
+                    }
                 }
                 catch (Exception ex)
                 {
                     MelonLogger.Warning($"[TrackAssetManager.LoadVideoURL] Prefix 처리 중 예외: {ex.Message}");
                 }
                 return true;
+            }
+        }
+
+        // =========================================================================
+        // 곡 선택 씬(FavControl) 프리뷰 오디오 직접 인터셉터
+        // TrackAssetManager.audioCache에 인접 곡 사전 로드로 숙주 곡 OGG가 캐시되어 있어도
+        // 커스텀 곡 선택 중에는 절대로 숙주 곡 BGM이 재생되지 않도록 차단한다.
+        // =========================================================================
+
+        [HarmonyPatch(typeof(FavControl), "SafeLoadAndPlayAudio")]
+        public static class FavControl_SafeLoadAndPlayAudio_Patch
+        {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(FavControl), "SafeLoadAndPlayAudio");
+
+            public static bool Prefix(string addressKey, AudioSource audioSource)
+            {
+                try
+                {
+                    if (!HwaAssetManager.IsInSongSelectContext || !HwaAssetManager.IsTargetTrackActive) return true;
+                    if (audioSource == null || string.IsNullOrEmpty(HwaAssetManager.BgmFilePath)) return true;
+
+                    var requestedEntry = HwaAssetManager.Active;
+                    if (requestedEntry == null) return true;
+
+                    if (requestedEntry.BgmClip != null)
+                    {
+                        if (audioSource.clip != requestedEntry.BgmClip || !audioSource.isPlaying)
+                        {
+                            audioSource.Stop();
+                            audioSource.clip = requestedEntry.BgmClip;
+                            audioSource.time = 0f;
+                            audioSource.Play();
+                        }
+                        return false;
+                    }
+
+                    // 로드 중 숙주 곡 잔여 오디오 차단
+                    audioSource.Stop();
+                    MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmForEntryCoroutine(
+                        requestedEntry,
+                        audioSource,
+                        forcePlay: true,
+                        requireStillActive: true));
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[FavControl.SafeLoadAndPlayAudio] Prefix 처리 중 예외: {ex.Message}");
+                    return true;
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(FavControl), "PlayAudioWhenReady")]
+        public static class FavControl_PlayAudioWhenReady_Patch
+        {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(FavControl), "PlayAudioWhenReady");
+
+            public static bool Prefix(AudioSource audioSource, ref AudioClip clip)
+            {
+                try
+                {
+                    if (!HwaAssetManager.IsInSongSelectContext || !HwaAssetManager.IsTargetTrackActive) return true;
+                    if (string.IsNullOrEmpty(HwaAssetManager.BgmFilePath)) return true;
+
+                    var customClip = HwaAssetManager.CustomBgmClip;
+                    if (customClip != null)
+                    {
+                        clip = customClip;
+                        return true;
+                    }
+
+                    // 커스텀 BGM이 아직 로딩 중이면 숙주 곡 클립 재생을 막고 완료 후 재생한다.
+                    if (audioSource != null)
+                    {
+                        audioSource.Stop();
+                        MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmForEntryCoroutine(
+                            HwaAssetManager.Active,
+                            audioSource,
+                            forcePlay: true,
+                            requireStillActive: true));
+                    }
+                    return false;
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[FavControl.PlayAudioWhenReady] Prefix 처리 중 예외: {ex.Message}");
+                    return true;
+                }
             }
         }
 
@@ -181,6 +281,12 @@ namespace DEFLATE_custom_chart.Hooks
                 if (player == null) return;
                 if (!HwaAssetManager.IsTargetTrackActive) return;
 
+                // 인게임/결과 화면에서는 audioCom이 BGM을 담당하므로 VideoPlayer 자체 오디오를 항상 음소거한다.
+                if (!HwaAssetManager.IsInSongSelectContext)
+                {
+                    HwaAssetManager.MuteVideoPlayer(player);
+                }
+
                 string bgaUrl = HwaAssetManager.BgaFileUrl;
                 if (string.IsNullOrEmpty(bgaUrl)) return;
 
@@ -231,10 +337,13 @@ namespace DEFLATE_custom_chart.Hooks
                     if (__instance == null || __instance.tracks == null) return;
                     MelonLogger.Msg($"[★ MainTrackList.Start 감지 ★] 총 곡 수: {__instance.tracks.Count}개");
 
-                    // 주입된 커스텀 곡 사본 블록에만 각자의 PNG 커버 적용 (원본 곡들은 건드리지 않음)
+                    // 주입된 커스텀 곡 사본 블록에만 각자의 PNG 커버 적용 (원본 곡 116+개는 이름 체크로 즉시 건너뜀)
+                    if (!CustomSongLibrary.HasSongs) return;
+
                     foreach (var trackBlock in __instance.tracks)
                     {
-                        if (trackBlock == null) continue;
+                        if (trackBlock == null || trackBlock.gameObject == null) continue;
+                        if (!trackBlock.gameObject.name.Contains("_Custom_")) continue;
 
                         string uniqueId = Il2CppReflectionHelper.GetValueResilient(trackBlock, () => trackBlock.uniqueID, "uniqueID", MemberFallbacks.TrackBlock.UniqueId, string.Empty);
                         var entry = CustomSongLibrary.FindByTrackID(uniqueId);
@@ -242,6 +351,9 @@ namespace DEFLATE_custom_chart.Hooks
 
                         var customCover = entry.LoadCoverSprite();
                         if (customCover == null) continue;
+
+                        var currentCover = Il2CppReflectionHelper.GetValueResilient<Sprite>(trackBlock, () => trackBlock.TrackCover, "TrackCover", MemberFallbacks.TrackBlock.Cover, null);
+                        if (currentCover == customCover) continue;
 
                         Il2CppReflectionHelper.SetValueResilient(trackBlock, () => trackBlock.TrackCover = customCover, "TrackCover", MemberFallbacks.TrackBlock.Cover, customCover);
                         string title = Il2CppReflectionHelper.GetValueResilient(trackBlock, () => trackBlock.TrackTitle, "TrackTitle", MemberFallbacks.TrackBlock.Title, entry.Meta.Title);
@@ -298,13 +410,13 @@ namespace DEFLATE_custom_chart.Hooks
                     // 자켓 PNG 주입 (사본 전용)
                     HwaAssetManager.ApplyCustomCoverToHierarchy(__instance.gameObject);
 
-                    // BGA 주입 (사본 전용)
+                    // BGA 주입 (사본 전용, 결과 화면 파형 미리듣기 BGM과 겹치지 않도록 음소거)
                     var players = __instance.GetComponentsInChildren<VideoPlayer>(true);
                     if (players != null)
                     {
                         foreach (var vp in players)
                         {
-                            HwaAssetManager.ApplyCustomBga(vp, true);
+                            HwaAssetManager.ApplyCustomBga(vp, true, muteAudio: true);
                         }
                     }
                 }
@@ -336,7 +448,7 @@ namespace DEFLATE_custom_chart.Hooks
                     {
                         foreach (var vp in players)
                         {
-                            HwaAssetManager.ApplyCustomBga(vp, true);
+                            HwaAssetManager.ApplyCustomBga(vp, true, muteAudio: true);
                         }
                     }
                 }

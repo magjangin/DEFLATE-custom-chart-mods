@@ -129,6 +129,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
             WriteBlockMember(targetBlock, targetObj, b => b.TrackTitle = Title, "TrackTitle", MemberFallbacks.TrackBlock.Title, Title);
             WriteBlockMember(targetBlock, targetObj, b => b.TrackAuthor = Artist, "TrackAuthor", MemberFallbacks.TrackBlock.Artist, Artist);
             WriteBlockMember(targetBlock, targetObj, b => b.TrackAlbum = AlbumName, "TrackAlbum", MemberFallbacks.TrackBlock.Album, AlbumName);
+            WriteBlockMember(targetBlock, targetObj, b => b.DiscID = DiscID, "DiscID", MemberFallbacks.TrackBlock.DiscId, DiscID);
             WriteBlockMember(targetBlock, targetObj, b => b.audioClip_Key = AudioKey, "audioClip_Key", MemberFallbacks.TrackBlock.AudioKey, AudioKey);
             WriteBlockMember(targetBlock, targetObj, b => b.videoClip_Key = VideoKey, "videoClip_Key", MemberFallbacks.TrackBlock.VideoKey, VideoKey);
             WriteBlockMember(targetBlock, targetObj, b => b.EZ_TrackKore_Key = EZ_KoreKey, "EZ_TrackKore_Key", MemberFallbacks.TrackBlock.EzKoreKey, EZ_KoreKey);

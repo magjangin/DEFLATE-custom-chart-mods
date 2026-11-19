@@ -215,6 +215,13 @@ namespace DEFLATE_custom_chart.Hooks
                 var customCover = entry.LoadCoverSprite();
 
                 cloneWrapper.ApplySongMetadata(meta, customCover);
+                // 숙주 곡의 온라인 코멘트 조회(DiscID) 차단
+                cloneWrapper.DiscID = string.Empty;
+                // 커스텀 BGA(.mp4)가 없는 곡은 숙주 곡의 PV 비디오+오디오가 재생되지 않도록 VideoKey를 비운다.
+                if (string.IsNullOrEmpty(entry.BgaFilePath))
+                {
+                    cloneWrapper.VideoKey = string.Empty;
+                }
                 cloneWrapper.ApplyTo(cloneBlock);
 
                 // 5) 커스텀 에셋 타겟 정보 및 O(1) 조회 인덱스 등록

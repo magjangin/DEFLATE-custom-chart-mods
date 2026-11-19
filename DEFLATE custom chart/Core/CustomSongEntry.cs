@@ -424,13 +424,18 @@ namespace DEFLATE_custom_chart.Core
         {
             if (targetAudioSource != null)
             {
-                targetAudioSource.Stop();
-                targetAudioSource.clip = BgmClip;
-                targetAudioSource.time = 0f;
-                if (forcePlay) targetAudioSource.Play();
+                if (targetAudioSource.clip != BgmClip || !targetAudioSource.isPlaying)
+                {
+                    targetAudioSource.Stop();
+                    targetAudioSource.clip = BgmClip;
+                    targetAudioSource.time = 0f;
+                    if (forcePlay) targetAudioSource.Play();
+                }
             }
 
-            string tag = fromCache ? "캐시된 Custom BGM 즉시 적용" : "★ Custom BGM 주입 및 재생 성공 ★";
+            string tag = targetAudioSource == null && !forcePlay
+                ? (fromCache ? "Custom BGM 캐시 확인" : "Custom BGM 사전 로드 완료")
+                : (fromCache ? "캐시된 Custom BGM 즉시 적용" : "★ Custom BGM 주입 및 재생 성공 ★");
             MelonLogger.Msg($"[커스텀 곡] {tag}: '{Meta.Title}' ➔ '{BgmClip.name}' ({BgmClip.length:F2}초)");
 
             onLoaded?.Invoke(BgmClip);

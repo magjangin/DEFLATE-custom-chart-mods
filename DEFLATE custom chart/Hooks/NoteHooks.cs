@@ -35,13 +35,21 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(GameData), nameof(GameData.SaveGameData))]
         public static class GameData_SaveGameData_Patch
         {
+            private static bool _loggedOnce;
+
+            public static bool Prepare() => ModConfig.Instance.BlockSave;
+
             public static bool Prefix()
             {
                 try
                 {
                     if (ModConfig.Instance.BlockSave)
                     {
-                        MelonLogger.Msg("[ModConfig] BlockSave=1: 게임 스코어 및 랭킹 데이터 저장을 차단했습니다.");
+                        if (!_loggedOnce)
+                        {
+                            _loggedOnce = true;
+                            MelonLogger.Msg("[ModConfig] BlockSave=1: 게임 스코어 및 랭킹 데이터 저장을 차단합니다 (이후 동일 로그 생략).");
+                        }
                         return false;
                     }
                 }
@@ -59,6 +67,7 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(NoteObject), nameof(NoteObject.Initialize))]
         public static class NoteObject_Initialize_Patch
         {
+            public static bool Prepare() => ModConfig.Instance.NoteSpeedChaos;
             private static float DeterministicFloat01(int seed)
             {
                 unchecked
@@ -109,7 +118,7 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(NoteObject), "UpdateNotePosition")]
         public static class NoteObject_UpdateNotePosition_Patch
         {
-            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(NoteObject), "UpdateNotePosition");
+            public static bool Prepare() => ModConfig.Instance.NoteSway && Il2CppReflectionHelper.HasPatchTarget(typeof(NoteObject), "UpdateNotePosition");
 
             private static int _cachedFrame = -1;
             private static float _cachedSample;

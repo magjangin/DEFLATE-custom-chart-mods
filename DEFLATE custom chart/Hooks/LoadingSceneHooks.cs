@@ -47,7 +47,7 @@ namespace DEFLATE_custom_chart.Hooks
 
                 if (instance.NowTrackScore != null) instance.NowTrackScore.text = meta.ChartAuthor;
                 if (instance.NowTrackDifficulty != null) instance.NowTrackDifficulty.text = targetStar.ToString();
-                if (instance.diffStarsCtrl != null) instance.diffStarsCtrl.GenerateStarImages(targetStar);
+                if (instance.diffStarsCtrl != null) HwaAssetManager.SafeGenerateStarImages(instance.diffStarsCtrl, targetStar);
 
                 if (customCover != null)
                 {
