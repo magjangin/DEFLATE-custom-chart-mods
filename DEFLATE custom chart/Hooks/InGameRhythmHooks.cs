@@ -93,6 +93,12 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.Start))]
         public static class RhythmGameController_Start_Patch
         {
+            // 최후 안전망: 어떤 경로로 인게임에 들어오든 곡 선택 전용 훅이 인게임 요청에 끼어들지 않게 한다.
+            public static void Prefix()
+            {
+                HwaAssetManager.EnterGameplay("RhythmGameController.Start");
+            }
+
             public static void Postfix(RhythmGameController __instance)
             {
                 try
@@ -120,7 +126,7 @@ namespace DEFLATE_custom_chart.Hooks
                         isTargetTrack = HwaAssetManager.SetActiveTrack(nowTrackId, nowTrackTitle);
                         MelonLogger.Msg($"  - 커스텀 에셋 사본 여부: {isTargetTrack}");
                     }
-                    if (DEFLATE_custom_chart.Core.ModConfig.Instance.AutoMode)
+                    if (DEFLATE_custom_chart.Core.ModConfig.Instance.AutoMode || SmokeTest.IsRunning)
                     {
                         __instance.autoMode = true;
                         MelonLogger.Msg("  [ModConfig] 오토 모드(AutoMode) 강제 활성화!");
@@ -164,6 +170,8 @@ namespace DEFLATE_custom_chart.Hooks
                     MelonLogger.Msg($"  - HitWindowSampleWidth_hi: {__instance.HitWindowSampleWidth_hi}");
                     MelonLogger.Msg($"  - WindowSizeInUnits:       {__instance.WindowSizeInUnits}");
                     MelonLogger.Msg("==================================================");
+
+                    SmokeTest.OnInGameStart(__instance);
                 }
                 catch (Exception ex)
                 {
@@ -458,6 +466,7 @@ namespace DEFLATE_custom_chart.Hooks
 
                     lane.laneEvents = events;
                     lane.pendingEventIdx = 0;
+                    SmokeTest.RecordLaneInjection(events.Count);
                 }
                 catch (Exception ex)
                 {
@@ -622,6 +631,7 @@ namespace DEFLATE_custom_chart.Hooks
                     // (기존 리스트를 Clear()하지 않는 건 그 리스트가 원본 Koreography 트랙과 공유될 가능성을 피하기 위함)
                     lane.laneEvents = events;
                     lane.pendingEventIdx = 0;
+                    SmokeTest.RecordLineBarInjection(events.Count);
                 }
                 catch (Exception ex)
                 {

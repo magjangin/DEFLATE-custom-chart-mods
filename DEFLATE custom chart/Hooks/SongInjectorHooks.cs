@@ -20,7 +20,13 @@ namespace DEFLATE_custom_chart.Hooks
         private const string TargetKeyword = "WindShifter";
 
         /// <summary>사본 GameObject 이름에 붙는 표식. 원곡 블록과 사본 블록을 구분하는 데 쓴다.</summary>
-        private const string CloneNameMarker = "_Custom_";
+        internal const string CloneNameMarker = "_Custom_";
+
+        /// <summary>이 모드가 복제해 주입한 커스텀 곡 블록인지 (GameObject 이름 표식 기준).</summary>
+        internal static bool IsCustomBlock(MainTrackListBlock block)
+        {
+            return block != null && block.gameObject != null && block.gameObject.name.Contains(CloneNameMarker);
+        }
 
         [HarmonyPatch(typeof(MainTrackList), nameof(MainTrackList.Start))]
         public static class MainTrackList_Start_InjectCopy_Patch
@@ -30,7 +36,7 @@ namespace DEFLATE_custom_chart.Hooks
             {
                 try
                 {
-                    HwaAssetManager.IsInSongSelectContext = true;
+                    HwaAssetManager.EnterSongSelect();
                     CustomAlbumManager.Clear();
 
                     if (__instance == null || __instance.tracks == null || __instance.tracks.Length == 0) return;
