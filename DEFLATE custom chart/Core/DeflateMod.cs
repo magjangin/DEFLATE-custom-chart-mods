@@ -29,6 +29,16 @@ namespace DEFLATE_custom_chart.Core
                 MelonLogger.Error($"[DeflateMod] 시작 배너/지문 기록 중 예외: {ex.Message}");
             }
 
+            // 설정을 먼저 로드해야 SafePatcher가 NoteSway/NoteSpeedChaos/BlockSave 등 비활성 핫패스 훅을 Prepare()에서 건너뛸 수 있다.
+            try
+            {
+                ModConfig.Initialize();
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Error($"[DeflateMod] 설정 초기화 실패 (기본값으로 계속 진행): {ex.Message}");
+            }
+
             // 훅 적용은 설정/에셋 초기화 실패와 무관하게 반드시 시도한다.
             try
             {
@@ -41,15 +51,12 @@ namespace DEFLATE_custom_chart.Core
 
             try
             {
-                // savecustomkey/config.txt 설정 로드 및 자동 생성 (디렉터리 생성 포함)
-                ModConfig.Initialize();
-
                 // hwa/ 에셋 매니저 초기화 및 3종 에셋(BGM, BGA, Cover) 스캔 (디렉터리 생성 포함)
                 HwaAssetManager.Initialize();
             }
             catch (Exception ex)
             {
-                MelonLogger.Error($"[DeflateMod] 초기화 중 치명적 예외 발생: {ex.Message}\n{ex.StackTrace}");
+                MelonLogger.Error($"[DeflateMod] 에셋 초기화 중 치명적 예외 발생: {ex.Message}\n{ex.StackTrace}");
             }
         }
     }

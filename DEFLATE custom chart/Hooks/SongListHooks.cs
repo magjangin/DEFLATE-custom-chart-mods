@@ -1,5 +1,4 @@
 using System;
-using System.Text;
 using MelonLoader;
 using HarmonyLib;
 using Il2Cppdizzylab.castor;
@@ -24,45 +23,28 @@ namespace DEFLATE_custom_chart.Hooks
 
                     if (__instance == null || __instance.tracks == null) return;
 
-                    MelonLogger.Msg("--------------------------------------------------");
-                    MelonLogger.Msg($"[곡 목록 카탈로그 스캔 완료] 전체 수록곡: 총 {__instance.tracks.Length}곡");
-                    MelonLogger.Msg("--------------------------------------------------");
-
-                    var sb = new StringBuilder();
+                    // 117+곡 전체 카탈로그 덤프는 씬 진입마다 ~1,000줄 I/O 스팸 및 117개 래퍼 할당 병목을 유발하므로
+                    // 요약 + 주입된 커스텀 곡만 간결하게 기록한다.
+                    int customCount = 0;
                     for (int i = 0; i < __instance.tracks.Length; i++)
                     {
                         var track = __instance.tracks[i];
-                        if (track == null) continue;
+                        if (track == null || track.gameObject == null) continue;
+                        if (!track.gameObject.name.Contains("_Custom_")) continue;
 
+                        customCount++;
                         try
                         {
                             var wrapped = new CustomTrackWrapper(track);
-                            string coverInfoStr = "없음";
-                            if (wrapped.CoverSprite != null)
-                            {
-                                var sprite = wrapped.CoverSprite;
-                                string texInfo = sprite.texture != null ? $"{sprite.texture.width}x{sprite.texture.height}" : "NoTexture";
-                                coverInfoStr = $"'{sprite.name}' ({texInfo})";
-                            }
-
-                            sb.Clear();
-                            sb.AppendLine($"[트랙 #{i + 1}] ID: {wrapped.UniqueID} | 제목: {wrapped.Title} | 아티스트: {wrapped.Artist}");
-                            sb.AppendLine($"  - 앨범: {wrapped.AlbumName} | 디스크: {wrapped.DiscID}");
-                            sb.AppendLine($"  - 자켓 이미지: {coverInfoStr}");
-                            sb.AppendLine($"  - 오디오 Key: {wrapped.AudioKey}");
-                            sb.AppendLine($"  - 비디오 Key: {wrapped.VideoKey}");
-                            sb.AppendLine($"  - Easy 차트 Key: {wrapped.EZ_KoreKey} (★{wrapped.EZ_Star})");
-                            sb.AppendLine($"  - Normal 차트 Key: {wrapped.NM_KoreKey} (★{wrapped.NM_Star})");
-                            sb.AppendLine($"  - Hard 차트 Key: {wrapped.HD_KoreKey} (★{wrapped.HD_Star})");
-
-                            MelonLogger.Msg(sb.ToString().TrimEnd());
+                            MelonLogger.Msg($"  [커스텀 트랙 #{i + 1}] '{wrapped.Title}' / {wrapped.Artist} (앨범: '{wrapped.AlbumName}', ID: {wrapped.UniqueID}, ★{wrapped.EZ_Star}/{wrapped.NM_Star}/{wrapped.HD_Star})");
                         }
                         catch (Exception trackEx)
                         {
-                            MelonLogger.Warning($"[곡 목록 스캔] 트랙 #{i + 1} 로깅 중 예외: {trackEx.Message}");
+                            MelonLogger.Warning($"[곡 목록 스캔] 커스텀 트랙 #{i + 1} 로깅 중 예외: {trackEx.Message}");
                         }
                     }
-                    MelonLogger.Msg("--------------------------------------------------");
+
+                    MelonLogger.Msg($"[곡 목록 카탈로그] 총 {__instance.tracks.Length}곡 (커스텀 {customCount}곡)");
                 }
                 catch (Exception ex)
                 {
@@ -187,7 +169,7 @@ namespace DEFLATE_custom_chart.Hooks
             return meta.GetLevelForDifficulty((int)diffCtrl.myDifficulty);
         }
 
-        private static void ApplyCustomDiffDisplay(DiffCtrl diffCtrl)
+        private static void ApplyCustomDiffDisplay(DiffCtrl diffCtrl, bool logUpdate = false)
         {
             try
             {
@@ -197,12 +179,16 @@ namespace DEFLATE_custom_chart.Hooks
 
                 if (diffCtrl.starsCtrl != null)
                 {
-                    diffCtrl.starsCtrl.GenerateStarImages(targetStar);
+                    HwaAssetManager.SafeGenerateStarImages(diffCtrl.starsCtrl, targetStar);
                 }
 
                 if (diffCtrl.Diff_Text != null)
                 {
-                    diffCtrl.Diff_Text.text = targetStar.ToString();
+                    string levelStr = targetStar.ToString();
+                    if (!string.Equals(diffCtrl.Diff_Text.text, levelStr, StringComparison.Ordinal))
+                    {
+                        diffCtrl.Diff_Text.text = levelStr;
+                    }
                 }
 
                 if (diffCtrl.gameData != null)
@@ -211,7 +197,10 @@ namespace DEFLATE_custom_chart.Hooks
                     Il2CppReflectionHelper.SetValueResilient(diffCtrl.gameData, () => diffCtrl.gameData.NowTrackLevel = levelStr, "NowTrackLevel", MemberFallbacks.GameData.Level, levelStr);
                 }
 
-                MelonLogger.Msg($"[DiffCtrl UI 난이도 갱신] 난이도: {diffCtrl.myDifficulty} -> ★{targetStar}");
+                if (logUpdate)
+                {
+                    MelonLogger.Msg($"[DiffCtrl UI 난이도 갱신] 난이도: {diffCtrl.myDifficulty} -> ★{targetStar}");
+                }
             }
             catch (Exception ex)
             {
@@ -224,7 +213,7 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static void Postfix(DiffCtrl __instance)
             {
-                ApplyCustomDiffDisplay(__instance);
+                ApplyCustomDiffDisplay(__instance, logUpdate: false);
             }
         }
 
@@ -236,8 +225,7 @@ namespace DEFLATE_custom_chart.Hooks
                 try
                 {
                     if (__instance == null) return;
-                    ApplyCustomDiffDisplay(__instance);
-                    MelonLogger.Msg($"[난이도 변경] 선택된 난이도: {__instance.myDifficulty}");
+                    ApplyCustomDiffDisplay(__instance, logUpdate: true);
                 }
                 catch (Exception ex)
                 {
@@ -254,8 +242,7 @@ namespace DEFLATE_custom_chart.Hooks
                 try
                 {
                     if (__instance == null) return;
-                    ApplyCustomDiffDisplay(__instance);
-                    MelonLogger.Msg($"[난이도 변경] 선택된 난이도: {__instance.myDifficulty}");
+                    ApplyCustomDiffDisplay(__instance, logUpdate: true);
                 }
                 catch (Exception ex)
                 {

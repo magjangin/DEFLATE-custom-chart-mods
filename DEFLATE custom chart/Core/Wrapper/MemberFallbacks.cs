@@ -59,5 +59,10 @@ namespace DEFLATE_custom_chart.Core.Wrapper
             public static readonly string[] NowSongId = { "nowSongID", "NowTrackID", "CurrentSongID" };
             public static readonly string[] BlockCtrlUniqueId = { "uniqueID", "m_UniqueID", "trackID" };
         }
+
+        public static class Koreography
+        {
+            public static readonly string[] SourceClip = { "mSourceClip", "sourceClip", "audioClip" };
+        }
     }
 }

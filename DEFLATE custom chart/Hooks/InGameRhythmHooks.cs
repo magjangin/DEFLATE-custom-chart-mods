@@ -23,19 +23,51 @@ namespace DEFLATE_custom_chart.Hooks
             return precomputedSample;
         }
 
+        private static void ApplyCustomClipToKoreography(Koreography koreo)
+        {
+            if (koreo == null || !HwaAssetManager.IsTargetTrackActive) return;
+            var customClip = HwaAssetManager.CustomBgmClip;
+            if (customClip == null) return;
+
+            Il2CppReflectionHelper.SetValueResilient(
+                koreo,
+                () => koreo.SourceClip = customClip,
+                "SourceClip",
+                MemberFallbacks.Koreography.SourceClip,
+                customClip);
+        }
+
         private static void EnsureInGameCustomBgm(RhythmGameController instance, string contextTag)
         {
             if (instance == null || instance.audioCom == null) return;
             if (!HwaAssetManager.IsTargetTrackActive || string.IsNullOrEmpty(HwaAssetManager.BgmFilePath)) return;
 
-            if (HwaAssetManager.CustomBgmClip != null)
+            var customClip = HwaAssetManager.CustomBgmClip;
+            if (customClip != null)
             {
-                instance.audioCom.clip = HwaAssetManager.CustomBgmClip;
+                if (instance.audioCom.clip == customClip && !instance.audioCom.mute)
+                {
+                    return;
+                }
+
+                // 숙주 곡 오디오가 재생 중이면 즉시 정지시킨 뒤 커스텀 클립으로 교체한다.
+                if (instance.audioCom.isPlaying && instance.audioCom.clip != customClip)
+                {
+                    instance.audioCom.Stop();
+                }
+
+                instance.audioCom.clip = customClip;
                 instance.audioCom.mute = false;
-                MelonLogger.Msg($"  - [{contextTag}] Custom BGM 사전 클립 0ms 즉시 할당 완료: '{HwaAssetManager.CustomBgmClip.name}'");
+                MelonLogger.Msg($"  - [{contextTag}] Custom BGM 사전 클립 0ms 즉시 할당 완료: '{customClip.name}'");
                 return;
             }
 
+            // 커스텀 BGM이 아직 로딩 중이면 숙주 곡 클립이 재생되지 않도록 정지·비움·음소거한다.
+            if (instance.audioCom.isPlaying)
+            {
+                instance.audioCom.Stop();
+            }
+            instance.audioCom.clip = null;
             instance.audioCom.mute = true;
             MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(
                 instance.audioCom,
@@ -45,6 +77,7 @@ namespace DEFLATE_custom_chart.Hooks
                     if (instance != null && instance.audioCom != null)
                     {
                         instance.audioCom.mute = false;
+                        ApplyCustomClipToKoreography(instance.playingKoreo);
                     }
                 },
                 () =>
@@ -101,10 +134,14 @@ namespace DEFLATE_custom_chart.Hooks
                         // hwa/ Custom BGM (.ogg/.wav/.mp3) 사전 로드된 클립 0ms 즉시 할당 (원곡 소리 튐 차단)
                         EnsureInGameCustomBgm(__instance, "Start");
 
-                        // hwa/ Custom BGA (.mp4) 사전 주입 (사본 전용)
+                        // hwa/ Custom BGA (.mp4) 사전 주입 (사본 전용, 인게임에서는 audioCom과 겹치지 않도록 음소거)
                         if (__instance.videoPlayer != null)
                         {
-                            HwaAssetManager.ApplyCustomBga(__instance.videoPlayer, false);
+                            HwaAssetManager.ApplyCustomBga(__instance.videoPlayer, false, muteAudio: true);
+                        }
+                        if (__instance.videoPlayer_playdata != null)
+                        {
+                            HwaAssetManager.MuteVideoPlayer(__instance.videoPlayer_playdata);
                         }
 
                         // hwa/ Custom PNG 커버 자켓 사전 주입 (사본 전용)
@@ -196,6 +233,10 @@ namespace DEFLATE_custom_chart.Hooks
 
                     if (HwaAssetManager.IsTargetTrackActive)
                     {
+                        // 0. 숙주 Koreography의 SourceClip 및 audioCom을 커스텀 BGM으로 고정 (숙주 BGM 재바인딩 차단)
+                        ApplyCustomClipToKoreography(koreo);
+                        EnsureInGameCustomBgm(__instance, "InitializeKoreographyTracks");
+
                         // 1. 드롭 심벌 전용 독립 배열 초기화
                         if (__instance.dropEventSamples != null) __instance.dropEventSamples.Clear();
                         if (__instance.processedDropSamples != null) __instance.processedDropSamples.Clear();
@@ -685,6 +726,85 @@ namespace DEFLATE_custom_chart.Hooks
             }
         }
 
+        // =========================================================================
+        // 인게임 BGM 바인딩 가드: 게임 1.2의 비동기 Koreography 바인딩 경로가
+        // audioCom.clip을 숙주 곡(WindShifter)의 SourceClip으로 덮어쓰는 것을 원천 차단한다.
+        // =========================================================================
+
+        [HarmonyPatch(typeof(RhythmGameController), "EnsureAudioSourceBound")]
+        public static class RhythmGameController_EnsureAudioSourceBound_Patch
+        {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "EnsureAudioSourceBound");
+
+            public static void Prefix(RhythmGameController __instance, Koreography kore)
+            {
+                try
+                {
+                    if (!HwaAssetManager.IsTargetTrackActive) return;
+                    ApplyCustomClipToKoreography(kore);
+                    EnsureInGameCustomBgm(__instance, "EnsureAudioSourceBound.Pre");
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[EnsureAudioSourceBound] Prefix 예외: {ex.Message}");
+                }
+            }
+
+            public static void Postfix(RhythmGameController __instance)
+            {
+                try
+                {
+                    if (!HwaAssetManager.IsTargetTrackActive) return;
+                    EnsureInGameCustomBgm(__instance, "EnsureAudioSourceBound.Post");
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[EnsureAudioSourceBound] Postfix 예외: {ex.Message}");
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(RhythmGameController), "BindAudioClipWhenReady")]
+        public static class RhythmGameController_BindAudioClipWhenReady_Patch
+        {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "BindAudioClipWhenReady");
+
+            public static void Prefix(RhythmGameController __instance, ref AudioClip clip)
+            {
+                try
+                {
+                    if (!HwaAssetManager.IsTargetTrackActive) return;
+                    if (HwaAssetManager.CustomBgmClip != null)
+                    {
+                        clip = HwaAssetManager.CustomBgmClip;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[BindAudioClipWhenReady] Prefix 예외: {ex.Message}");
+                }
+            }
+        }
+
+        [HarmonyPatch(typeof(RhythmGameController), "StartAudioWhenReady")]
+        public static class RhythmGameController_StartAudioWhenReady_Patch
+        {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "StartAudioWhenReady");
+
+            public static void Prefix(RhythmGameController __instance)
+            {
+                try
+                {
+                    if (!HwaAssetManager.IsTargetTrackActive) return;
+                    EnsureInGameCustomBgm(__instance, "StartAudioWhenReady");
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[StartAudioWhenReady] Prefix 예외: {ex.Message}");
+                }
+            }
+        }
+
         [HarmonyPatch(typeof(RhythmGameController), "TriggerAudioStartIfReady")]
         public static class RhythmGameController_TriggerAudioStartIfReady_Patch
         {
@@ -723,7 +843,8 @@ namespace DEFLATE_custom_chart.Hooks
                 {
                     MelonLogger.Msg($"[인게임 BGA 로드] BGA AddressKey: '{addresskey}'");
 
-                    if (HwaAssetManager.IsTargetTrackActive && thisplayer != null && HwaAssetManager.ApplyCustomBga(thisplayer, true))
+                    // 인게임 BGA VideoPlayer는 audioCom과 이중 재생되지 않도록 반드시 음소거한다.
+                    if (HwaAssetManager.IsTargetTrackActive && thisplayer != null && HwaAssetManager.ApplyCustomBga(thisplayer, true, muteAudio: true))
                     {
                         return false;
                     }
@@ -748,7 +869,7 @@ namespace DEFLATE_custom_chart.Hooks
                 {
                     if (HwaAssetManager.IsTargetTrackActive && player != null)
                     {
-                        HwaAssetManager.ApplyCustomBga(player, false);
+                        HwaAssetManager.ApplyCustomBga(player, false, muteAudio: true);
                     }
 
                     MelonLogger.Msg($"[인게임 BGA 동기화 재생] Offset: {offsetSeconds}초 | URL: '{player?.url}'");

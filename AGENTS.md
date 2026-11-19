@@ -126,6 +126,12 @@
 9. **MelonLoader 자동 `PatchAll()`에 의존:**
    - 훅 하나의 예외로 그 뒤 훅이 전부 미적용되는 구조라, `Prepare()` 가드가 없는 `nameof` 훅 38개가 단일 장애점이었습니다.
    - **해결:** `[assembly: HarmonyDontPatchAll]` + `SafePatcher.PatchAll`(§3-⑤ 표의 ②).
+10. **`DiffStarsCtrl.GenerateStarImages(int, Il2CppSystem.Nullable<Color> = null)`에서 기본 인자 생략 호출 (1.2 NRE 스팸):**
+   - Il2CppInterop에서 `Il2CppSystem.Nullable<T>`는 박싱된 IL2CPP 값 타입 래퍼(C# 참조 타입)이므로, 기본 인자 `null`을 그대로 넘기면 `IL2CPP.Il2CppObjectBaseToPtrNotNull(null)`에서 `NullReferenceException`이 터집니다.
+   - **해결:** `HwaAssetManager.SafeGenerateStarImages(ctrl, count)`를 통해 `new Il2CppSystem.Nullable<Color>()`(`HasValue == false`)를 명시 전달.
+11. **인게임/곡 선택 이중 BGM 재생 (숙주 곡 BGM + 커스텀 곡 BGM 동시 출력):**
+   - 인게임에서는 `RhythmGameController.EnsureAudioSourceBound`/`BindAudioClipWhenReady`가 숙주 Koreography의 `SourceClip`으로 `audioCom`을 덮어쓰고, 동시에 `LoadVideo` Prefix가 원본을 스킵하며 음소거 없이 `video.mp4`를 재생해 두 오디오가 겹쳤습니다. 곡 선택 씬에서도 `FavControl.PreloadNearbyTracks`로 `TrackAssetManager.audioCache`에 숙주 OGG가 캐시된 뒤 `FavControl.SafeLoadAndPlayAudio`/`PlayAudioWhenReady`가 숙주 클립을 재생하거나, 빠른 스크롤 시 지연 코루틴 콜백이 겹칠 수 있었습니다.
+   - **해결:** 인게임 `EnsureAudioSourceBound`/`BindAudioClipWhenReady`/`StartAudioWhenReady` + `koreo.SourceClip` 교체 및 인게임/결과 `VideoPlayer` 강제 음소거(`MuteVideoPlayer`), 곡 선택 `FavControl.SafeLoadAndPlayAudio`/`PlayAudioWhenReady`/`TrackAssetManager.LoadVideoURL` 인터셉트, 빠른 스크롤 경쟁 상태 가드(`LoadCustomBgmForEntryCoroutine`), BGA 없는 커스텀 곡의 `VideoKey`·`DiscID` 초기화.
 
 ---
 
@@ -176,7 +182,8 @@
 | `8222cc3` | 내성·할당 제거 | `BmsLaneMapper` 열거형 박싱 제거, `InvokeMethodResilient`, `DeclaredOnly` 상속 체인 탐색 |
 | `02341bd` | 래퍼 폴백 버그 수정 | `CustomTrackWrapper` `SafeCast` 실패 시 폴백 우회 버그 수정, `WarnOnce`, `TryAdaptValueForTargetType`, UTF-8 BOM 대응, `SampleRate <= 0` 가드 |
 | `2c80477` | 감사·단일화·패치 격리 | `MemberFallbacks.cs` 단일화, 문자열/보조 훅 `Prepare()`(`HasPatchTarget`) 패치 격리 가드, `DiscID` 래핑, 인수인계 플레이북 추가. ⚠ **컴파일 불가 상태로 커밋됨**(`DiscID`를 `int`로 선언) — 다음 행에서 수정 |
-| 현재 | 게임 1.2 대응·업데이트 내성 계층 | 1.2(Build `26402105`) `LaneType` 중첩 이동 대응(이름 기반 레인 판정), `DiscID` `string` 수정, `SafePatcher`(자동 PatchAll 대체·클래스 단위 격리·사전 JIT 검사), `GameCompat` 빌드 지문 경고, NoteSway 서킷 브레이커, CS0162 경고 제거, 플레이북에 시그니처 대조 스크립트·Steam 경유 실행·덤퍼 실행 옵션 반영 |
+| `5d6f2a9` | 게임 1.2 대응·업데이트 내성 계층 | 1.2(Build `26402105`) `LaneType` 중첩 이동 대응(이름 기반 레인 판정), `DiscID` `string` 수정, `SafePatcher`(자동 PatchAll 대체·클래스 단위 격리·사전 JIT 검사), `GameCompat` 빌드 지문 경고, NoteSway 서킷 브레이커, CS0162 경고 제거, 플레이북에 시그니처 대조 스크립트·Steam 경유 실행·덤퍼 실행 옵션 반영 |
+| 현재 | DiffCtrl 스팸·이중 BGM·병목 수정 | `SafeGenerateStarImages`(`new Il2CppSystem.Nullable<Color>()`)로 `DiffCtrl`/`LoadingGamePlay` NRE 스팸 해결, 숙주+커스텀 이중 BGM 차단(인게임 `EnsureAudioSourceBound`/`BindAudioClipWhenReady`/`StartAudioWhenReady`+`SourceClip` 교체+`MuteVideoPlayer`, 곡 선택 `FavControl.SafeLoadAndPlayAudio`/`PlayAudioWhenReady`/`LoadVideoURL`+빠른 스크롤 가드+무BGA 곡 `VideoKey`/`DiscID` 초기화), `ModConfig.Initialize()` 선행 로드로 비활성 핫패스 훅(`NoteSway`/`NoteSpeedChaos`/`BlockSave`) `Prepare()` 스킵, 117곡 전체 카탈로그 덤프/커버 순회/BlockSave/프리로드 로그 스팸 및 할당 병목 제거 |
 
 ---
 
