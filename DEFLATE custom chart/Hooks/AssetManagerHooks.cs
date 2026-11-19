@@ -30,12 +30,12 @@ namespace DEFLATE_custom_chart.Hooks
                         var requestedEntry = HwaAssetManager.Active;
                         if (requestedEntry != null && requestedEntry.BgmClip != null)
                         {
-                            MelonLogger.Msg($"[HwaAssetManager] ★ {where} Custom BGM 즉시 오버라이드(캐시) ★ Key: '{key}'");
+                            ModLog.Verbose($"[HwaAssetManager] ★ {where} Custom BGM 즉시 오버라이드(캐시) ★ Key: '{key}'");
                             onSuccess?.Invoke(requestedEntry.BgmClip);
                             return false;
                         }
 
-                        MelonLogger.Msg($"[HwaAssetManager] ★ {where} Custom BGM 오버라이드 ★ Key: '{key}'");
+                        ModLog.Verbose($"[HwaAssetManager] ★ {where} Custom BGM 오버라이드 ★ Key: '{key}'");
                         // 원본 로드를 건너뛰므로, 실패하면 onFail을 불러 게임이 계속 기다리지 않게 한다.
                         // 곡 선택에서만 '빠른 스크롤로 커서가 다른 곡으로 넘어갔다면 지연 콜백 취소'를 적용한다.
                         // (인게임에서 콜백을 취소하면 게임이 오디오를 영원히 기다리므로 반드시 성공/실패 중 하나를 호출)
@@ -77,7 +77,7 @@ namespace DEFLATE_custom_chart.Hooks
                     if (HwaAssetManager.ShouldOverrideVideoKey(key))
                     {
                         string where = HwaAssetManager.IsInSongSelectContext ? "곡 목록 프리뷰" : "인게임";
-                        MelonLogger.Msg($"[HwaAssetManager] ★ {where} Custom BGA URL 오버라이드 ★ Key: '{key}'");
+                        ModLog.Verbose($"[HwaAssetManager] ★ {where} Custom BGA URL 오버라이드 ★ Key: '{key}'");
                         onSuccess?.Invoke(HwaAssetManager.BgaFileUrl);
                         return false;
                     }
@@ -186,7 +186,7 @@ namespace DEFLATE_custom_chart.Hooks
             {
                 try
                 {
-                    MelonLogger.Msg($"[PV 메뉴 BGA 재생] pvKey: '{pvKey}'");
+                    ModLog.Verbose($"[PV 메뉴 BGA 재생] pvKey: '{pvKey}'");
 
                     if (HwaAssetManager.IsTargetTrackActive && __instance != null && __instance.videoPlayer != null)
                     {
@@ -213,7 +213,7 @@ namespace DEFLATE_custom_chart.Hooks
             {
                 try
                 {
-                    MelonLogger.Msg($"[PV 메뉴 미디어 로드] videoKey: '{videoKey}', audioKey: '{audioKey}'");
+                    ModLog.Verbose($"[PV 메뉴 미디어 로드] videoKey: '{videoKey}', audioKey: '{audioKey}'");
 
                     if (HwaAssetManager.IsTargetTrackActive && __instance != null && __instance.videoPlayer != null)
                     {
@@ -239,7 +239,7 @@ namespace DEFLATE_custom_chart.Hooks
             {
                 try
                 {
-                    MelonLogger.Msg($"[★ SimpleRandomVideo.LoadVideoSmart 호출 ★] pvKey: '{pvKey}' | videoPlayer: '{(videoPlayer != null ? videoPlayer.name : "null")}'");
+                    ModLog.Verbose($"[★ SimpleRandomVideo.LoadVideoSmart 호출 ★] pvKey: '{pvKey}' | videoPlayer: '{(videoPlayer != null ? videoPlayer.name : "null")}'");
 
                     if (HwaAssetManager.IsTargetTrackActive && videoPlayer != null && HwaAssetManager.ApplyCustomBga(videoPlayer, autoPlay))
                     {
@@ -261,7 +261,7 @@ namespace DEFLATE_custom_chart.Hooks
             {
                 try
                 {
-                    MelonLogger.Msg($"[★ SimpleRandomVideo.LoadVideo 호출 ★] addressKey: '{addressKey}' | videoPlayer: '{(videoPlayer != null ? videoPlayer.name : "null")}'");
+                    ModLog.Verbose($"[★ SimpleRandomVideo.LoadVideo 호출 ★] addressKey: '{addressKey}' | videoPlayer: '{(videoPlayer != null ? videoPlayer.name : "null")}'");
 
                     if (HwaAssetManager.IsTargetTrackActive && videoPlayer != null && HwaAssetManager.ApplyCustomBga(videoPlayer, autoPlay))
                     {
@@ -296,7 +296,7 @@ namespace DEFLATE_custom_chart.Hooks
                 {
                     player.source = VideoSource.Url;
                     player.url = bgaUrl;
-                    MelonLogger.Msg($"[★ Universal {caller} Custom BGA 강제 적용 ★] 오브젝트: '{player.gameObject.name}' | URL: '{bgaUrl}'");
+                    ModLog.Verbose($"[★ Universal {caller} Custom BGA 강제 적용 ★] 오브젝트: '{player.gameObject.name}' | URL: '{bgaUrl}'");
                 }
             }
             catch (Exception ex)
@@ -337,7 +337,7 @@ namespace DEFLATE_custom_chart.Hooks
                 try
                 {
                     if (__instance == null || __instance.tracks == null) return;
-                    MelonLogger.Msg($"[★ MainTrackList.Start 감지 ★] 총 곡 수: {__instance.tracks.Count}개");
+                    ModLog.Verbose($"[★ MainTrackList.Start 감지 ★] 총 곡 수: {__instance.tracks.Count}개");
 
                     // 주입된 커스텀 곡 사본 블록에만 각자의 PNG 커버 적용 (원본 곡 116+개는 이름 체크로 즉시 건너뜀)
                     if (!CustomSongLibrary.HasSongs) return;
@@ -359,7 +359,7 @@ namespace DEFLATE_custom_chart.Hooks
 
                         Il2CppReflectionHelper.SetValueResilient(trackBlock, () => trackBlock.TrackCover = customCover, "TrackCover", MemberFallbacks.TrackBlock.Cover, customCover);
                         string title = Il2CppReflectionHelper.GetValueResilient(trackBlock, () => trackBlock.TrackTitle, "TrackTitle", MemberFallbacks.TrackBlock.Title, entry.Meta.Title);
-                        MelonLogger.Msg($"  [★ MainTrackListBlock 데이터 커버 교체 성공 (사본 전용) ★] 앨범: '{entry.Meta.Album}' | 제목: '{title}' | 커버: '{customCover.name}'");
+                        ModLog.Verbose($"  [★ MainTrackListBlock 데이터 커버 교체 성공 (사본 전용) ★] 앨범: '{entry.Meta.Album}' | 제목: '{title}' | 커버: '{customCover.name}'");
                     }
                 }
                 catch (Exception ex)
@@ -386,7 +386,7 @@ namespace DEFLATE_custom_chart.Hooks
                     if (HwaAssetManager.CustomBgmClip == null) return true;
 
                     __result = HwaAssetManager.CustomBgmClip;
-                    MelonLogger.Msg($"[HwaAssetManager] ★ 결과 화면 파형/재생 미리듣기 Custom BGM 오버라이드 ★: '{__result.name}' ({__result.length:F2}초)");
+                    ModLog.Verbose($"[HwaAssetManager] ★ 결과 화면 파형/재생 미리듣기 Custom BGM 오버라이드 ★: '{__result.name}' ({__result.length:F2}초)");
                     return false;
                 }
                 catch (Exception ex)
@@ -405,7 +405,7 @@ namespace DEFLATE_custom_chart.Hooks
                 try
                 {
                     if (__instance == null) return;
-                    MelonLogger.Msg("[★ Panel_Result.Awake 감지 ★] 결과 씬 진입!");
+                    ModLog.Verbose("[★ Panel_Result.Awake 감지 ★] 결과 씬 진입!");
 
                     if (!HwaAssetManager.IsTargetTrackActive) return;
 
@@ -437,7 +437,7 @@ namespace DEFLATE_custom_chart.Hooks
                 try
                 {
                     if (__instance == null) return;
-                    MelonLogger.Msg("[★ Panel_Result.ApplyText 감지 ★] 점수 표출 시작!");
+                    ModLog.Verbose("[★ Panel_Result.ApplyText 감지 ★] 점수 표출 시작!");
 
                     if (!HwaAssetManager.IsTargetTrackActive) return;
 

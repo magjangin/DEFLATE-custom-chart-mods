@@ -55,7 +55,7 @@ namespace DEFLATE_custom_chart.Hooks
                     if (instance.NowTrackCover_bg != null) instance.NowTrackCover_bg.sprite = customCover;
                 }
 
-                MelonLogger.Msg($"[로딩 씬 커스텀 UI 주입] 제목: '{meta.Title}' | 아티스트: '{meta.Artist}' | 매퍼: '{meta.ChartAuthor}' | BGA: '{meta.BgaAuthor}' | 난이도: {gd.nowDifficulty}(★{targetStar}) | 앨범: '{meta.Album}'");
+                ModLog.Verbose($"[로딩 씬 커스텀 UI 주입] 제목: '{meta.Title}' | 아티스트: '{meta.Artist}' | 매퍼: '{meta.ChartAuthor}' | BGA: '{meta.BgaAuthor}' | 난이도: {gd.nowDifficulty}(★{targetStar}) | 앨범: '{meta.Album}'");
             }
             catch (Exception ex)
             {
@@ -79,7 +79,7 @@ namespace DEFLATE_custom_chart.Hooks
 
                     if (HwaAssetManager.IsTargetTrackActive && !string.IsNullOrEmpty(HwaAssetManager.BgmFilePath))
                     {
-                        MelonLogger.Msg("[로딩 씬] 커스텀 BGM 사전 로딩(Preload) 시작!");
+                        ModLog.Verbose("[로딩 씬] 커스텀 BGM 사전 로딩(Preload) 시작!");
                         MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(null, false));
                     }
 
@@ -106,14 +106,14 @@ namespace DEFLATE_custom_chart.Hooks
                         MemberFallbacks.GameData.TrackId,
                         string.Empty);
 
-                    MelonLogger.Msg("==================================================");
-                    MelonLogger.Msg($"[로딩 씬 진입 감지] TargetActive: {HwaAssetManager.IsTargetTrackActive}");
-                    MelonLogger.Msg($"  - 곡 제목:      '{trackTitle}'");
-                    MelonLogger.Msg($"  - 곡 아티스트:   '{trackAuthor}'");
-                    MelonLogger.Msg($"  - 채보 매퍼:    '{meta.ChartAuthor}'");
-                    MelonLogger.Msg($"  - PV/BGA 제작자: '{meta.BgaAuthor}'");
-                    MelonLogger.Msg($"  - 곡 ID:        '{trackId}'");
-                    MelonLogger.Msg("==================================================");
+                    ModLog.Verbose("==================================================");
+                    ModLog.Verbose($"[로딩 씬 진입 감지] TargetActive: {HwaAssetManager.IsTargetTrackActive}");
+                    ModLog.Verbose($"  - 곡 제목:      '{trackTitle}'");
+                    ModLog.Verbose($"  - 곡 아티스트:   '{trackAuthor}'");
+                    ModLog.Verbose($"  - 채보 매퍼:    '{meta.ChartAuthor}'");
+                    ModLog.Verbose($"  - PV/BGA 제작자: '{meta.BgaAuthor}'");
+                    ModLog.Verbose($"  - 곡 ID:        '{trackId}'");
+                    ModLog.Verbose("==================================================");
                 }
                 catch (Exception ex)
                 {
@@ -143,11 +143,14 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(LoadingManager), nameof(LoadingManager.LoadScene))]
         public static class LoadingManager_LoadScene_Patch
         {
+            // 로그 전용 훅: 로그 레벨이 모자라면 패치하지 않는다.
+            public static bool Prepare() => ModLog.Prepare(ModLog.DebugLevel);
+
             public static void Prefix(string sceneName)
             {
                 try
                 {
-                    MelonLogger.Msg($"[씬 전환 탐지] target scene -> '{sceneName}'");
+                    ModLog.Debug($"[씬 전환 탐지] target scene -> '{sceneName}'");
                 }
                 catch (Exception ex)
                 {

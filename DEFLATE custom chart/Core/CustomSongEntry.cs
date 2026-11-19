@@ -261,8 +261,9 @@ namespace DEFLATE_custom_chart.Core
             {
                 var parser = new Bms.BmsParser();
                 Chart = parser.ParseFile(BmsFilePath, targetSampleRate);
-                MelonLogger.Msg($"  - [BMS 파싱] '{Meta.Title}' ➔ '{Chart.Header.Title}' | BPM {Chart.Header.InitialBpm} | 노트 {Chart.Notes.Count}개");
-                MelonLogger.Msg($"    홀드 매칭: {Chart.HoldPairedCount}개 성사 | 짝 없는 시작 {Chart.HoldOrphanHeadCount}개(단타 강등) | 짝 없는 끝 {Chart.HoldOrphanTailCount}개(제거)");
+                MelonLogger.Msg($"  - [BMS 파싱] '{Meta.Title}' ➔ '{Chart.Header.Title}' | BPM {Chart.Header.InitialBpm} | 노트 {Chart.Notes.Count}개 ({Chart.DescribeLaneDistribution()})"
+                    + (Chart.KeysoundLaneMismatchCount > 0 ? $" | 킥·스네어 키음 이름과 열이 다른 노트 {Chart.KeysoundLaneMismatchCount}개(열 기준 배치)" : ""));
+                ModLog.Verbose($"    홀드 매칭: {Chart.HoldPairedCount}개 성사 | 짝 없는 시작 {Chart.HoldOrphanHeadCount}개(단타 강등) | 짝 없는 끝 {Chart.HoldOrphanTailCount}개(제거)");
                 foreach (var warning in Chart.Warnings)
                 {
                     MelonLogger.Warning($"    [BMS 경고] '{FolderName}' {warning}");
@@ -293,7 +294,7 @@ namespace DEFLATE_custom_chart.Core
                     tex.wrapMode = TextureWrapMode.Clamp;
                     CoverSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
                     CoverSprite.name = Path.GetFileNameWithoutExtension(CoverFilePath);
-                    MelonLogger.Msg($"[커스텀 곡] PNG 커버 로드: '{Meta.Title}' ({tex.width}x{tex.height})");
+                    ModLog.Verbose($"[커스텀 곡] PNG 커버 로드: '{Meta.Title}' ({tex.width}x{tex.height})");
                 }
                 else
                 {
@@ -436,7 +437,7 @@ namespace DEFLATE_custom_chart.Core
             string tag = targetAudioSource == null && !forcePlay
                 ? (fromCache ? "Custom BGM 캐시 확인" : "Custom BGM 사전 로드 완료")
                 : (fromCache ? "캐시된 Custom BGM 즉시 적용" : "★ Custom BGM 주입 및 재생 성공 ★");
-            MelonLogger.Msg($"[커스텀 곡] {tag}: '{Meta.Title}' ➔ '{BgmClip.name}' ({BgmClip.length:F2}초)");
+            ModLog.Verbose($"[커스텀 곡] {tag}: '{Meta.Title}' ➔ '{BgmClip.name}' ({BgmClip.length:F2}초)");
 
             onLoaded?.Invoke(BgmClip);
         }

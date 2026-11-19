@@ -1,5 +1,6 @@
 using System;
 using MelonLoader;
+using DEFLATE_custom_chart.Core;
 using HarmonyLib;
 using Il2Cppdizzylab.castor;
 using DEFLATE_custom_chart.Core.Wrapper;
@@ -39,7 +40,7 @@ namespace DEFLATE_custom_chart.Hooks
 
                     _lastCoverName = coverName;
                     _lastTitle = title;
-                    MelonLogger.Msg($"[HUD] Cover='{coverName}' | Title='{title}'");
+                    ModLog.Verbose($"[HUD] Cover='{coverName}' | Title='{title}'");
                 }
                 catch (Exception ex)
                 {

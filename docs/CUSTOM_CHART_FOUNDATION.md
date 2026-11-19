@@ -183,14 +183,14 @@ $$\text{StartSample} = \text{Time (seconds)} \times \text{SampleRate}$$
 var bmsChart = HwaAssetManager.LoadedBmsChart;
 if (bmsChart != null && bmsChart.Notes.Count > 0)
 {
-    // trackID("hihat_2") 또는 laneType 열거형 '이름' ➔ 레인 슬롯("lane_2")
+    // trackID("hihat_2") 또는 laneType 열거형 '이름' ➔ 게임 레인 ID("hihat_2"). 노트는 파싱 시 채널(열)+키음(하이햇/킥·스네어)으로 정확히 한 레인에 배정됨
     // 게임 1.2부터 LaneType은 LaneController.LaneType(중첩)이므로 타입을 직접 참조하지 않고 리플렉션으로 값만 읽는다.
     string targetLane = BmsLaneMapper.ResolveLaneId(trackID, ReadLaneTypeValue(lane));
     if (targetLane != null)
     {
         // 파싱 시점에 사전 인덱싱된 레인별 노트를 O(1)로 조회
         var laneNotes = bmsChart.GetNotesForLane(targetLane);
-        int targetSampleRate = koreo.SampleRate;
+        int targetSampleRate = TimelineSampleRate(koreo, bmsChart); // 재생 중인 커스텀 음악 클립의 주파수 (게임 시계 = audioCom.timeSamples)
         int tapDurationSamples = (int)(targetSampleRate * 0.1f);
 
         for (int i = 0; i < laneNotes.Count; i++)

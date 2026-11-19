@@ -112,7 +112,7 @@ namespace DEFLATE_custom_chart.Core
                 if (songDirs.Length == 0)
                 {
                     // info.txt/차트/커버/BGA가 없는 폴더 (예: 키음 .wav 보관함) — 곡도 앨범도 아니므로 무시한다.
-                    MelonLogger.Msg($"[커스텀 곡 라이브러리] 곡 폴더가 아니라 건너뜀: '{albumName}/'");
+                    ModLog.Verbose($"[커스텀 곡 라이브러리] 곡 폴더가 아니라 건너뜀: '{albumName}/'");
                     continue;
                 }
 
@@ -123,7 +123,7 @@ namespace DEFLATE_custom_chart.Core
                 {
                     var song = CustomSongEntry.TryCreate(songDir, albumName);
                     if (song != null) { AddScannedEntry(song); addedInAlbum++; }
-                    else MelonLogger.Msg($"[커스텀 곡 라이브러리] 곡 에셋(info.txt/BMS/PNG/MP4)이 없어 건너뜀: '{albumName}/{CustomSongEntry.GetDirectoryName(songDir)}'");
+                    else ModLog.Verbose($"[커스텀 곡 라이브러리] 곡 에셋(info.txt/BMS/PNG/MP4)이 없어 건너뜀: '{albumName}/{CustomSongEntry.GetDirectoryName(songDir)}'");
                 }
 
                 if (addedInAlbum == 0)
@@ -168,19 +168,19 @@ namespace DEFLATE_custom_chart.Core
 
         private static void LogCatalog()
         {
-            MelonLogger.Msg("==================================================");
+            ModLog.Verbose("==================================================");
             MelonLogger.Msg($"[커스텀 곡 라이브러리] hwa/ 스캔 완료 — 총 {Entries.Count}곡");
 
             foreach (var group in Entries.GroupBy(e => string.IsNullOrEmpty(e.Meta.Album) ? "(앨범 없음)" : e.Meta.Album))
             {
-                MelonLogger.Msg($"  ▣ 앨범 '{group.Key}' ({group.Count()}곡)");
+                ModLog.Verbose($"  ▣ 앨범 '{group.Key}' ({group.Count()}곡)");
                 foreach (var e in group)
                 {
                     MelonLogger.Msg($"    - '{e.Meta.Title}' / {e.Meta.Artist} | 매퍼: {e.Meta.ChartAuthor} | ★{e.Meta.EasyLevel}/{e.Meta.NormalLevel}/{e.Meta.HardLevel}");
-                    MelonLogger.Msg($"      BGM: {NameOr(e.BgmFilePath)} | BGA: {NameOr(e.BgaFilePath)} | 커버: {NameOr(e.CoverFilePath)} | BMS: {NameOr(e.BmsFilePath)}");
+                    ModLog.Verbose($"      BGM: {NameOr(e.BgmFilePath)} | BGA: {NameOr(e.BgaFilePath)} | 커버: {NameOr(e.CoverFilePath)} | BMS: {NameOr(e.BmsFilePath)}");
                 }
             }
-            MelonLogger.Msg("==================================================");
+            ModLog.Verbose("==================================================");
         }
 
         private static string NameOr(string path) => string.IsNullOrEmpty(path) ? "없음" : Path.GetFileName(path);

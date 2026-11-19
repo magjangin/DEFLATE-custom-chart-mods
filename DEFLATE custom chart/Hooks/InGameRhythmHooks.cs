@@ -23,11 +23,112 @@ namespace DEFLATE_custom_chart.Hooks
             return precomputedSample;
         }
 
+        /// <summary>
+        /// 인게임 노트/라인바/드롭 샘플 위치를 계산할 기준 샘플레이트.
+        ///
+        /// 게임 시계는 <c>audioCom.timeSamples</c>(= 실제 재생 중인 클립의 샘플)이고, 이벤트의 StartSample도 같은 단위로 비교됩니다.
+        /// 커스텀 곡은 숙주 Koreography(대개 44100Hz) 대신 커스텀 음악 클립을 재생하므로, 그 클립의 주파수로 계산해야 합니다.
+        /// 예전처럼 Koreography의 SampleRate를 쓰면 48000Hz 음악에서 노트가 곡 진행에 비례해 8.8%씩 일찍 나옵니다
+        /// (2026-11-20 실기: 게임 시간 10초가 실제 9.2초에 경과 = 48000/44100).
+        /// </summary>
+        private static int TimelineSampleRate(Koreography koreo, BmsChart chart)
+        {
+            var clip = HwaAssetManager.IsTargetTrackActive ? HwaAssetManager.CustomBgmClip : null;
+            if (clip != null && clip.frequency > 0)
+            {
+                int koreoRate = koreo != null ? koreo.SampleRate : 0;
+                if (koreoRate > 0 && koreoRate != clip.frequency && !_rateMismatchWarned)
+                {
+                    _rateMismatchWarned = true;
+                    MelonLogger.Warning($"[BMS 타이밍] 커스텀 음악 '{clip.name}'은 {clip.frequency}Hz, 숙주 차트는 {koreoRate}Hz입니다. "
+                        + $"노트 위치는 {clip.frequency}Hz 기준으로 보정했지만, 게임의 판정 범위·진행률 표시는 {koreoRate}Hz로 계산되어 약 {Math.Abs(clip.frequency - koreoRate) * 100.0 / koreoRate:F1}% 어긋납니다. "
+                        + $"음악을 {koreoRate}Hz로 변환하면 완전히 일치합니다.");
+                }
+                return clip.frequency;
+            }
+
+            if (HwaAssetManager.IsTargetTrackActive && !_clipMissingWarned)
+            {
+                _clipMissingWarned = true;
+                MelonLogger.Warning("[BMS 타이밍] 레인 로드 시점에 커스텀 음악이 아직 로드되지 않아 숙주 차트 샘플레이트로 노트를 배치합니다. 음악 샘플레이트가 다르면 노트가 어긋날 수 있습니다.");
+            }
+            if (koreo != null && koreo.SampleRate > 0) return koreo.SampleRate;
+            return chart != null && chart.SampleRate > 0 ? chart.SampleRate : 44100;
+        }
+
+        private static bool _rateMismatchWarned;
+        private static bool _clipMissingWarned;
+
+        // 곡당 한 줄 요약(LogLevel 0에서도 기록)용 집계. 하이햇/킥·스네어 레인이 같은 슬롯을 공유하므로 슬롯 단위로 덮어쓴다.
+        private static readonly Dictionary<string, int> _summaryLaneCounts = new Dictionary<string, int>();
+        private static int _summaryBarLines;
+        private static int _summaryTimelineRate;
+        private static bool _summaryLogged;
+
+        private static void ResetPlaySummary()
+        {
+            _summaryLaneCounts.Clear();
+            _summaryBarLines = 0;
+            _summaryTimelineRate = 0;
+            _summaryLogged = false;
+            _clipMissingWarned = false;
+        }
+
+        private static void LogPlaySummaryOnce(RhythmGameController instance)
+        {
+            if (_summaryLogged || !HwaAssetManager.IsTargetTrackActive) return;
+            _summaryLogged = true;
+
+            var meta = HwaAssetManager.CurrentMeta;
+            var chart = HwaAssetManager.LoadedBmsChart;
+            var clip = instance != null && instance.audioCom != null ? instance.audioCom.clip : null;
+            string Lane(string id) => _summaryLaneCounts.TryGetValue(id, out int c) ? c.ToString() : "-";
+            string chartPart = chart == null
+                ? "BMS 없음(테스트 노트)"
+                : $"BMS 노트 {chart.Notes.Count}개 → 주입 하이햇 {Lane(BmsLaneMapper.HiHat1)}/{Lane(BmsLaneMapper.HiHat2)}/{Lane(BmsLaneMapper.HiHat3)}/{Lane(BmsLaneMapper.HiHat4)}"
+                    + $" · 킥·스네어 {Lane(BmsLaneMapper.SnareLeft)}/{Lane(BmsLaneMapper.KickLeft)}/{Lane(BmsLaneMapper.KickRight)}/{Lane(BmsLaneMapper.SnareRight)}(1~4열)"
+                    + $" · 드롭 {Lane(BmsLaneMapper.Drop)} · 라인바 {_summaryBarLines}";
+            ModLog.Info($"[커스텀 차트] '{meta.Title}' — {chartPart} | 음악 '{(clip != null ? clip.name : "없음")}' {(clip != null ? clip.frequency : 0)}Hz (노트 기준 {_summaryTimelineRate}Hz) | BGA {(string.IsNullOrEmpty(HwaAssetManager.BgaFileUrl) ? "없음" : "있음")}");
+        }
+
+        // 숙주 Koreography는 Addressables로 캐시되는 공유 에셋이라, SourceClip을 바꾼 채 두면
+        // 같은 세션에서 숙주 원곡(WindShifter)을 플레이할 때 커스텀 음악이 묶여 나올 수 있다. 곡 목록 복귀 시 원복한다.
+        private static Koreography _patchedKoreo;
+        private static AudioClip _originalSourceClip;
+
+        /// <summary>곡 목록 진입 시 호출: 커스텀 곡 플레이 중 바꿔 둔 숙주 Koreography.SourceClip을 원래 클립으로 되돌립니다.</summary>
+        public static void RestoreHostKoreography()
+        {
+            var koreo = _patchedKoreo;
+            var original = _originalSourceClip;
+            _patchedKoreo = null;
+            _originalSourceClip = null;
+            if (koreo == null) return;
+
+            try
+            {
+                Il2CppReflectionHelper.SetValueResilient(koreo, () => koreo.SourceClip = original, "SourceClip", MemberFallbacks.Koreography.SourceClip, original);
+                ModLog.Verbose($"[HwaAssetManager] 숙주 Koreography SourceClip 원복: '{(original != null ? original.name : "null")}'");
+            }
+            catch (Exception ex)
+            {
+                // 씬 전환으로 에셋이 이미 해제됐으면 원복할 대상도 없다.
+                ModLog.Verbose($"[HwaAssetManager] 숙주 Koreography 원복 생략 ({ex.GetType().Name})");
+            }
+        }
+
         private static void ApplyCustomClipToKoreography(Koreography koreo)
         {
             if (koreo == null || !HwaAssetManager.IsTargetTrackActive) return;
             var customClip = HwaAssetManager.CustomBgmClip;
             if (customClip == null) return;
+
+            if (_patchedKoreo == null || _patchedKoreo.Pointer != koreo.Pointer)
+            {
+                RestoreHostKoreography();
+                _patchedKoreo = koreo;
+                _originalSourceClip = Il2CppReflectionHelper.GetValueResilient<AudioClip>(koreo, () => koreo.SourceClip, "SourceClip", MemberFallbacks.Koreography.SourceClip, null);
+            }
 
             Il2CppReflectionHelper.SetValueResilient(
                 koreo,
@@ -58,7 +159,7 @@ namespace DEFLATE_custom_chart.Hooks
 
                 instance.audioCom.clip = customClip;
                 instance.audioCom.mute = false;
-                MelonLogger.Msg($"  - [{contextTag}] Custom BGM 사전 클립 0ms 즉시 할당 완료: '{customClip.name}'");
+                ModLog.Verbose($"  - [{contextTag}] Custom BGM 사전 클립 0ms 즉시 할당 완료: '{customClip.name}'");
                 return;
             }
 
@@ -105,10 +206,12 @@ namespace DEFLATE_custom_chart.Hooks
                 {
                     if (__instance == null) return;
                     RhythmGameController_UpdateSongDurationScrollbar_Patch.ResetTimer();
+                    ResetPlaySummary();
+                    ChartDiagnostics.Reset();
                     NoteHooks.NoteObject_UpdateNotePosition_Patch.ResetFrameCache();
 
-                    MelonLogger.Msg("==================================================");
-                    MelonLogger.Msg("[★ 핵심 훅: RhythmGameController.Start ★] 인게임 리듬게임 씬 진입!");
+                    ModLog.Verbose("==================================================");
+                    ModLog.Verbose("[★ 핵심 훅: RhythmGameController.Start ★] 인게임 리듬게임 씬 진입!");
                     bool isTargetTrack = false;
                     if (__instance.gameData != null)
                     {
@@ -117,23 +220,23 @@ namespace DEFLATE_custom_chart.Hooks
                         string nowTrackTitle = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackTitle, "NowTrackTitle", MemberFallbacks.GameData.Title, string.Empty);
                         string nowTrackAuthor = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackAurthor, "NowTrackAurthor", MemberFallbacks.GameData.Author, string.Empty);
 
-                        MelonLogger.Msg($"  - 곡 ID:        {nowTrackId}");
-                        MelonLogger.Msg($"  - 곡 제목:      {nowTrackTitle}");
-                        MelonLogger.Msg($"  - 곡 아티스트:   {nowTrackAuthor}");
-                        MelonLogger.Msg($"  - 타겟 차트 Key: {gd.targetKorePath}");
+                        ModLog.Verbose($"  - 곡 ID:        {nowTrackId}");
+                        ModLog.Verbose($"  - 곡 제목:      {nowTrackTitle}");
+                        ModLog.Verbose($"  - 곡 아티스트:   {nowTrackAuthor}");
+                        ModLog.Verbose($"  - 타겟 차트 Key: {gd.targetKorePath}");
 
                         // hwa/ 커스텀 png·bga·bgm 에셋을 사본(테스트 곡)에만 적용하기 위한 활성 트랙 갱신
                         isTargetTrack = HwaAssetManager.SetActiveTrack(nowTrackId, nowTrackTitle);
-                        MelonLogger.Msg($"  - 커스텀 에셋 사본 여부: {isTargetTrack}");
+                        ModLog.Verbose($"  - 커스텀 에셋 사본 여부: {isTargetTrack}");
                     }
                     if (DEFLATE_custom_chart.Core.ModConfig.Instance.AutoMode || SmokeTest.IsRunning)
                     {
                         __instance.autoMode = true;
-                        MelonLogger.Msg("  [ModConfig] 오토 모드(AutoMode) 강제 활성화!");
+                        ModLog.Verbose("  [ModConfig] 오토 모드(AutoMode) 강제 활성화!");
                     }
 
-                    MelonLogger.Msg($"  - 오토 모드:     {__instance.autoMode}");
-                    MelonLogger.Msg($"  - 노트 배속:     {__instance.noteSpeed}");
+                    ModLog.Verbose($"  - 오토 모드:     {__instance.autoMode}");
+                    ModLog.Verbose($"  - 노트 배속:     {__instance.noteSpeed}");
 
                     if (isTargetTrack)
                     {
@@ -161,15 +264,15 @@ namespace DEFLATE_custom_chart.Hooks
                         }
                     }
 
-                    MelonLogger.Msg("--------------------------------------------------");
-                    MelonLogger.Msg($"  - 판정 윈도우(ms):     {__instance.hitWindowRangeInMS}");
-                    MelonLogger.Msg($"  - 판정 윈도우 Hi(ms):  {__instance.hitWindowsRangeInMS_Hi}");
-                    MelonLogger.Msg($"  - 판정 윈도우(샘플):    {__instance.hitWindowRangeInSamples}");
-                    MelonLogger.Msg($"  - 판정 윈도우 Hi(샘플): {__instance.hitWindowRangeInSamples_Hi}");
-                    MelonLogger.Msg($"  - HitWindowSampleWidth:    {__instance.HitWindowSampleWidth}");
-                    MelonLogger.Msg($"  - HitWindowSampleWidth_hi: {__instance.HitWindowSampleWidth_hi}");
-                    MelonLogger.Msg($"  - WindowSizeInUnits:       {__instance.WindowSizeInUnits}");
-                    MelonLogger.Msg("==================================================");
+                    ModLog.Verbose("--------------------------------------------------");
+                    ModLog.Verbose($"  - 판정 윈도우(ms):     {__instance.hitWindowRangeInMS}");
+                    ModLog.Verbose($"  - 판정 윈도우 Hi(ms):  {__instance.hitWindowsRangeInMS_Hi}");
+                    ModLog.Verbose($"  - 판정 윈도우(샘플):    {__instance.hitWindowRangeInSamples}");
+                    ModLog.Verbose($"  - 판정 윈도우 Hi(샘플): {__instance.hitWindowRangeInSamples_Hi}");
+                    ModLog.Verbose($"  - HitWindowSampleWidth:    {__instance.HitWindowSampleWidth}");
+                    ModLog.Verbose($"  - HitWindowSampleWidth_hi: {__instance.HitWindowSampleWidth_hi}");
+                    ModLog.Verbose($"  - WindowSizeInUnits:       {__instance.WindowSizeInUnits}");
+                    ModLog.Verbose("==================================================");
 
                     SmokeTest.OnInGameStart(__instance);
                 }
@@ -183,12 +286,15 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.ChangeDrumMode))]
         public static class RhythmGameController_ChangeDrumMode_Patch
         {
+            // 로그 전용 훅: 로그 레벨이 모자라면 패치하지 않는다.
+            public static bool Prepare() => ModLog.Prepare(ModLog.DebugLevel);
+
             public static void Postfix(RhythmGameController __instance)
             {
                 try
                 {
                     if (__instance == null) return;
-                    MelonLogger.Msg($"[드럼 모드 전환] drumMode -> {__instance.drumMode} | lastDrumModeChangeSample={__instance.lastDrumModeChangeSample}");
+                    ModLog.Debug($"[드럼 모드 전환] drumMode -> {__instance.drumMode} | lastDrumModeChangeSample={__instance.lastDrumModeChangeSample}");
                 }
                 catch (Exception ex)
                 {
@@ -200,12 +306,15 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.ChangeDrumModeScore))]
         public static class RhythmGameController_ChangeDrumModeScore_Patch
         {
+            // 로그 전용 훅: 로그 레벨이 모자라면 패치하지 않는다.
+            public static bool Prepare() => ModLog.Prepare(ModLog.DebugLevel);
+
             public static void Postfix(RhythmGameController __instance)
             {
                 try
                 {
                     if (__instance == null) return;
-                    MelonLogger.Msg($"[드럼 모드(점수) 전환] drumMode_Score -> {__instance.drumMode_Score}");
+                    ModLog.Debug($"[드럼 모드(점수) 전환] drumMode_Score -> {__instance.drumMode_Score}");
                 }
                 catch (Exception ex)
                 {
@@ -255,13 +364,14 @@ namespace DEFLATE_custom_chart.Hooks
                         if (bmsChart != null && bmsChart.Notes.Count > 0 && __instance.dropEventSamples != null)
                         {
                             var dropNotes = bmsChart.GetNotesForLane(BmsLaneMapper.Drop);
-                            int targetSampleRate = koreo.SampleRate > 0 ? koreo.SampleRate : bmsChart.SampleRate;
+                            int targetSampleRate = TimelineSampleRate(koreo, bmsChart);
                             for (int i = 0; i < dropNotes.Count; i++)
                             {
                                 var n = dropNotes[i];
                                 __instance.dropEventSamples.Add(ResolveSamplePosition(n.TimeSeconds, n.SamplePosition, bmsChart.SampleRate, targetSampleRate));
                             }
-                            MelonLogger.Msg($"  - [BMS 14번 채널] 커스텀 드롭(Drop) 노트 샘플 {__instance.dropEventSamples.Count}개 dropEventSamples 주입 완료!");
+                            _summaryLaneCounts[BmsLaneMapper.Drop] = __instance.dropEventSamples.Count;
+                            ModLog.Verbose($"  - [BMS 14번 채널] 커스텀 드롭(Drop) 노트 샘플 {__instance.dropEventSamples.Count}개 dropEventSamples 주입 완료!");
                         }
 
                         // 3. Koreography 원본 차트 트랙 중 hihat_3 이외 트랙의 mEventList 클리어
@@ -279,13 +389,13 @@ namespace DEFLATE_custom_chart.Hooks
                             }
                         }
 
-                        MelonLogger.Msg("[★ 잔여 dropEventSamples 및 원본 차트 에셋 잔여 노트 완전 정리 완료 ★]");
+                        ModLog.Verbose("[★ 잔여 dropEventSamples 및 원본 차트 에셋 잔여 노트 완전 정리 완료 ★]");
                     }
 
-                    MelonLogger.Msg("----------------------------------------------------------------------------------------------------");
-                    MelonLogger.Msg($"[★ 핵심 훅: RhythmGameController.InitializeKoreographyTracks ★] 차트(Koreography) 로드 완료!");
-                    MelonLogger.Msg($"  - 차트 이름: '{koreo.name}' | 오디오 샘플레이트: {koreo.SampleRate}Hz | 트랙 수: {koreo.Tracks?.Count ?? 0} | 총 노트 이벤트 수: {totalEvents}개");
-                    MelonLogger.Msg("----------------------------------------------------------------------------------------------------");
+                    ModLog.Verbose("----------------------------------------------------------------------------------------------------");
+                    ModLog.Verbose($"[★ 핵심 훅: RhythmGameController.InitializeKoreographyTracks ★] 차트(Koreography) 로드 완료!");
+                    ModLog.Verbose($"  - 차트 이름: '{koreo.name}' | 오디오 샘플레이트: {koreo.SampleRate}Hz | 트랙 수: {koreo.Tracks?.Count ?? 0} | 총 노트 이벤트 수: {totalEvents}개");
+                    ModLog.Verbose("----------------------------------------------------------------------------------------------------");
                 }
                 catch (Exception ex)
                 {
@@ -344,7 +454,7 @@ namespace DEFLATE_custom_chart.Hooks
                 {
                     var laneNotes = bmsChart.GetNotesForLane(targetLane);
                     int holdCount = 0;
-                    int targetSampleRate = koreo.SampleRate > 0 ? koreo.SampleRate : bmsChart.SampleRate;
+                    int targetSampleRate = TimelineSampleRate(koreo, bmsChart);
                     int tapDurationSamples = (int)(targetSampleRate * 0.1f);
 
                     for (int i = 0; i < laneNotes.Count; i++)
@@ -362,11 +472,13 @@ namespace DEFLATE_custom_chart.Hooks
                         if (bmsNote.IsLongNote) holdCount++;
                     }
 
-                    MelonLogger.Msg($"[★ HWA BMS 노트 주입 ★] ({source}) 레인: '{trackID}'(lane {targetLane}) | {before}개 ➔ {events.Count}개 주입 완료 (홀드 {holdCount}개)");
+                    _summaryLaneCounts[targetLane] = events.Count;
+                    _summaryTimelineRate = targetSampleRate;
+                    ModLog.Verbose($"[★ HWA BMS 노트 주입 ★] ({source}) 레인: '{trackID}'(lane {targetLane}) | {before}개 ➔ {events.Count}개 주입 완료 (홀드 {holdCount}개)");
                 }
                 else
                 {
-                    MelonLogger.Msg($"[BMS 레인 비움] ({source}) 레인: '{trackID}' | 지정 매핑 없음 ➔ 0개");
+                    ModLog.Verbose($"[BMS 레인 비움] ({source}) 레인: '{trackID}' | 지정 매핑 없음 ➔ 0개");
                 }
 
                 return events;
@@ -407,11 +519,11 @@ namespace DEFLATE_custom_chart.Hooks
                     events.Add(newEvt);
                 }
 
-                MelonLogger.Msg($"[★ hihat_3 커스텀 롱노트 10연발 주입 ★] ({source}) 레인: '{trackID}' | StartSample={globalFirstStart}, 1.5초 롱노트 | {before}개 -> {events.Count}개");
+                ModLog.Verbose($"[★ hihat_3 커스텀 롱노트 10연발 주입 ★] ({source}) 레인: '{trackID}' | StartSample={globalFirstStart}, 1.5초 롱노트 | {before}개 -> {events.Count}개");
             }
             else
             {
-                MelonLogger.Msg($"[커스텀 테스트 주입] ({source}) 레인: '{trackID}' | 비움 (0개)");
+                ModLog.Verbose($"[커스텀 테스트 주입] ({source}) 레인: '{trackID}' | 비움 (0개)");
             }
 
             return events;
@@ -441,7 +553,7 @@ namespace DEFLATE_custom_chart.Hooks
                         if (!HwaAssetManager.IsTargetTrackActive) return;
 
                         int count = lane.laneEvents != null ? lane.laneEvents.Count : -1;
-                        MelonLogger.Msg($"[레인 노트 로드] trackID='{trackID}' | 노트 수: {count}개");
+                        ModLog.Debug($"[레인 노트 로드] trackID='{trackID}' | 노트 수: {count}개");
 
                         const int LongNoteDurationThreshold = 10000;
                         if (lane.laneEvents != null)
@@ -453,7 +565,7 @@ namespace DEFLATE_custom_chart.Hooks
                                 int duration = ev.EndSample - ev.StartSample;
                                 if (duration >= LongNoteDurationThreshold)
                                 {
-                                    MelonLogger.Msg($"  [롱노트] trackID='{trackID}' [{i}] StartSample={ev.StartSample} EndSample={ev.EndSample} duration={duration}");
+                                    ModLog.Debug($"  [롱노트] trackID='{trackID}' [{i}] StartSample={ev.StartSample} EndSample={ev.EndSample} duration={duration}");
                                 }
                             }
                         }
@@ -461,6 +573,7 @@ namespace DEFLATE_custom_chart.Hooks
                         return;
                     }
 
+                    ChartDiagnostics.RecordOriginalLane(trackID, lane);
                     var events = BuildBmsLaneEvents(__instance, trackID, lane, "LoadKoreographyEvents");
                     if (events == null) return;
 
@@ -573,9 +686,7 @@ namespace DEFLATE_custom_chart.Hooks
             // 2. BMS 마디선/박자선 ➔ KoreographyEvent
             var events = new Il2CppSystem.Collections.Generic.List<KoreographyEvent>();
             int measureLines = 0;
-            int targetSampleRate = lane.gameController != null && lane.gameController.playingKoreo != null && lane.gameController.playingKoreo.SampleRate > 0
-                ? lane.gameController.playingKoreo.SampleRate
-                : bmsChart.SampleRate;
+            int targetSampleRate = TimelineSampleRate(lane.gameController != null ? lane.gameController.playingKoreo : null, bmsChart);
             foreach (var bar in bmsChart.BarLines)
             {
                 int samplePos = ResolveSamplePosition(bar.TimeSeconds, bar.SamplePosition, bmsChart.SampleRate, targetSampleRate);
@@ -594,8 +705,9 @@ namespace DEFLATE_custom_chart.Hooks
             foreach (var kv in payloadCounts) dist.Add($"{kv.Key}={kv.Value}");
             int avgInterval = originalCount > 1 ? (lastStart - firstStart) / (originalCount - 1) : 0;
 
-            MelonLogger.Msg($"[★ HWA BMS 라인바 주입 ★] ({source}) trackID='{trackID}' | 원본 {originalCount}개 ➔ BMS {events.Count}개 (마디선 {measureLines} / 박자선 {events.Count - measureLines})");
-            MelonLogger.Msg($"  - 원본 페이로드 분포: [{string.Join(", ", dist)}] | 마디선←'{measureKey}' 박자선←'{beatKey}' | 이벤트 길이 {span}샘플 | 원본 평균 간격 {avgInterval}샘플");
+            _summaryBarLines = events.Count;
+            ModLog.Verbose($"[★ HWA BMS 라인바 주입 ★] ({source}) trackID='{trackID}' | 원본 {originalCount}개 ➔ BMS {events.Count}개 (마디선 {measureLines} / 박자선 {events.Count - measureLines})");
+            ModLog.Verbose($"  - 원본 페이로드 분포: [{string.Join(", ", dist)}] | 마디선←'{measureKey}' 박자선←'{beatKey}' | 이벤트 길이 {span}샘플 | 원본 평균 간격 {avgInterval}샘플");
             return events;
             }
             catch (Exception ex)
@@ -683,7 +795,7 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), "UpdateSongDurationScrollbar")]
         public static class RhythmGameController_UpdateSongDurationScrollbar_Patch
         {
-            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "UpdateSongDurationScrollbar");
+            public static bool Prepare() => ModLog.Prepare(ModLog.DebugLevel) && Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "UpdateSongDurationScrollbar");
 
             private static float lastLoggedTime = -10f;
 
@@ -706,12 +818,12 @@ namespace DEFLATE_custom_chart.Hooks
                         float totalLength = __instance.audioCom != null && __instance.audioCom.clip != null ? __instance.audioCom.clip.length : 0f;
                         float progressPercent = totalLength > 0f ? (currentTimeSeconds / totalLength) * 100f : 0f;
 
-                        MelonLogger.Msg($"[재생 진행률 업데이트] 현재 시간: {currentTimeSeconds:F2}초 / 전체: {totalLength:F2}초 ({progressPercent:F1}%)");
+                        ModLog.Debug($"[재생 진행률 업데이트] 현재 시간: {currentTimeSeconds:F2}초 / 전체: {totalLength:F2}초 ({progressPercent:F1}%)");
 
                         int activeNotesCount = __instance.activeNotes != null ? __instance.activeNotes.Count : -1;
                         int activeLineBarsCount = __instance.activeLineBars != null ? __instance.activeLineBars.Count : -1;
-                        MelonLogger.Msg($"  - 활성 노트(activeNotes): {activeNotesCount}개 | 활성 라인바(activeLineBars): {activeLineBarsCount}개");
-                        MelonLogger.Msg($"  - 드럼 모드: {__instance.drumMode} | 점수용 드럼 모드: {__instance.drumMode_Score}");
+                        ModLog.Debug($"  - 활성 노트(activeNotes): {activeNotesCount}개 | 활성 라인바(activeLineBars): {activeLineBarsCount}개");
+                        ModLog.Debug($"  - 드럼 모드: {__instance.drumMode} | 점수용 드럼 모드: {__instance.drumMode_Score}");
 
                         int kickL = __instance.kickNoteObjectPool_left != null ? __instance.kickNoteObjectPool_left.Count : -1;
                         int kickR = __instance.kickNoteObjectPool_right != null ? __instance.kickNoteObjectPool_right.Count : -1;
@@ -724,7 +836,7 @@ namespace DEFLATE_custom_chart.Hooks
                         int drop = __instance.dropNoteObjectPool != null ? __instance.dropNoteObjectPool.Count : -1;
                         int shake = __instance.shakeNoteObjectPool != null ? __instance.shakeNoteObjectPool.Count : -1;
                         int lineBarPool = __instance.lineBarObjectPool != null ? __instance.lineBarObjectPool.Count : -1;
-                        MelonLogger.Msg($"  - 풀 여유분(대기 중): kickL={kickL} kickR={kickR} snareL={snareL} snareR={snareR} hh1={hh1} hh2={hh2} hh3={hh3} hh4={hh4} drop={drop} shake={shake} lineBar={lineBarPool}");
+                        ModLog.Debug($"  - 풀 여유분(대기 중): kickL={kickL} kickR={kickR} snareL={snareL} snareR={snareR} hh1={hh1} hh2={hh2} hh3={hh3} hh4={hh4} drop={drop} shake={shake} lineBar={lineBarPool}");
                     }
                 }
                 catch (Exception ex)
@@ -825,14 +937,16 @@ namespace DEFLATE_custom_chart.Hooks
                 try
                 {
                     if (__instance == null) return;
-                    MelonLogger.Msg($"[★ 핵심 훅: RhythmGameController.TriggerAudioStartIfReady ★] BGM 오디오 재생 트리거!");
+                    LogPlaySummaryOnce(__instance);
+                    ChartDiagnostics.DumpOnce(__instance);
+                    ModLog.Verbose($"[★ 핵심 훅: RhythmGameController.TriggerAudioStartIfReady ★] BGM 오디오 재생 트리거!");
 
                     EnsureInGameCustomBgm(__instance, "TriggerAudioStartIfReady");
 
                     if (__instance.audioCom != null && __instance.audioCom.clip != null)
                     {
                         var clip = __instance.audioCom.clip;
-                        MelonLogger.Msg($"  - 현재 오디오 클립명: '{clip.name}' | 주파수: {clip.frequency}Hz | 길이: {clip.length:F2}초");
+                        ModLog.Verbose($"  - 현재 오디오 클립명: '{clip.name}' | 주파수: {clip.frequency}Hz | 길이: {clip.length:F2}초");
                     }
                 }
                 catch (Exception ex)
@@ -851,7 +965,7 @@ namespace DEFLATE_custom_chart.Hooks
             {
                 try
                 {
-                    MelonLogger.Msg($"[인게임 BGA 로드] BGA AddressKey: '{addresskey}'");
+                    ModLog.Verbose($"[인게임 BGA 로드] BGA AddressKey: '{addresskey}'");
 
                     // 인게임 BGA VideoPlayer는 audioCom과 이중 재생되지 않도록 반드시 음소거한다.
                     if (HwaAssetManager.IsTargetTrackActive && thisplayer != null && HwaAssetManager.ApplyCustomBga(thisplayer, true, muteAudio: true))
@@ -882,7 +996,7 @@ namespace DEFLATE_custom_chart.Hooks
                         HwaAssetManager.ApplyCustomBga(player, false, muteAudio: true);
                     }
 
-                    MelonLogger.Msg($"[인게임 BGA 동기화 재생] Offset: {offsetSeconds}초 | URL: '{player?.url}'");
+                    ModLog.Verbose($"[인게임 BGA 동기화 재생] Offset: {offsetSeconds}초 | URL: '{player?.url}'");
                 }
                 catch (Exception ex)
                 {
@@ -895,7 +1009,7 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), "OnVideoStarted")]
         public static class RhythmGameController_OnVideoStarted_Patch
         {
-            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "OnVideoStarted");
+            public static bool Prepare() => ModLog.Prepare(ModLog.Detail) && Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "OnVideoStarted");
 
             public static void Postfix(RhythmGameController __instance, VideoPlayer source)
             {
@@ -903,7 +1017,7 @@ namespace DEFLATE_custom_chart.Hooks
                 {
                     if (source != null)
                     {
-                        MelonLogger.Msg($"[인게임 BGA 재생 시작] URL: '{source.url}'");
+                        ModLog.Verbose($"[인게임 BGA 재생 시작] URL: '{source.url}'");
                     }
                 }
                 catch (Exception ex)

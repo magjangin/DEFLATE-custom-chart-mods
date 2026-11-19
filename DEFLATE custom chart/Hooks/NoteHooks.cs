@@ -13,14 +13,14 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), "RecalculateAllNoteCount")]
         public static class RhythmGameController_RecalculateAllNoteCount_Patch
         {
-            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "RecalculateAllNoteCount");
+            public static bool Prepare() => ModLog.Prepare(ModLog.Detail) && Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "RecalculateAllNoteCount");
 
             public static void Postfix(RhythmGameController __instance)
             {
                 try
                 {
                     if (__instance == null) return;
-                    MelonLogger.Msg($"[노트 수 재계산 완료] 전체 노트 수(AllNoteCount): {__instance.AllNoteCount}");
+                    ModLog.Verbose($"[노트 수 재계산 완료] 전체 노트 수(AllNoteCount): {__instance.AllNoteCount}");
                 }
                 catch (Exception ex)
                 {

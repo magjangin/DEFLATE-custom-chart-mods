@@ -37,6 +37,7 @@ namespace DEFLATE_custom_chart.Hooks
                 try
                 {
                     HwaAssetManager.EnterSongSelect();
+                    InGameRhythmHooks.RestoreHostKoreography();
                     CustomAlbumManager.Clear();
 
                     if (__instance == null || __instance.tracks == null || __instance.tracks.Length == 0) return;
@@ -64,12 +65,12 @@ namespace DEFLATE_custom_chart.Hooks
                         CustomSongLibrary.RegisterInjectedTrack(matched, existingWrapper.UniqueID, existingWrapper.AudioKey, existingWrapper.VideoKey);
                         pending.Remove(matched);
 
-                        MelonLogger.Msg($"[곡 목록 주입] 기존 사본 재사용: '{matched.Meta.Title}' (앨범: '{matched.Meta.Album}', ID: {existingWrapper.UniqueID})");
+                        ModLog.Verbose($"[곡 목록 주입] 기존 사본 재사용: '{matched.Meta.Title}' (앨범: '{matched.Meta.Album}', ID: {existingWrapper.UniqueID})");
                     }
 
                     if (pending.Count == 0)
                     {
-                        MelonLogger.Msg($"[곡 목록 주입] 커스텀 곡 {CustomSongLibrary.Entries.Count}곡이 모두 이미 주입되어 있습니다.");
+                        ModLog.Verbose($"[곡 목록 주입] 커스텀 곡 {CustomSongLibrary.Entries.Count}곡이 모두 이미 주입되어 있습니다.");
                         return;
                     }
 
@@ -233,7 +234,7 @@ namespace DEFLATE_custom_chart.Hooks
                 // 5) 커스텀 에셋 타겟 정보 및 O(1) 조회 인덱스 등록
                 CustomSongLibrary.RegisterInjectedTrack(entry, cloneWrapper.UniqueID, cloneWrapper.AudioKey, cloneWrapper.VideoKey);
 
-                MelonLogger.Msg($"  [사본 생성] 앨범 '{meta.Album}' / '{meta.Title}' (ID: {cloneWrapper.UniqueID}) ← 폴더 '{entry.FolderName}'");
+                ModLog.Verbose($"  [사본 생성] 앨범 '{meta.Album}' / '{meta.Title}' (ID: {cloneWrapper.UniqueID}) ← 폴더 '{entry.FolderName}'");
                 return cloneBlock;
             }
             catch (Exception ex)

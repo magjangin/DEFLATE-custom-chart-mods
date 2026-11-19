@@ -34,6 +34,9 @@ namespace DEFLATE_custom_chart.Core
         // 5. 무인 스모크 테스트 (게임 업데이트 후 검증용, 평소에는 0)
         public bool SmokeTest { get; set; } = false;
 
+        // 6. 로그 상세도 (0 = 요약, 1 = 상세, 2 = 디버그) — ModLog 참고
+        public int LogLevel { get; set; } = 0;
+
         public ModConfig()
         {
             UpdateDerivedValues();
@@ -78,7 +81,7 @@ namespace DEFLATE_custom_chart.Core
                 if (File.Exists(ConfigFilePath))
                 {
                     LoadFromTxt();
-                    MelonLogger.Msg($"[ModConfig] config.txt 설정 파일 로드 완료 (AutoPlay={Instance.AutoPlay}, NoteSway={Instance.NoteSway}, BlockSave={Instance.BlockSave}{(Instance.SmokeTest ? ", SmokeTest=ON" : "")})");
+                    MelonLogger.Msg($"[ModConfig] config.txt 설정 파일 로드 완료 (AutoPlay={Instance.AutoPlay}, NoteSway={Instance.NoteSway}, BlockSave={Instance.BlockSave}, LogLevel={Instance.LogLevel}{(Instance.SmokeTest ? ", SmokeTest=ON" : "")})");
                     return;
                 }
 
@@ -166,6 +169,10 @@ namespace DEFLATE_custom_chart.Core
                 {
                     if (TryParseFlexibleBool(val, out bool b)) config.SmokeTest = b;
                 }
+                else if (key.Equals("LogLevel", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (int.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out int lv)) config.LogLevel = Math.Clamp(lv, 0, 2);
+                }
             }
 
             config.UpdateDerivedValues();
@@ -243,7 +250,10 @@ namespace DEFLATE_custom_chart.Core
                     "",
                     "# [개발용] 무인 스모크 테스트: 실행 직후 첫 커스텀 곡을 자동 선택·오토플레이하고",
                     "# 로그에 [SmokeTest] PASS/FAIL을 남깁니다. 게임 업데이트 후 점검할 때만 1로 켜세요.",
-                    $"SmokeTest={(Instance.SmokeTest ? 1 : 0)}"
+                    $"SmokeTest={(Instance.SmokeTest ? 1 : 0)}",
+                    "",
+                    "# 로그 상세도: 0 = 요약(기본, 곡당 한 줄), 1 = 상세(레인별 주입·에셋 교체), 2 = 디버그(커서 이동·진행률 등 전부)",
+                    $"LogLevel={Instance.LogLevel}"
                 };
                 File.WriteAllLines(ConfigFilePath, lines);
             }

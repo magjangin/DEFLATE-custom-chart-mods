@@ -190,7 +190,11 @@ namespace DEFLATE_custom_chart.Core
                 bool bgmIsCustom = audio != null && customClip != null && audio.clip == customClip;
                 bool bgmPlaying = audio != null && audio.isPlaying && !audio.mute;
                 bool hasChart = HwaAssetManager.LoadedBmsChart != null;
-                bool notesOk = !hasChart || _injectedLaneEvents > 0;
+                int chartNotes = hasChart ? HwaAssetManager.LoadedBmsChart.Notes.Count : 0;
+                // 노트 하나는 정확히 한 레인에만 들어가야 한다(하이햇/킥·스네어 양쪽 복제 회귀 검사).
+                bool notesOk = !hasChart || (_injectedLaneEvents > 0 && _injectedLaneEvents == chartNotes);
+                int allNoteCount = -1;
+                try { allNoteCount = controller.AllNoteCount; } catch { }
                 string videoUrl = controller.videoPlayer != null ? controller.videoPlayer.url : null;
                 bool bgaOk = string.IsNullOrEmpty(HwaAssetManager.BgaFileUrl)
                     || string.Equals(videoUrl, HwaAssetManager.BgaFileUrl, StringComparison.Ordinal);
@@ -202,7 +206,7 @@ namespace DEFLATE_custom_chart.Core
                 bool pass = customActive && bgmIsCustom && bgmPlaying && notesOk && bgaOk && contextOk;
 
                 string detail = $"커스텀 곡 활성={customActive} | BGM 커스텀={bgmIsCustom}('{audio?.clip?.name}') 재생중={bgmPlaying} t={(audio != null ? audio.time : -1f):F1}s"
-                    + $" | BMS 노트 주입 {_injectedLaneEvents}개/{_injectedLanes}레인 · 라인바 {_injectedLineBars}개 | 활성 노트 {activeNotes}"
+                    + $" | BMS 노트 주입 {_injectedLaneEvents}개/{_injectedLanes}레인 (차트 {chartNotes}개{(notesOk ? "" : " ≠ 중복/누락!")}) · 라인바 {_injectedLineBars}개 | 게임 AllNoteCount {allNoteCount} | 활성 노트 {activeNotes}"
                     + $" | BGA={(bgaOk ? "OK" : $"불일치('{videoUrl}')")} 영상오디오={videoAudio}"
                     + $" | 컨텍스트={(contextOk ? "인게임" : "곡선택 잔류!")}";
 
