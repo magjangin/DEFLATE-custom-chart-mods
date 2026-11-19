@@ -469,8 +469,7 @@ namespace DEFLATE_custom_chart.Core.Bms
             foreach (var raw in rawChannels)
             {
                 // 노트 채널 여부 확인: BmsLaneMapper가 아는 레인 채널(16/11/12/13/14)만 노트로 취급.
-                string resolvedLane = BmsLaneMapper.ResolveChannelLane(raw.Channel);
-                if (resolvedLane == null) continue;
+                if (!BmsLaneMapper.IsNoteChannel(raw.Channel)) continue;
                 if (string.IsNullOrEmpty(raw.Data)) continue;
                 if (raw.Data.Length % noteWidth != 0)
                 {
@@ -489,6 +488,12 @@ namespace DEFLATE_custom_chart.Core.Bms
                     if (IsAllZeros(raw.Data, startIdx, noteWidth)) continue;
 
                     string val = raw.Data.Substring(startIdx, noteWidth).ToUpperInvariant();
+                    // 열은 채널, 하이햇/킥·스네어는 키음 파일명으로 정해 노트 하나를 정확히 한 게임 레인에 배치한다.
+                    chart.Header.WavTable.TryGetValue(val, out string keysoundFile);
+                    string resolvedLane = BmsLaneMapper.ResolveGameLane(raw.Channel, keysoundFile);
+                    if (resolvedLane == null) continue;
+                    string hint = BmsLaneMapper.KeysoundLaneHintMismatch(keysoundFile, resolvedLane);
+                    if (hint != null) chart.KeysoundLaneMismatchCount++;
 
                     double noteTick = mStartTick + ((double)i / objectCount) * mLengthTicks;
                     double timeSec = CalculateTimeAtTick(noteTick, chart.BpmEvents);

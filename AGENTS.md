@@ -5,7 +5,8 @@
 >
 > **현재 검증 상태 (2026-11-20, 게임 1.2 / Build `26402105`):** 컴파일 경고 0 · `[SafePatcher] 성공 52 / 건너뜀 2(설정상 비활성) / 실패 0` · `[GameCompat] 일치`.
 > **게임플레이 실기 검증 완료:** ① 무인 스모크 테스트(`SmokeTest=1`, §3-⑥) `PASS` — BMS 노트 1104개/9레인·라인바 296개 주입, 커스텀 BGM 재생, BGA URL 일치. ② 사용자 수동 플레이(로딩 씬 경유) 로그에서 곡 목록 주입 → 로딩 UI 메타데이터 → 인게임 노트/라인바/BGM/BGA 주입 확인.
-> 미확인: 결과 화면, 롱노트(테스트 차트에 홀드 0개), 드롭 레인(테스트 차트 14번 채널 0개).
+> **2026-11-20 추가 수정·검증:** 노트 이중 생성(하이햇+킥·스네어 양쪽 복제, 열도 어긋남) 및 48000Hz 음악 타이밍 드리프트 수정 → 스모크 `PASS`, 게임 `AllNoteCount` 552 = BMS 552, 화면에서 노트가 BMS 열대로 한 번씩만 표시됨을 캡처로 확인.
+> 미확인: 결과 화면, 롱노트(테스트 차트에 홀드 0개), 드롭 레인(테스트 차트 14번 채널 0개), 킥/스네어 키음 노트(테스트 차트에 없음).
 
 ---
 
@@ -90,9 +91,20 @@
 ### ⑥ 무인 스모크 테스트 (`Core/SmokeTest.cs`, config `SmokeTest=1`)
 - **목적:** 게임 업데이트 직후 "곡 목록 주입 → 커스텀 곡 선택 → 인게임 노트/BGM/BGA 주입"을 사람 손 없이 1회 돌리고 `[SmokeTest] PASS/FAIL — …` 한 줄로 판정합니다. 오토플레이 강제, `BlockSave` 설정은 그대로 따릅니다.
 - **동작:** 곡 목록이 준비되면(`MainTrackList.Start` Last 훅) 첫 커스텀 블록을 찾아 **`Next()`/`Last()`로 사용자처럼 이동** → `hasKoreHandle` 대기 → `GotoSceneData()` → 인게임 12초 후 점검.
-- **판정 기준:** 커스텀 곡 활성, `audioCom.clip`이 커스텀 클립이고 재생 중(음소거 아님), BMS가 있으면 레인 노트 주입 > 0, BGA가 있으면 VideoPlayer URL 일치, 컨텍스트가 인게임으로 전환됨. 상세 줄에 라인바 수·활성 노트 수·VideoPlayer 오디오 모드도 기록.
+- **판정 기준:** 커스텀 곡 활성, `audioCom.clip`이 커스텀 클립이고 재생 중(음소거 아님), BMS가 있으면 **레인 주입 노트 수 = BMS 노트 수**(중복·누락 없음), BGA가 있으면 VideoPlayer URL 일치, 컨텍스트가 인게임으로 전환됨. 상세 줄에 라인바 수·활성 노트 수·VideoPlayer 오디오 모드도 기록.
 - **설계 포인트:** 게임은 시작 직후 `MainTrackList`를 **두 번** 만듭니다(인트로 → 곡 목록 재로드). 새 목록이 오면 세대(`_generation`)를 올려 이전 실행을 조용히 폐기하고 새 목록에서 다시 시작합니다. 플레이 확정 후에는 재실행하지 않습니다(결과 화면 후 복귀 시 반복 방지).
 - **한계:** `GotoSceneData` 직접 호출은 로딩 씬을 건너뛰므로 사용자 경로(로딩 씬 경유)와 다릅니다. 로딩 씬 UI 주입은 이 테스트로 검증되지 않습니다 → `[씬 전환 탐지] MainTrackList.GoToScene(...)` 진단 로그로 사용자 경로의 씬 이름을 확보하면 그 경로로 바꾸는 것이 다음 개선 과제입니다.
+
+### ⑦ BMS → 게임 레인 배치와 타이밍 기준 (2026-11-20 실측으로 재설계)
+- **노트 하나 = 게임 레인 하나.** 열(1~4)은 채널(16/11/12/13), 하이햇/킥·스네어는 키음 파일명(`kick`/`snare` 포함 여부)으로 정합니다. 열별 킥·스네어 레인은 **실측 배치** `snare_left / kick_left / kick_right / snare_right`(1~4열)입니다(`BmsLaneMapper.KickSnareByColumn`).
+- **근거:** `ChartDiagnostics`(LogLevel 2)로 `LaneController.thisPad`(KEY_1~4)·x좌표를 기록했고, 숙주 원곡 차트에서 킥·스네어와 하이햇의 동시 출현이 0건임을 확인했습니다. 예전 "양쪽 복제" 설계는 노트를 두 열에 두 번 만들었습니다(`AllNoteCount` 2배).
+- **타이밍 기준 샘플레이트:** 게임 시계는 `audioCom.timeSamples`(재생 중인 클립 단위)이므로 노트/라인바/드롭 샘플은 **커스텀 음악 클립의 주파수**로 계산합니다(`InGameRhythmHooks.TimelineSampleRate`). 숙주 Koreography(44100Hz)로 계산하던 예전 방식은 48000Hz 음악에서 노트가 8.8%씩 일찍 나왔습니다. 판정 범위·진행률 표시는 게임이 Koreography 샘플레이트로 계산하므로, 완전 일치를 원하면 음악을 44100Hz로 변환하도록 `[BMS 타이밍]` 경고로 안내합니다.
+- **숙주 에셋 원복:** 커스텀 곡 플레이 중 바꾼 숙주 `Koreography.SourceClip`은 곡 목록 진입 시 `InGameRhythmHooks.RestoreHostKoreography()`로 되돌립니다(공유 Addressables 에셋이라 그대로 두면 같은 세션의 원곡 플레이에 영향).
+
+### ⑧ 로그 상세도 (`Core/ModLog.cs`, config `LogLevel`)
+- `0` 요약(기본): 시작 요약(`[GameCompat]`, `[SafePatcher]`, `[ModConfig]`), 곡 라이브러리·`[BMS 파싱]` 한 줄, `[곡 목록 주입 완료]`, 플레이마다 `[커스텀 차트]` 한 줄, 경고/오류. `1` 상세: 레인별 주입·에셋 오버라이드·씬별 메타데이터. `2` 디버그: 커서 이동/클릭/난이도/드럼 모드/10초 진행률·`[진단]` 레인 배치와 원곡 차트 분석.
+- 로그만 찍는 훅(진행률, 드럼 모드, 커서 이동, 클릭, 씬 전환, 노트 수, 영상 시작)은 `ModLog.Prepare(level)`로 **레벨이 모자라면 패치 자체를 생략**합니다. 기본값에서 `[SafePatcher]` 성공 수가 줄어드는 것은 정상입니다.
+- 경고/오류는 레벨과 무관하게 항상 남깁니다. 새 로그를 추가할 때는 `ModLog.Info/Verbose/Debug` 중 하나를 고르고, 이벤트마다 반복되는 로그는 `Debug`로 두세요.
 
 ---
 
@@ -109,7 +121,7 @@
 | `LoadingGamePlay.Start` | Postfix | `EnterGameplay`, 로딩 UI 메타데이터 주입(오타 필드 폴백 포함) |
 | `RhythmGameController.Start` | Prefix / Postfix | Prefix: `EnterGameplay`(최후 안전망). Postfix: 인게임 BGM 0ms 즉시 할당(`EnsureInGameCustomBgm`), 오토플레이(`AutoMode` 또는 스모크 테스트) 강제, 판정 파라미터 로깅, 스모크 테스트 점검 예약 |
 | `RhythmGameController.InitializeKoreographyTracks` | Postfix | `dropEventSamples`에 O(1) 드롭 레인 노트 주입 및 원본 잔여 이벤트 정리 |
-| `RhythmGameController.LoadKoreographyEvents` | Postfix | **[핵심]** 각 레인별(`lane_1`~`lane_4`) BMS 차트 이벤트(`KoreographyEvent`) O(1) 레인 인덱스 기반 주입 |
+| `RhythmGameController.LoadKoreographyEvents` | Postfix | **[핵심]** 게임 레인(`hihat_1~4`, `snare_left`/`kick_left`/`kick_right`/`snare_right`, `drop`)별로 BMS 노트를 O(1) 인덱스로 주입. 노트는 파싱 시 **채널=열, 키음=하이햇/킥·스네어**로 정확히 한 레인에 배정(`docs/bms_mapping_spec.md`) |
 | `RhythmGameController.ReplaceLaneEventsFromTrack` / `AtSample` | Postfix | 재시작·모드 전환 시 레인 이벤트가 원본 차트로 복원되지 않도록 커스텀 BMS 노트 재주입 |
 | `RhythmGameController.LoadLineBarEvents` / `ReplaceLineBarEventsFromTrack` / `AtSample` | Postfix | BMS 마디/박자 기반 커스텀 라인바 이벤트 주입 및 재시작 복원 방지 |
 | `GameData.SaveGameData` | Prefix | `BlockSave=1`일 때 세이브 방지 (스코어 덮어쓰기 방지) |
@@ -160,6 +172,15 @@
 14. **'프리뷰 전용' 가로채기를 씬 플래그 하나로만 막기:**
    - 로딩 씬 훅에서만 플래그를 끄는 구조는 로딩 씬을 건너뛰는 경로에서 인게임 내내 '곡 선택'으로 남고, 반대로 인게임에서 꼭 필요한 숙주 Key 대체(BGM/BGA)는 막아버립니다. 1.2에서 `EnforceCustomBgaUrl`의 인게임 VideoPlayer 음소거도 이 플래그에 의존합니다.
    - **해결:** §3-②의 `EnterSongSelect`/`EnterGameplay` 다중 진입점 + Key 일치 정책.
+
+15. **BMS 노트를 하이햇·킥/스네어 레인 양쪽에 복제 (노트 이중 생성·열 어긋남):**
+   - "4개 레인을 두 드럼 모드가 공유한다"는 가정은 틀렸습니다. 킥/스네어 열 배치가 다르고(kick_left=2열), 원곡에서 두 세트는 동시에 나오지 않는 별개 노트입니다. 복제하면 노트가 두 열에 두 번 나오고 `AllNoteCount`가 2배가 됩니다.
+   - **해결:** 노트 하나 = 레인 하나(채널=열, 키음=세트). 레인 배치를 다시 의심할 땐 `LogLevel=2` + 스모크 테스트로 `[진단]` 레인 배치·원곡 동시 출현 통계를 다시 뽑으세요.
+16. **노트 샘플 위치를 숙주 Koreography 샘플레이트로 계산 (타이밍 드리프트):**
+   - 게임 시계는 재생 중인 클립의 `timeSamples`라서, 커스텀 음악이 48000Hz면 44100Hz로 계산한 노트가 곡 진행에 비례해 8.8%씩 일찍 나옵니다(로그상 게임 시간 10초가 실제 9.2초).
+   - **해결:** `TimelineSampleRate` = 커스텀 클립 주파수.
+17. **로그를 기본값에서 이벤트마다 남기기 (로그 스팸):**
+   - 커서 이동·클릭마다, 레인마다, 10초마다 여러 줄씩 기본으로 찍혀 콘솔·로그가 묻혔습니다. **해결:** §3-⑧ `LogLevel`.
 
 ---
 
@@ -213,7 +234,8 @@
 | `2c80477` | 감사·단일화·패치 격리 | `MemberFallbacks.cs` 단일화, 문자열/보조 훅 `Prepare()`(`HasPatchTarget`) 패치 격리 가드, `DiscID` 래핑, 인수인계 플레이북 추가. ⚠ **컴파일 불가 상태로 커밋됨**(`DiscID`를 `int`로 선언) — 다음 행에서 수정 |
 | `5d6f2a9` | 게임 1.2 대응·업데이트 내성 계층 | 1.2(Build `26402105`) `LaneType` 중첩 이동 대응(이름 기반 레인 판정), `DiscID` `string` 수정, `SafePatcher`(자동 PatchAll 대체·클래스 단위 격리·사전 JIT 검사), `GameCompat` 빌드 지문 경고, NoteSway 서킷 브레이커, CS0162 경고 제거, 플레이북에 시그니처 대조 스크립트·Steam 경유 실행·덤퍼 실행 옵션 반영 |
 | `b25a513` | DiffCtrl 스팸·이중 BGM·병목 수정 | `SafeGenerateStarImages`(`new Il2CppSystem.Nullable<Color>()`)로 `DiffCtrl`/`LoadingGamePlay` NRE 스팸 해결, 숙주+커스텀 이중 BGM 차단(인게임 `EnsureAudioSourceBound`/`BindAudioClipWhenReady`/`StartAudioWhenReady`+`SourceClip` 교체+`MuteVideoPlayer`, 곡 선택 `FavControl.SafeLoadAndPlayAudio`/`PlayAudioWhenReady`/`LoadVideoURL`+빠른 스크롤 가드+무BGA 곡 `VideoKey`/`DiscID` 초기화), `ModConfig.Initialize()` 선행 로드로 비활성 핫패스 훅(`NoteSway`/`NoteSpeedChaos`/`BlockSave`) `Prepare()` 스킵, 117곡 전체 카탈로그 덤프/커버 순회/BlockSave/프리로드 로그 스팸 및 할당 병목 제거 |
-| 현재 | 1.2 실기 검증·컨텍스트 결함 수정·스모크 테스트 | `SmokeTest`(무인 커스텀 곡 자동 플레이·PASS/FAIL 판정, 목록 이중 생성 대응) 추가 및 1.2 실기 PASS, `EnterSongSelect`/`EnterGameplay` 다중 진입점으로 곡 선택 컨텍스트 누수 수정, `LoadAudioClip`/`LoadVideoURL`을 숙주 Key 일치 정책으로 통일(인게임 포함·인게임 콜백 취소 금지·`LoadVideoURL` Key 검사 신설), `MainTrackList.GoToScene` 진단 로그, 커스텀 블록 판정(`SongInjectorHooks.IsCustomBlock`) 단일화 |
+| `809250d` | 1.2 실기 검증·컨텍스트 결함 수정·스모크 테스트 | `SmokeTest`(무인 커스텀 곡 자동 플레이·PASS/FAIL 판정, 목록 이중 생성 대응) 추가 및 1.2 실기 PASS, `EnterSongSelect`/`EnterGameplay` 다중 진입점으로 곡 선택 컨텍스트 누수 수정, `LoadAudioClip`/`LoadVideoURL`을 숙주 Key 일치 정책으로 통일(인게임 포함·인게임 콜백 취소 금지·`LoadVideoURL` Key 검사 신설), `MainTrackList.GoToScene` 진단 로그, 커스텀 블록 판정(`SongInjectorHooks.IsCustomBlock`) 단일화 |
+| 현재 | 노트 이중 생성·타이밍·로그 정리 | BMS 노트 1개=게임 레인 1개(채널=열, 키음=하이햇/킥·스네어, 킥·스네어 실측 열 배치), 노트 샘플 위치를 커스텀 음악 주파수 기준으로 계산(48kHz 드리프트 수정)+`[BMS 타이밍]` 안내, 숙주 `SourceClip` 원복, `LogLevel`(0/1/2)과 로그 전용 훅 Prepare 생략, 곡당 한 줄 `[커스텀 차트]` 요약, `ChartDiagnostics`(레인 배치·원곡 동시 출현), 스모크 테스트에 중복·누락 검사 |
 
 ---
 

@@ -63,6 +63,7 @@ hwa/
 | `BlockSave` | `1` | 게임 세이브(`GameData.SaveGameData`) 차단 |
 | `NoteSway` | `0` | 노트 좌우 흔들림 연출 (`NoteSwayAmplitude` / `NoteSwaySpeed` / `NoteSwayDamping` / `NoteSwayDampingTime`) |
 | `NoteSpeedChaos` | `0` | 노트마다/레인마다 낙하 속도를 다르게 (`NoteSpeedChaosMin` / `NoteSpeedChaosMax` / `NoteSpeedChaosPerLane`) |
+| `LogLevel` | `0` | 로그 상세도. `0` 요약(곡당 한 줄 + 경고/오류), `1` 상세(레인별 주입·에셋 교체), `2` 디버그(커서 이동·10초 진행률·레인 배치/원곡 차트 진단) |
 | `SmokeTest` | `0` | [개발용] 실행 직후 첫 커스텀 곡을 자동 선택·오토플레이하고 로그에 `[SmokeTest] PASS/FAIL`을 남김. 게임 업데이트 후 점검할 때만 켜고 끝나면 0으로 |
 
 > **`BlockSave=1` 주의:** 점수만 막는 것이 아니라 커스텀 곡/원곡 구분 없이 `GameData.SaveGameData` 호출 자체를 건너뜁니다. `GameData`에 함께 들어 있는 키 설정·볼륨·입력 지연(InputDelay/VisualOffset)·즐겨찾기·플레이어 레벨/경험치·구매 목록·점수도 저장되지 않습니다. 게임 설정을 바꿔야 할 때는 `BlockSave=0`으로 두세요.

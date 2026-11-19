@@ -122,6 +122,18 @@ namespace DEFLATE_custom_chart.Core.Bms
         /// <summary>파싱 중 건너뛴 줄 등 차트 제작자가 알아야 할 경고 (로그 출력용).</summary>
         public List<string> Warnings { get; } = new List<string>();
 
+        /// <summary>키음 이름이 가리키는 레인(예: hihat_3.wav)과 채널(열)로 배치된 레인이 다른 노트 수. 배치는 항상 채널 기준.</summary>
+        public int KeysoundLaneMismatchCount { get; set; }
+
+        /// <summary>게임 레인별 노트 수 요약 ("하이햇 a/b/c/d · 킥·스네어 e/f/g/h(1~4열) · 드롭 i").</summary>
+        public string DescribeLaneDistribution()
+        {
+            string Count(string lane) => GetNotesForLane(lane).Count.ToString();
+            return $"하이햇 {Count(BmsLaneMapper.HiHat1)}/{Count(BmsLaneMapper.HiHat2)}/{Count(BmsLaneMapper.HiHat3)}/{Count(BmsLaneMapper.HiHat4)}"
+                + $" · 킥·스네어 {Count(BmsLaneMapper.SnareLeft)}/{Count(BmsLaneMapper.KickLeft)}/{Count(BmsLaneMapper.KickRight)}/{Count(BmsLaneMapper.SnareRight)}(1~4열)"
+                + $" · 드롭 {Count(BmsLaneMapper.Drop)}";
+        }
+
         private readonly Dictionary<string, List<BmsNote>> _notesByLane =
             new Dictionary<string, List<BmsNote>>(StringComparer.OrdinalIgnoreCase);
 

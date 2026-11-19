@@ -35,7 +35,7 @@ namespace DEFLATE_custom_chart.Hooks
                         try
                         {
                             var wrapped = new CustomTrackWrapper(track);
-                            MelonLogger.Msg($"  [커스텀 트랙 #{i + 1}] '{wrapped.Title}' / {wrapped.Artist} (앨범: '{wrapped.AlbumName}', ID: {wrapped.UniqueID}, ★{wrapped.EZ_Star}/{wrapped.NM_Star}/{wrapped.HD_Star})");
+                            ModLog.Verbose($"  [커스텀 트랙 #{i + 1}] '{wrapped.Title}' / {wrapped.Artist} (앨범: '{wrapped.AlbumName}', ID: {wrapped.UniqueID}, ★{wrapped.EZ_Star}/{wrapped.NM_Star}/{wrapped.HD_Star})");
                         }
                         catch (Exception trackEx)
                         {
@@ -43,7 +43,7 @@ namespace DEFLATE_custom_chart.Hooks
                         }
                     }
 
-                    MelonLogger.Msg($"[곡 목록 카탈로그] 총 {__instance.tracks.Length}곡 (커스텀 {customCount}곡)");
+                    ModLog.Verbose($"[곡 목록 카탈로그] 총 {__instance.tracks.Length}곡 (커스텀 {customCount}곡)");
 
                     // config.txt SmokeTest=1이면 첫 커스텀 곡을 자동 선택·플레이해 파이프라인 전체를 점검한다.
                     SmokeTest.OnSongListReady(__instance, SongInjectorHooks.IsCustomBlock);
@@ -58,6 +58,9 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(MainTrackList), nameof(MainTrackList.GoToTrack))]
         public static class MainTrackList_GoToTrack_Patch
         {
+            // 로그 전용 훅: 로그 레벨이 모자라면 패치하지 않는다.
+            public static bool Prepare() => ModLog.Prepare(ModLog.DebugLevel);
+
             public static void Postfix(MainTrackList __instance, int trackIndex)
             {
                 try
@@ -69,7 +72,7 @@ namespace DEFLATE_custom_chart.Hooks
                         if (track != null)
                         {
                             string coverName = track.TrackCover != null ? track.TrackCover.name : "null";
-                            MelonLogger.Msg($"[곡 목록 커서 이동] 인덱스: {trackIndex} | 제목: '{track.TrackTitle}' (ID: {track.uniqueID}) | 자켓: '{coverName}'");
+                            ModLog.Debug($"[곡 목록 커서 이동] 인덱스: {trackIndex} | 제목: '{track.TrackTitle}' (ID: {track.uniqueID}) | 자켓: '{coverName}'");
                         }
                     }
                 }
@@ -100,7 +103,7 @@ namespace DEFLATE_custom_chart.Hooks
                     }
 
                     string coverName = __instance.cover != null && __instance.cover.sprite != null ? __instance.cover.sprite.name : "null";
-                    MelonLogger.Msg($"[곡 블록 선택 감지] 인덱스: {__instance.IndexInTrackList} | 제목: '{titleText}' (ID: {uniqueId}) | UI 자켓: '{coverName}' | 커스텀 에셋 사본 여부: {isTargetTrack}");
+                    ModLog.Debug($"[곡 블록 선택 감지] 인덱스: {__instance.IndexInTrackList} | 제목: '{titleText}' (ID: {uniqueId}) | UI 자켓: '{coverName}' | 커스텀 에셋 사본 여부: {isTargetTrack}");
                 }
                 catch (Exception ex)
                 {
@@ -112,12 +115,15 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(TrackListBlockCtrl), nameof(TrackListBlockCtrl.OnPointerClick))]
         public static class TrackListBlockCtrl_OnPointerClick_Patch
         {
+            // 로그 전용 훅: 로그 레벨이 모자라면 패치하지 않는다.
+            public static bool Prepare() => ModLog.Prepare(ModLog.DebugLevel);
+
             public static void Postfix(TrackListBlockCtrl __instance, PointerEventData eventData)
             {
                 try
                 {
                     if (__instance == null) return;
-                    MelonLogger.Msg($"[곡 클릭 감지] 인덱스: {__instance.IndexInTrackList} | 제목: '{__instance.UI_TrackTitle?.text}' (ID: {__instance.UniqueID})");
+                    ModLog.Debug($"[곡 클릭 감지] 인덱스: {__instance.IndexInTrackList} | 제목: '{__instance.UI_TrackTitle?.text}' (ID: {__instance.UniqueID})");
                 }
                 catch (Exception ex)
                 {
@@ -131,13 +137,13 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(MainTrackList), "GoToScene")]
         public static class MainTrackList_GoToScene_Patch
         {
-            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(MainTrackList), "GoToScene");
+            public static bool Prepare() => ModLog.Prepare(ModLog.Detail) && Il2CppReflectionHelper.HasPatchTarget(typeof(MainTrackList), "GoToScene");
 
             public static void Prefix(string SceneName)
             {
                 try
                 {
-                    MelonLogger.Msg($"[씬 전환 탐지] MainTrackList.GoToScene('{SceneName}') | 커스텀 곡 활성: {HwaAssetManager.IsTargetTrackActive}");
+                    ModLog.Verbose($"[씬 전환 탐지] MainTrackList.GoToScene('{SceneName}') | 커스텀 곡 활성: {HwaAssetManager.IsTargetTrackActive}");
                 }
                 catch (Exception ex)
                 {
@@ -173,15 +179,15 @@ namespace DEFLATE_custom_chart.Hooks
 
                         HwaAssetManager.ApplyMetaToGameData(__instance.gameData, customCover, targetStar);
 
-                        MelonLogger.Msg($"[GameData 사전 주입] 제목: '{meta.Title}', 아티스트: '{meta.Artist}', 매퍼: '{meta.ChartAuthor}', BGA: '{meta.BgaAuthor}', 앨범: '{meta.Album}', 난이도: ★{targetStar}, 커버: '{(customCover != null ? customCover.name : "null")}' 주입 완료");
+                        ModLog.Verbose($"[GameData 사전 주입] 제목: '{meta.Title}', 아티스트: '{meta.Artist}', 매퍼: '{meta.ChartAuthor}', BGA: '{meta.BgaAuthor}', 앨범: '{meta.Album}', 난이도: ★{targetStar}, 커버: '{(customCover != null ? customCover.name : "null")}' 주입 완료");
                     }
 
-                    MelonLogger.Msg("==================================================");
-                    MelonLogger.Msg($"[곡 플레이 선택 확정!] 사용자가 플레이를 시작합니다!");
-                    MelonLogger.Msg($"  - 선택된 인덱스: {__instance.NowIndex}");
-                    MelonLogger.Msg($"  - 선택된 곡 ID:  '{nowSongId}'");
-                    MelonLogger.Msg($"  - 커스텀 에셋 사본 여부: {isTargetTrack}");
-                    MelonLogger.Msg("==================================================");
+                    ModLog.Verbose("==================================================");
+                    ModLog.Verbose($"[곡 플레이 선택 확정!] 사용자가 플레이를 시작합니다!");
+                    ModLog.Verbose($"  - 선택된 인덱스: {__instance.NowIndex}");
+                    ModLog.Verbose($"  - 선택된 곡 ID:  '{nowSongId}'");
+                    ModLog.Verbose($"  - 커스텀 에셋 사본 여부: {isTargetTrack}");
+                    ModLog.Verbose("==================================================");
                 }
                 catch (Exception ex)
                 {
@@ -227,7 +233,7 @@ namespace DEFLATE_custom_chart.Hooks
 
                 if (logUpdate)
                 {
-                    MelonLogger.Msg($"[DiffCtrl UI 난이도 갱신] 난이도: {diffCtrl.myDifficulty} -> ★{targetStar}");
+                    ModLog.Debug($"[DiffCtrl UI 난이도 갱신] 난이도: {diffCtrl.myDifficulty} -> ★{targetStar}");
                 }
             }
             catch (Exception ex)

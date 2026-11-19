@@ -84,7 +84,7 @@ namespace DEFLATE_custom_chart.Core
             if (IsInGameplayContext && !IsInSongSelectContext) return;
             IsInSongSelectContext = false;
             IsInGameplayContext = true;
-            MelonLogger.Msg($"[HwaAssetManager] 컨텍스트 전환: 곡 선택 → 인게임 ({reason})");
+            ModLog.Verbose($"[HwaAssetManager] 컨텍스트 전환: 곡 선택 → 인게임 ({reason})");
         }
 
         /// <summary>선택된 곡 ID/제목으로 커스텀 곡을 판정하고 Active를 갱신합니다.</summary>
@@ -237,7 +237,7 @@ namespace DEFLATE_custom_chart.Core
                     if (img.sprite != sprite)
                     {
                         img.sprite = sprite;
-                        MelonLogger.Msg($"[HwaAssetManager] UI 자켓 PNG 적용: 오브젝트 '{img.name}'");
+                        ModLog.Verbose($"[HwaAssetManager] UI 자켓 PNG 적용: 오브젝트 '{img.name}'");
                     }
                 }
             }
@@ -308,7 +308,7 @@ namespace DEFLATE_custom_chart.Core
                 {
                     videoPlayer.Play();
                 }
-                MelonLogger.Msg($"[HwaAssetManager] ★ Custom BGA 주입 성공 ★ 오브젝트: '{videoPlayer.name}' | URL: '{url}'{(muteAudio ? " (음소거)" : "")}");
+                ModLog.Verbose($"[HwaAssetManager] ★ Custom BGA 주입 성공 ★ 오브젝트: '{videoPlayer.name}' | URL: '{url}'{(muteAudio ? " (음소거)" : "")}");
                 return true;
             }
             catch (Exception ex)

@@ -16,10 +16,7 @@ namespace DEFLATE_custom_chart.Core
         {
             try
             {
-                MelonLogger.Msg("==================================================");
-                MelonLogger.Msg("  DEFLATE Custom Chart Mod v1.0.0 Loaded!");
-                MelonLogger.Msg("  - Modular Architecture & Selection Interceptor");
-                MelonLogger.Msg("==================================================");
+                MelonLogger.Msg("DEFLATE Custom Chart Mod v1.0.0 로드 (로그 상세도는 config.txt의 LogLevel: 0 요약 / 1 상세 / 2 디버그)");
 
                 // 게임 버전/Unity/Steam Build ID 지문 기록 및 기준 빌드와 불일치 시 경고
                 GameCompat.LogFingerprint();
