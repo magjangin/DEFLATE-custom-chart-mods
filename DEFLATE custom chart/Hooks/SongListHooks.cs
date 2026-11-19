@@ -19,7 +19,7 @@ namespace DEFLATE_custom_chart.Hooks
                 try
                 {
                     // 곡 목록 씬으로 (재)진입 시 프리뷰 컨텍스트를 다시 활성화한다.
-                    HwaAssetManager.IsInSongSelectContext = true;
+                    HwaAssetManager.EnterSongSelect();
 
                     if (__instance == null || __instance.tracks == null) return;
 
@@ -29,8 +29,7 @@ namespace DEFLATE_custom_chart.Hooks
                     for (int i = 0; i < __instance.tracks.Length; i++)
                     {
                         var track = __instance.tracks[i];
-                        if (track == null || track.gameObject == null) continue;
-                        if (!track.gameObject.name.Contains("_Custom_")) continue;
+                        if (!SongInjectorHooks.IsCustomBlock(track)) continue;
 
                         customCount++;
                         try
@@ -45,6 +44,9 @@ namespace DEFLATE_custom_chart.Hooks
                     }
 
                     MelonLogger.Msg($"[곡 목록 카탈로그] 총 {__instance.tracks.Length}곡 (커스텀 {customCount}곡)");
+
+                    // config.txt SmokeTest=1이면 첫 커스텀 곡을 자동 선택·플레이해 파이프라인 전체를 점검한다.
+                    SmokeTest.OnSongListReady(__instance, SongInjectorHooks.IsCustomBlock);
                 }
                 catch (Exception ex)
                 {
@@ -124,9 +126,35 @@ namespace DEFLATE_custom_chart.Hooks
             }
         }
 
+        // 진단용: 1.2의 사용자 플레이 경로는 GotoSceneData를 거치지 않고 로딩 씬(LoadingGamePlay)으로 간다(2026-11-20 실기 확인).
+        // 어느 씬 이름으로 어떤 경로를 타는지 다음 업데이트 때 바로 확인할 수 있게 씬 이름만 기록한다.
+        [HarmonyPatch(typeof(MainTrackList), "GoToScene")]
+        public static class MainTrackList_GoToScene_Patch
+        {
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(MainTrackList), "GoToScene");
+
+            public static void Prefix(string SceneName)
+            {
+                try
+                {
+                    MelonLogger.Msg($"[씬 전환 탐지] MainTrackList.GoToScene('{SceneName}') | 커스텀 곡 활성: {HwaAssetManager.IsTargetTrackActive}");
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[MainTrackList.GoToScene] Prefix 예외: {ex.Message}");
+                }
+            }
+        }
+
         [HarmonyPatch(typeof(MainTrackList), nameof(MainTrackList.GotoSceneData))]
         public static class MainTrackList_GotoSceneData_Patch
         {
+            // 원본이 정상 종료(=플레이 확정 및 씬 전환 시작)했을 때만 실행된다. 예외로 중단되면 곡 선택 컨텍스트를 유지한다.
+            public static void Postfix()
+            {
+                HwaAssetManager.EnterGameplay("MainTrackList.GotoSceneData");
+            }
+
             public static void Prefix(MainTrackList __instance)
             {
                 try

@@ -60,9 +60,32 @@ namespace DEFLATE_custom_chart.Core
             set { if (!value) CustomSongLibrary.SetActive(null, null); }
         }
 
-        /// <summary>곡 목록(프리뷰) 씬에 있는지 여부. 로딩 씬 진입 시 false로 전환되어, 프리뷰 전용 BGM 오버라이드 훅이
-        /// 로딩/인게임 씬의 실제 오디오 로드 요청을 잘못 가로채 원본 로직을 스킵시키는(크래시 원인) 것을 막습니다.</summary>
+        /// <summary>곡 목록(프리뷰) 씬에 있는지 여부. 곡 선택 전용 훅(FavControl 프리뷰, 빠른 스크롤 취소 등)이
+        /// 인게임 씬의 실제 로드 요청에 끼어들지 않게 합니다. <see cref="EnterSongSelect"/> / <see cref="EnterGameplay"/>로만 전환하세요.
+        /// (게임 1.2부터 곡 선택 → 인게임이 로딩 씬(LoadingGamePlay)을 거치지 않으므로, 로딩 씬 훅만으로 끄면 인게임에서도 true로 남습니다.)</summary>
         public static bool IsInSongSelectContext { get; set; } = true;
+
+        /// <summary>플레이 확정 이후 인게임(결과 화면 포함) 컨텍스트인지 여부.</summary>
+        public static bool IsInGameplayContext { get; private set; }
+
+        /// <summary>곡 목록 씬 진입(MainTrackList.Start).</summary>
+        public static void EnterSongSelect()
+        {
+            IsInSongSelectContext = true;
+            IsInGameplayContext = false;
+        }
+
+        /// <summary>
+        /// 곡 선택을 떠나 인게임으로 진입. 플레이 확정(GotoSceneData 정상 종료) / 로딩 씬 / RhythmGameController.Start 중
+        /// 가장 먼저 도달한 지점에서 1회 전환되며, 이후 호출은 무시됩니다.
+        /// </summary>
+        public static void EnterGameplay(string reason)
+        {
+            if (IsInGameplayContext && !IsInSongSelectContext) return;
+            IsInSongSelectContext = false;
+            IsInGameplayContext = true;
+            MelonLogger.Msg($"[HwaAssetManager] 컨텍스트 전환: 곡 선택 → 인게임 ({reason})");
+        }
 
         /// <summary>선택된 곡 ID/제목으로 커스텀 곡을 판정하고 Active를 갱신합니다.</summary>
         public static bool SetActiveTrack(string activeTrackID, string activeTitle = null)
@@ -81,13 +104,32 @@ namespace DEFLATE_custom_chart.Core
             return false;
         }
 
-        public static bool IsTargetAudioPreview(string audioKey)
+        /// <summary>
+        /// TrackAssetManager의 오디오 로드 요청을 커스텀 BGM으로 바꿔야 하는지.
+        /// 커스텀 곡이 활성이고, 요청 Key가 그 사본이 숙주 곡에서 물려받은 오디오 Key와 정확히 같을 때만 true.
+        /// 곡 선택(프리뷰)과 인게임 모두 적용됩니다 — 1.2 인게임은 숙주 Key로 BGM을 다시 요청하므로 여기서 막지 않으면 숙주 곡이 섞입니다.
+        /// 인접 곡 사전 로드처럼 다른 Key 요청은 절대 건드리지 않습니다.
+        /// </summary>
+        public static bool ShouldOverrideAudioKey(string audioKey)
         {
             var active = Active;
-            return IsInSongSelectContext &&
+            return (IsInSongSelectContext || IsInGameplayContext) &&
                 active != null &&
                 !string.IsNullOrEmpty(active.AudioKey) &&
                 string.Equals(active.AudioKey, audioKey, StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
+        /// TrackAssetManager의 비디오 URL 요청을 커스텀 BGA로 바꿔야 하는지. 활성 커스텀 곡에 BGA가 있고,
+        /// 요청 Key가 숙주 비디오 Key와 같을 때만 true (숙주 Key를 모르면 이전 동작대로 Key 검사를 생략).
+        /// 1.2 인게임 BGA는 LoadVideo 훅이 아니라 이 경로로 로드되므로 인게임에서도 적용해야 합니다.
+        /// </summary>
+        public static bool ShouldOverrideVideoKey(string videoKey)
+        {
+            var active = Active;
+            if (!(IsInSongSelectContext || IsInGameplayContext) || active == null || string.IsNullOrEmpty(active.BgaFileUrl)) return false;
+            return string.IsNullOrEmpty(active.VideoKey) ||
+                string.Equals(active.VideoKey, videoKey, StringComparison.OrdinalIgnoreCase);
         }
 
         public class HwaMetaInfo
@@ -353,7 +395,7 @@ namespace DEFLATE_custom_chart.Core
             {
                 entry.ResetLoadedAssets();
             }
-            IsInSongSelectContext = true;
+            EnterSongSelect();
         }
     }
 }

@@ -3,8 +3,9 @@
 > 본 문서는 **DEFLATE (`dizzylab.castor`)** 커스텀 차트 및 곡 주입기 모드에 대한 멀티 에이전트 및 개발자 핸드오버 문서입니다.  
 > 인게임 실기 검증 및 구조적 안정화가 완료된 최신 아키텍처와 개발 노하우를 기록합니다.
 >
-> **현재 검증 상태 (2026-11-19, 게임 1.2 / Build `26402105`):** 컴파일 성공(경고 0) · 훅 대상 48개 시그니처 대조 · 실행 시 `[SafePatcher] 성공 48 / 실패 0` · `[GameCompat] 일치` · `hwa/` 곡 스캔까지 확인.
-> 곡 선택 화면 주입·BMS 노트 플레이 등 **게임플레이 실기 확인은 1.2에서 아직 수행하지 않음** (다음 작업자는 §6 4단계 체크리스트로 확인 후 이 줄을 갱신할 것).
+> **현재 검증 상태 (2026-11-20, 게임 1.2 / Build `26402105`):** 컴파일 경고 0 · `[SafePatcher] 성공 52 / 건너뜀 2(설정상 비활성) / 실패 0` · `[GameCompat] 일치`.
+> **게임플레이 실기 검증 완료:** ① 무인 스모크 테스트(`SmokeTest=1`, §3-⑥) `PASS` — BMS 노트 1104개/9레인·라인바 296개 주입, 커스텀 BGM 재생, BGA URL 일치. ② 사용자 수동 플레이(로딩 씬 경유) 로그에서 곡 목록 주입 → 로딩 UI 메타데이터 → 인게임 노트/라인바/BGM/BGA 주입 확인.
+> 미확인: 결과 화면, 롱노트(테스트 차트에 홀드 0개), 드롭 레인(테스트 차트 14번 채널 0개).
 
 ---
 
@@ -40,9 +41,18 @@
 - **이유:** Addressables 에셋 번들(`.bundle`)을 직접 변조하면 Steam 파일 무결성 검사 시 깨지고 게임 패치 시 모드가 파괴됩니다.
 - **방식:** 원곡 트랙(1순위 `WindShifter`, 2순위 첫 번째 유효 원곡 블록 자동 폴백)의 `MainTrackListBlock` GameObject를 런타임에 `UnityEngine.Object.Instantiate`로 복제하고 고유 ID를 부여한 뒤, `MainTrackList.tracks` (`Il2CppReferenceArray<MainTrackListBlock>`) 배열을 `N -> N + 커스텀곡수`로 확장 주입합니다. 원본 곡과 커스텀 곡이 완벽히 공존합니다.
 
-### ② 프리뷰 컨텍스트 분리 (`HwaAssetManager.IsInSongSelectContext`)
-- **이유:** 곡 목록 씬에서 커서를 옮길 때 곡 BGA/BGM 프리뷰를 위해 `TrackAssetManager.LoadAudioClip`을 후킹해야 합니다. 그러나 이 훅이 로딩 씬/인게임 씬까지 무차별로 동작하면, 실제 게임플레이 오디오 로드 요청을 가로채 원본 로직을 스킵시켜버려 인게임 로딩 무한 대기 또는 크래시를 유발합니다.
-- **해결책:** `LoadingGamePlay.Start` 진입 시 `IsInSongSelectContext = false`로 설정하여 프리뷰 훅을 즉시 비활성화하고, 곡 선택 씬(`MainTrackList.Start`) 복귀 시 다시 `true`로 켭니다.
+### ② 곡 선택 / 인게임 컨텍스트 분리 (`HwaAssetManager.EnterSongSelect` / `EnterGameplay`)
+- **이유:** 곡 목록 프리뷰용 훅(`FavControl` 프리뷰, 빠른 스크롤 시 지연 콜백 취소 등)이 인게임의 실제 로드 요청에 끼어들면, 콜백이 취소돼 게임이 오디오를 영원히 기다리거나 원본 로직이 스킵됩니다(구버전에서 로딩 무한 대기/크래시 발생).
+- **1.2의 씬 흐름 (2026-11-20 실기 확인):**
+  - **사용자 플레이:** 곡 목록 → 로딩 씬(`LoadingGamePlay.Start`) → 인게임. 이 경로는 `MainTrackList.GotoSceneData`를 **호출하지 않습니다**.
+  - **`GotoSceneData()` 직접 호출(스모크 테스트):** 로딩 씬을 **건너뛰고** 곧장 인게임으로 갑니다. 예전처럼 `LoadingGamePlay.Start`에서만 플래그를 끄면 인게임 내내 '곡 선택' 상태로 남습니다(실제로 발생, 수정 완료).
+- **해결책:** 상태 전환을 두 메서드로만 하고, 진입 지점을 여러 겹으로 둡니다.
+  - `EnterSongSelect()` ← `MainTrackList.Start`(두 훅 모두). `IsInSongSelectContext=true`, `IsInGameplayContext=false`.
+  - `EnterGameplay(reason)` ← `GotoSceneData` **Postfix**(원본이 예외 없이 끝났을 때만) / `LoadingGamePlay.Start` / `RhythmGameController.Start` **Prefix**(최후 안전망). 가장 먼저 도달한 곳에서 1회만 전환·로그(`[HwaAssetManager] 컨텍스트 전환`).
+- **Key 일치 가로채기 정책 (`ShouldOverrideAudioKey` / `ShouldOverrideVideoKey`):** `TrackAssetManager.LoadAudioClip`/`LoadVideoURL`은 "커스텀 곡 활성 + 요청 Key == 사본이 숙주 곡에서 물려받은 Key"일 때만, **곡 선택과 인게임 모두에서** 커스텀 에셋으로 바꿉니다.
+  - 1.2 인게임은 숙주 Key(`_track/074/074clip.ogg`, `pv/074…mp4`)로 BGM/BGA를 다시 요청하므로, 여기서 바꾸지 않으면 숙주 곡이 섞입니다(이중 BGM의 근원).
+  - 인접 곡 사전 로드 등 다른 Key는 절대 건드리지 않습니다(예전 `LoadVideoURL`은 Key 검사가 없어 곡 선택 중 모든 영상 요청을 커스텀 BGA로 바꿨음).
+  - 빠른 스크롤 취소(`requireStillActive`)는 곡 선택에서만 적용하고, 인게임에서는 반드시 성공/실패 콜백 중 하나를 호출합니다.
 
 ### ③ 내성 강화 리플렉션 래퍼 및 오타/인덱싱 최적화 (`CustomTrackWrapper` & `Il2CppReflectionHelper`)
 - **이유:** Unity Il2Cpp 게임은 버전 패치 시 필드/프로퍼티의 이름이나 대소문자, 접두사(`_`, `m_`), 메서드 시그니처가 변경되거나 상속 계층 구조가 바뀔 수 있습니다. 또한 게임 원본 코드(`GameData`, `LoadingGamePlay`)에 `NowTrackAurthor`, `NowTracLabel` 같은 오타 필드가 존재합니다.
@@ -75,7 +85,14 @@
 
 - **②가 필요한 이유:** Harmony `PatchAll()`은 패치 클래스를 순서대로 처리하다 하나라도 예외(대상 없음, 오버로드 추가로 인한 모호성, 파라미터명 변경)가 나면 그 뒤 훅이 **전부** 미적용됩니다. `nameof(X.Method)`도 컴파일 시 문자열로 박제되므로, 업데이트 후 재빌드 전 DLL에서는 문자열 훅과 똑같이 깨집니다. 그래서 자동 `PatchAll`을 끄고 `OnInitializeMelon`에서 클래스마다 `CreateClassProcessor(type).Patch()`를 try/catch로 돌립니다. `Prepare()=false`는 실패가 아니라 '건너뜀'으로 집계됩니다. **새 훅을 추가해도 별도 등록은 필요 없습니다**(`[HarmonyPatch]` 속성이 붙은 클래스를 자동 수집).
 - **③이 필요한 이유:** .NET(CoreCLR)은 메서드를 **처음 호출할 때** JIT하며, 이때 참조 멤버가 없으면 `MissingMethodException`/`MissingFieldException`/`TypeLoadException`이 호출 지점(=Harmony가 만든 대체 메서드)에서 터집니다. 즉 훅 내부의 `try/catch`로는 잡히지 않고, Prefix라면 **원본 메서드까지 실행되지 못합니다.** `RuntimeHelpers.PrepareMethod`로 패치 전에 미리 JIT해 깨진 훅을 적용 단계에서 걸러냅니다(최선 노력 검사 — JIT가 해석을 지연하는 경로는 못 잡을 수 있음). 반대로 `GetValueResilient(..., () => gd.NowTrackID, ...)`처럼 **람다로 분리된 직접 접근**은 별도 메서드라서 그 JIT 실패가 래퍼 내부 try/catch에서 잡히고 백업 리플렉션으로 넘어갑니다 — 업데이트에 취약한 멤버 접근은 이렇게 람다/헬퍼로 분리해 두는 것이 원칙입니다.
-- **⑥의 배경:** 1.2에서 최상위 `LaneType`이 `LaneController.LaneType`(중첩)으로 옮겨지고, 값 배치가 다른 `CommingNote.LaneType`이 새로 생겼습니다. 9월 빌드는 런타임에 최상위 `LaneType`을 찾지 못해 BMS 레인 주입 헬퍼가 무력화됐을 것입니다(훅 try/catch에 흡수되어 조용히 원본 차트로 플레이 — 1.2 실기 미확인 추정). 열거형 **멤버 이름**(`HiHat_3`, `Kick_Left` …)은 그대로이므로 `laneType` 값을 리플렉션으로 `object`로 읽어 `ToString()` 이름으로만 판정합니다. 레인 로드 시 레인당 1회 호출이라 할당 비용은 무시할 수준입니다.
+- **⑥의 배경 (1.2 실기 확인):** 1.2에서 최상위 `LaneType`이 `LaneController.LaneType`(중첩)으로 옮겨지고, 값 배치가 다른 `CommingNote.LaneType`이 새로 생겼습니다. 9월 빌드는 런타임에 최상위 `LaneType`을 찾지 못해 BMS 레인 주입 헬퍼가 무력화됐을 것입니다(훅 try/catch에 흡수되어 조용히 원본 차트로 플레이 — 1.2 실기 미확인 추정). 열거형 **멤버 이름**(`HiHat_3`, `Kick_Left` …)은 그대로이므로 `laneType` 값을 리플렉션으로 `object`로 읽어 `ToString()` 이름으로만 판정합니다. 레인 로드 시 레인당 1회 호출이라 할당 비용은 무시할 수준입니다.
+
+### ⑥ 무인 스모크 테스트 (`Core/SmokeTest.cs`, config `SmokeTest=1`)
+- **목적:** 게임 업데이트 직후 "곡 목록 주입 → 커스텀 곡 선택 → 인게임 노트/BGM/BGA 주입"을 사람 손 없이 1회 돌리고 `[SmokeTest] PASS/FAIL — …` 한 줄로 판정합니다. 오토플레이 강제, `BlockSave` 설정은 그대로 따릅니다.
+- **동작:** 곡 목록이 준비되면(`MainTrackList.Start` Last 훅) 첫 커스텀 블록을 찾아 **`Next()`/`Last()`로 사용자처럼 이동** → `hasKoreHandle` 대기 → `GotoSceneData()` → 인게임 12초 후 점검.
+- **판정 기준:** 커스텀 곡 활성, `audioCom.clip`이 커스텀 클립이고 재생 중(음소거 아님), BMS가 있으면 레인 노트 주입 > 0, BGA가 있으면 VideoPlayer URL 일치, 컨텍스트가 인게임으로 전환됨. 상세 줄에 라인바 수·활성 노트 수·VideoPlayer 오디오 모드도 기록.
+- **설계 포인트:** 게임은 시작 직후 `MainTrackList`를 **두 번** 만듭니다(인트로 → 곡 목록 재로드). 새 목록이 오면 세대(`_generation`)를 올려 이전 실행을 조용히 폐기하고 새 목록에서 다시 시작합니다. 플레이 확정 후에는 재실행하지 않습니다(결과 화면 후 복귀 시 반복 방지).
+- **한계:** `GotoSceneData` 직접 호출은 로딩 씬을 건너뛰므로 사용자 경로(로딩 씬 경유)와 다릅니다. 로딩 씬 UI 주입은 이 테스트로 검증되지 않습니다 → `[씬 전환 탐지] MainTrackList.GoToScene(...)` 진단 로그로 사용자 경로의 씬 이름을 확보하면 그 경로로 바꾸는 것이 다음 개선 과제입니다.
 
 ---
 
@@ -85,11 +102,12 @@
 | :--- | :--- | :--- |
 | `MainTrackList.Start` | Postfix | `High` 우선순위로 원본 `WindShifter` 복제 및 O(1) 등록, `Normal` 커버 주입, `Last` 카탈로그 로깅 |
 | `TrackListBlockCtrl.SetSelected` | Postfix | 곡 목록 커서 이동 시 현재 활성 트랙(`HwaAssetManager.Active`) 갱신 및 커버 적용. 1.2에서 시그니처가 `(bool isSelected, bool animated = true)`로 확장됨 — Postfix는 `isSelected`만 받아도 Harmony 바인딩 유지 |
-| `MainTrackList.GotoSceneData` | Prefix | 곡 플레이 시작 확정 시 `ApplyMetaToGameData`로 커스텀 메타데이터(제목, 아티스트, 커버 등) 주입 |
-| `TrackAssetManager.LoadAudioClip` | Prefix | 곡 목록 프리뷰 중 커스텀 BGM 비동기 로드 및 콜백 호출 (원본 로드 스킵) |
+| `MainTrackList.GotoSceneData` | Prefix / Postfix | Prefix: `ApplyMetaToGameData`로 커스텀 메타데이터 주입. Postfix: `EnterGameplay`. ⚠ 1.2 **사용자 플레이 경로에서는 호출되지 않음**(로딩 씬 경유) — 메타데이터는 `LoadingGamePlay` 훅이 담당 |
+| `MainTrackList.GoToScene` | Prefix | 진단 전용: 전환 씬 이름 로깅(`[씬 전환 탐지]`) |
+| `TrackAssetManager.LoadAudioClip` / `LoadVideoURL` | Prefix | 활성 커스텀 곡의 **숙주 Key와 일치하는 요청만** 커스텀 BGM/BGA로 대체(곡 선택·인게임 공통, §3-②). 1.2 인게임 BGA는 이 경로로 적용됨 |
 | `SimpleRandomVideo.LoadVideoSmart` | Prefix | 곡 선택/결과/인게임 BGA VideoPlayer에 커스텀 MP4 URL 주입 |
-| `LoadingGamePlay.Start` | Postfix | 프리뷰 컨텍스트 비활성화(`IsInSongSelectContext = false`), 로딩 UI 메타데이터 주입(오타 필드 폴백 포함) |
-| `RhythmGameController.Start` | Postfix | 인게임 BGM 0ms 즉시 할당(`EnsureInGameCustomBgm`), 오토플레이(`AutoMode`) 강제, 판정 파라미터 로깅 |
+| `LoadingGamePlay.Start` | Postfix | `EnterGameplay`, 로딩 UI 메타데이터 주입(오타 필드 폴백 포함) |
+| `RhythmGameController.Start` | Prefix / Postfix | Prefix: `EnterGameplay`(최후 안전망). Postfix: 인게임 BGM 0ms 즉시 할당(`EnsureInGameCustomBgm`), 오토플레이(`AutoMode` 또는 스모크 테스트) 강제, 판정 파라미터 로깅, 스모크 테스트 점검 예약 |
 | `RhythmGameController.InitializeKoreographyTracks` | Postfix | `dropEventSamples`에 O(1) 드롭 레인 노트 주입 및 원본 잔여 이벤트 정리 |
 | `RhythmGameController.LoadKoreographyEvents` | Postfix | **[핵심]** 각 레인별(`lane_1`~`lane_4`) BMS 차트 이벤트(`KoreographyEvent`) O(1) 레인 인덱스 기반 주입 |
 | `RhythmGameController.ReplaceLaneEventsFromTrack` / `AtSample` | Postfix | 재시작·모드 전환 시 레인 이벤트가 원본 차트로 복원되지 않도록 커스텀 BMS 노트 재주입 |
@@ -133,6 +151,16 @@
    - 인게임에서는 `RhythmGameController.EnsureAudioSourceBound`/`BindAudioClipWhenReady`가 숙주 Koreography의 `SourceClip`으로 `audioCom`을 덮어쓰고, 동시에 `LoadVideo` Prefix가 원본을 스킵하며 음소거 없이 `video.mp4`를 재생해 두 오디오가 겹쳤습니다. 곡 선택 씬에서도 `FavControl.PreloadNearbyTracks`로 `TrackAssetManager.audioCache`에 숙주 OGG가 캐시된 뒤 `FavControl.SafeLoadAndPlayAudio`/`PlayAudioWhenReady`가 숙주 클립을 재생하거나, 빠른 스크롤 시 지연 코루틴 콜백이 겹칠 수 있었습니다.
    - **해결:** 인게임 `EnsureAudioSourceBound`/`BindAudioClipWhenReady`/`StartAudioWhenReady` + `koreo.SourceClip` 교체 및 인게임/결과 `VideoPlayer` 강제 음소거(`MuteVideoPlayer`), 곡 선택 `FavControl.SafeLoadAndPlayAudio`/`PlayAudioWhenReady`/`TrackAssetManager.LoadVideoURL` 인터셉트, 빠른 스크롤 경쟁 상태 가드(`LoadCustomBgmForEntryCoroutine`), BGA 없는 커스텀 곡의 `VideoKey`·`DiscID` 초기화.
 
+12. **`GoToTrack(index)` + `GotoSceneData()`로 곡 자동 선택·시작 (네이티브 NRE):**
+   - `GoToTrack`은 인덱스만 옮기고 `ChangeTrack`/`LoadKoreography`를 거치지 않아 `currentKoreHandle`이 비어 있고, `GotoSceneData` 내부에서 `NullReferenceException`이 납니다(2026-11-20 확인). 커스텀 곡 활성화(`SetSelected`)도 일어나지 않습니다.
+   - **해결:** 사용자처럼 `Next()`/`Last()`로 이동하고 `hasKoreHandle == true`를 기다린 뒤 호출(`SmokeTest.SelectAndPlay`).
+13. **곡 목록 첫 인스턴스에 코루틴 고정:**
+   - 게임 시작 직후 `MainTrackList.Start`가 두 번 불리고 첫 인스턴스는 곧 파괴됩니다. 첫 인스턴스를 붙잡고 기다리는 로직은 중간에 대상이 사라집니다.
+   - **해결:** 목록이 새로 생길 때마다 세대 토큰으로 재시작(`SmokeTest._generation`). 곡 목록 관련 지연 작업을 새로 만들 때도 같은 패턴을 쓰세요.
+14. **'프리뷰 전용' 가로채기를 씬 플래그 하나로만 막기:**
+   - 로딩 씬 훅에서만 플래그를 끄는 구조는 로딩 씬을 건너뛰는 경로에서 인게임 내내 '곡 선택'으로 남고, 반대로 인게임에서 꼭 필요한 숙주 Key 대체(BGM/BGA)는 막아버립니다. 1.2에서 `EnforceCustomBgaUrl`의 인게임 VideoPlayer 음소거도 이 플래그에 의존합니다.
+   - **해결:** §3-②의 `EnterSongSelect`/`EnterGameplay` 다중 진입점 + Key 일치 정책.
+
 ---
 
 ## 6. 게임 업데이트 대응 & 복구 플레이북 (Update Survival Playbook)
@@ -168,7 +196,8 @@
 5. **빌드 & 런타임 검증:**
    - `dotnet build -c Release` (경고 0 / 오류 0) → `Get-FileHash "<GameDir>Mods\DEFLATE custom chart.dll"`과 `Latest.log`의 `SHA256 Hash:` 일치 확인.
    - 로그에서 `[GameCompat] … → 일치`, `[SafePatcher] … 실패 0`, `[커스텀 곡 라이브러리] hwa/ 스캔 완료` 확인.
-   - **게임플레이 체크리스트:** 곡 선택 화면에 커스텀 곡 표시(`[곡 목록 주입 완료]`) → 커서 이동 시 커버/BGM·BGA 프리뷰 → 플레이 진입 시 로딩 UI 메타데이터 → 인게임 `[★ HWA BMS 노트 주입 ★]` 레인별 로그와 실제 노트/라인바 → 결과 화면.
+   - **무인 스모크 테스트(권장):** `<GameDir>savecustomkey\config.txt`를 백업 → 맨 끝에 `SmokeTest=1` 추가 → Steam 경유 실행 → `Latest.log`에서 `[SmokeTest] PASS` 확인 → **config.txt 원복**. 게임 시작 후 약 25~30초면 판정이 나옵니다. 테스트 중에는 게임을 조작하지 마세요(사용자 입력이 끼면 로딩 씬 경로로 진입해 점검이 건너뛰어집니다).
+   - **수동 게임플레이 체크리스트:** 곡 선택 화면에 커스텀 곡 표시(`[곡 목록 주입 완료]`) → 커서 이동 시 커버/BGM·BGA 프리뷰 → 플레이 진입 시 로딩 UI 메타데이터(`[로딩 씬 커스텀 UI 주입]`) → `[HwaAssetManager] 컨텍스트 전환` → 인게임 `[★ HWA BMS 노트 주입 ★]` 레인별 로그와 실제 노트/라인바 → 결과 화면.
 
 ---
 
@@ -183,7 +212,8 @@
 | `02341bd` | 래퍼 폴백 버그 수정 | `CustomTrackWrapper` `SafeCast` 실패 시 폴백 우회 버그 수정, `WarnOnce`, `TryAdaptValueForTargetType`, UTF-8 BOM 대응, `SampleRate <= 0` 가드 |
 | `2c80477` | 감사·단일화·패치 격리 | `MemberFallbacks.cs` 단일화, 문자열/보조 훅 `Prepare()`(`HasPatchTarget`) 패치 격리 가드, `DiscID` 래핑, 인수인계 플레이북 추가. ⚠ **컴파일 불가 상태로 커밋됨**(`DiscID`를 `int`로 선언) — 다음 행에서 수정 |
 | `5d6f2a9` | 게임 1.2 대응·업데이트 내성 계층 | 1.2(Build `26402105`) `LaneType` 중첩 이동 대응(이름 기반 레인 판정), `DiscID` `string` 수정, `SafePatcher`(자동 PatchAll 대체·클래스 단위 격리·사전 JIT 검사), `GameCompat` 빌드 지문 경고, NoteSway 서킷 브레이커, CS0162 경고 제거, 플레이북에 시그니처 대조 스크립트·Steam 경유 실행·덤퍼 실행 옵션 반영 |
-| 현재 | DiffCtrl 스팸·이중 BGM·병목 수정 | `SafeGenerateStarImages`(`new Il2CppSystem.Nullable<Color>()`)로 `DiffCtrl`/`LoadingGamePlay` NRE 스팸 해결, 숙주+커스텀 이중 BGM 차단(인게임 `EnsureAudioSourceBound`/`BindAudioClipWhenReady`/`StartAudioWhenReady`+`SourceClip` 교체+`MuteVideoPlayer`, 곡 선택 `FavControl.SafeLoadAndPlayAudio`/`PlayAudioWhenReady`/`LoadVideoURL`+빠른 스크롤 가드+무BGA 곡 `VideoKey`/`DiscID` 초기화), `ModConfig.Initialize()` 선행 로드로 비활성 핫패스 훅(`NoteSway`/`NoteSpeedChaos`/`BlockSave`) `Prepare()` 스킵, 117곡 전체 카탈로그 덤프/커버 순회/BlockSave/프리로드 로그 스팸 및 할당 병목 제거 |
+| `b25a513` | DiffCtrl 스팸·이중 BGM·병목 수정 | `SafeGenerateStarImages`(`new Il2CppSystem.Nullable<Color>()`)로 `DiffCtrl`/`LoadingGamePlay` NRE 스팸 해결, 숙주+커스텀 이중 BGM 차단(인게임 `EnsureAudioSourceBound`/`BindAudioClipWhenReady`/`StartAudioWhenReady`+`SourceClip` 교체+`MuteVideoPlayer`, 곡 선택 `FavControl.SafeLoadAndPlayAudio`/`PlayAudioWhenReady`/`LoadVideoURL`+빠른 스크롤 가드+무BGA 곡 `VideoKey`/`DiscID` 초기화), `ModConfig.Initialize()` 선행 로드로 비활성 핫패스 훅(`NoteSway`/`NoteSpeedChaos`/`BlockSave`) `Prepare()` 스킵, 117곡 전체 카탈로그 덤프/커버 순회/BlockSave/프리로드 로그 스팸 및 할당 병목 제거 |
+| 현재 | 1.2 실기 검증·컨텍스트 결함 수정·스모크 테스트 | `SmokeTest`(무인 커스텀 곡 자동 플레이·PASS/FAIL 판정, 목록 이중 생성 대응) 추가 및 1.2 실기 PASS, `EnterSongSelect`/`EnterGameplay` 다중 진입점으로 곡 선택 컨텍스트 누수 수정, `LoadAudioClip`/`LoadVideoURL`을 숙주 Key 일치 정책으로 통일(인게임 포함·인게임 콜백 취소 금지·`LoadVideoURL` Key 검사 신설), `MainTrackList.GoToScene` 진단 로그, 커스텀 블록 판정(`SongInjectorHooks.IsCustomBlock`) 단일화 |
 
 ---
 

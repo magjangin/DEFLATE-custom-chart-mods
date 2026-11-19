@@ -31,6 +31,9 @@ namespace DEFLATE_custom_chart.Core
         public float NoteSpeedChaosMax { get; set; } = 1.8f;
         public bool NoteSpeedChaosPerLane { get; set; } = true;
 
+        // 5. 무인 스모크 테스트 (게임 업데이트 후 검증용, 평소에는 0)
+        public bool SmokeTest { get; set; } = false;
+
         public ModConfig()
         {
             UpdateDerivedValues();
@@ -75,7 +78,7 @@ namespace DEFLATE_custom_chart.Core
                 if (File.Exists(ConfigFilePath))
                 {
                     LoadFromTxt();
-                    MelonLogger.Msg($"[ModConfig] config.txt 설정 파일 로드 완료 (AutoPlay={Instance.AutoPlay}, NoteSway={Instance.NoteSway})");
+                    MelonLogger.Msg($"[ModConfig] config.txt 설정 파일 로드 완료 (AutoPlay={Instance.AutoPlay}, NoteSway={Instance.NoteSway}, BlockSave={Instance.BlockSave}{(Instance.SmokeTest ? ", SmokeTest=ON" : "")})");
                     return;
                 }
 
@@ -159,6 +162,10 @@ namespace DEFLATE_custom_chart.Core
                 {
                     if (TryParseFlexibleBool(val, out bool b)) config.NoteSpeedChaosPerLane = b;
                 }
+                else if (key.Equals("SmokeTest", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (TryParseFlexibleBool(val, out bool b)) config.SmokeTest = b;
+                }
             }
 
             config.UpdateDerivedValues();
@@ -232,7 +239,11 @@ namespace DEFLATE_custom_chart.Core
                     "",
                     "# 1 = 레인마다 속도가 다름(같은 레인 안에서는 순서 유지, 읽을 수는 있음)",
                     "# 0 = 노트마다 속도가 다름(완전 카오스)",
-                    $"NoteSpeedChaosPerLane={(Instance.NoteSpeedChaosPerLane ? 1 : 0)}"
+                    $"NoteSpeedChaosPerLane={(Instance.NoteSpeedChaosPerLane ? 1 : 0)}",
+                    "",
+                    "# [개발용] 무인 스모크 테스트: 실행 직후 첫 커스텀 곡을 자동 선택·오토플레이하고",
+                    "# 로그에 [SmokeTest] PASS/FAIL을 남깁니다. 게임 업데이트 후 점검할 때만 1로 켜세요.",
+                    $"SmokeTest={(Instance.SmokeTest ? 1 : 0)}"
                 };
                 File.WriteAllLines(ConfigFilePath, lines);
             }

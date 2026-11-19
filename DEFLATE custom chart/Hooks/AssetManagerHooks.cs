@@ -23,24 +23,27 @@ namespace DEFLATE_custom_chart.Hooks
                     // 곡 목록 프리뷰에서 커스텀 사본이 선택된 상태로 자신의 오디오 Key가 요청된 경우에만
                     // hwa/ 커스텀 BGM으로 오버라이드한다 (원본 WindShifter는 같은 Key를 써도 건드리지 않음).
                     // 인접 곡 사전 로드(PreloadNearbyTracks) 로그 스팸을 피하기 위해 커스텀 오버라이드 시에만 기록한다.
-                    if (HwaAssetManager.IsTargetAudioPreview(key) && !string.IsNullOrEmpty(HwaAssetManager.BgmFilePath))
+                    if (HwaAssetManager.ShouldOverrideAudioKey(key) && !string.IsNullOrEmpty(HwaAssetManager.BgmFilePath))
                     {
+                        bool songSelect = HwaAssetManager.IsInSongSelectContext;
+                        string where = songSelect ? "곡 목록 프리뷰" : "인게임";
                         var requestedEntry = HwaAssetManager.Active;
                         if (requestedEntry != null && requestedEntry.BgmClip != null)
                         {
-                            MelonLogger.Msg($"[HwaAssetManager] ★ 곡 목록 프리뷰 Custom BGM 즉시 오버라이드(캐시) ★ Key: '{key}'");
+                            MelonLogger.Msg($"[HwaAssetManager] ★ {where} Custom BGM 즉시 오버라이드(캐시) ★ Key: '{key}'");
                             onSuccess?.Invoke(requestedEntry.BgmClip);
                             return false;
                         }
 
-                        MelonLogger.Msg($"[HwaAssetManager] ★ 곡 목록 프리뷰 Custom BGM 오버라이드 ★ Key: '{key}'");
+                        MelonLogger.Msg($"[HwaAssetManager] ★ {where} Custom BGM 오버라이드 ★ Key: '{key}'");
                         // 원본 로드를 건너뛰므로, 실패하면 onFail을 불러 게임이 계속 기다리지 않게 한다.
-                        // 빠른 스크롤 중 커서가 이미 다른 곡으로 넘어갔다면 지연된 콜백을 취소한다.
+                        // 곡 선택에서만 '빠른 스크롤로 커서가 다른 곡으로 넘어갔다면 지연 콜백 취소'를 적용한다.
+                        // (인게임에서 콜백을 취소하면 게임이 오디오를 영원히 기다리므로 반드시 성공/실패 중 하나를 호출)
                         MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmForEntryCoroutine(
                             requestedEntry,
                             null,
                             false,
-                            requireStillActive: true,
+                            requireStillActive: songSelect,
                             clip => onSuccess?.Invoke(clip),
                             () => onFail?.Invoke()));
                         return false;
@@ -71,11 +74,10 @@ namespace DEFLATE_custom_chart.Hooks
             {
                 try
                 {
-                    if (HwaAssetManager.IsInSongSelectContext &&
-                        HwaAssetManager.IsTargetTrackActive &&
-                        !string.IsNullOrEmpty(HwaAssetManager.BgaFileUrl))
+                    if (HwaAssetManager.ShouldOverrideVideoKey(key))
                     {
-                        MelonLogger.Msg($"[HwaAssetManager] ★ 곡 목록 프리뷰 Custom BGA URL 오버라이드 ★ Key: '{key}'");
+                        string where = HwaAssetManager.IsInSongSelectContext ? "곡 목록 프리뷰" : "인게임";
+                        MelonLogger.Msg($"[HwaAssetManager] ★ {where} Custom BGA URL 오버라이드 ★ Key: '{key}'");
                         onSuccess?.Invoke(HwaAssetManager.BgaFileUrl);
                         return false;
                     }

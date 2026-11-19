@@ -51,6 +51,7 @@ hwa/
 ### 지원 버전 & 게임 업데이트 후 확인
 - 기준 빌드: DEFLATE **1.2** (Steam Build `26402105`) · Unity `2022.3.62f2` · MelonLoader **0.7.3**
 - 게임이 업데이트되면 `MelonLoader/Latest.log` 첫머리에 `[GameCompat] … 불일치!` 경고가 뜹니다. 이어서 `[SafePatcher] 훅 적용 요약`의 `실패` 개수를 확인하세요 — 깨진 훅만 빠지고 나머지 기능은 계속 동작합니다.
+- 실제 플레이까지 한 번에 확인하려면 `config.txt`에 `SmokeTest=1`을 넣고 실행한 뒤 로그에서 `[SmokeTest] PASS`를 확인하세요.
 - 복구 절차는 [`AGENTS.md` §6 업데이트 대응 플레이북](AGENTS.md)을 따르세요.
 - 게임은 Steam으로 실행하세요(`DEFLATE.exe`를 직접 실행하면 "Another instance is already running" 오류가 날 수 있습니다).
 
@@ -62,6 +63,7 @@ hwa/
 | `BlockSave` | `1` | 게임 세이브(`GameData.SaveGameData`) 차단 |
 | `NoteSway` | `0` | 노트 좌우 흔들림 연출 (`NoteSwayAmplitude` / `NoteSwaySpeed` / `NoteSwayDamping` / `NoteSwayDampingTime`) |
 | `NoteSpeedChaos` | `0` | 노트마다/레인마다 낙하 속도를 다르게 (`NoteSpeedChaosMin` / `NoteSpeedChaosMax` / `NoteSpeedChaosPerLane`) |
+| `SmokeTest` | `0` | [개발용] 실행 직후 첫 커스텀 곡을 자동 선택·오토플레이하고 로그에 `[SmokeTest] PASS/FAIL`을 남김. 게임 업데이트 후 점검할 때만 켜고 끝나면 0으로 |
 
 > **`BlockSave=1` 주의:** 점수만 막는 것이 아니라 커스텀 곡/원곡 구분 없이 `GameData.SaveGameData` 호출 자체를 건너뜁니다. `GameData`에 함께 들어 있는 키 설정·볼륨·입력 지연(InputDelay/VisualOffset)·즐겨찾기·플레이어 레벨/경험치·구매 목록·점수도 저장되지 않습니다. 게임 설정을 바꿔야 할 때는 `BlockSave=0`으로 두세요.
 
