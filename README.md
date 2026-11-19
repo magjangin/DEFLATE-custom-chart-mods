@@ -48,6 +48,12 @@ hwa/
 3. 첫 실행 시 `savecustomkey/config.txt`가 만들어집니다. 아래 [설정](#설정-savecustomkeyconfigtxt)을 참고하세요.
 4. 자세한 훅 포인트와 트러블슈팅은 [`docs/`](docs/) 및 [`AGENTS.md`](AGENTS.md) 문서를 참고하세요.
 
+### 지원 버전 & 게임 업데이트 후 확인
+- 기준 빌드: DEFLATE **1.2** (Steam Build `26402105`) · Unity `2022.3.62f2` · MelonLoader **0.7.3**
+- 게임이 업데이트되면 `MelonLoader/Latest.log` 첫머리에 `[GameCompat] … 불일치!` 경고가 뜹니다. 이어서 `[SafePatcher] 훅 적용 요약`의 `실패` 개수를 확인하세요 — 깨진 훅만 빠지고 나머지 기능은 계속 동작합니다.
+- 복구 절차는 [`AGENTS.md` §6 업데이트 대응 플레이북](AGENTS.md)을 따르세요.
+- 게임은 Steam으로 실행하세요(`DEFLATE.exe`를 직접 실행하면 "Another instance is already running" 오류가 날 수 있습니다).
+
 ## 설정 (`savecustomkey/config.txt`)
 
 | 키 | 기본값 | 설명 |
@@ -62,7 +68,7 @@ hwa/
 ## 빌드
 
 - 게임 설치 경로는 `.csproj`의 `GameDir` 속성 하나로 지정합니다 (기본값 `H:\steam\steamapps\common\DEFLATE\`). 다른 경로면 `dotnet build -p:GameDir=<게임 폴더>\`로 덮어쓰세요.
-- 참조 DLL은 `MelonLoader/Il2CppAssemblies/`에서 가져옵니다. 이 폴더는 MelonLoader 설치 후 게임을 **한 번 실행해야** 생성됩니다.
+- 참조 DLL은 `MelonLoader/Il2CppAssemblies/`에서 가져옵니다. 이 폴더는 MelonLoader 설치(또는 버전 업그레이드) 후 게임을 **한 번 실행해야** 생성됩니다.
 - 빌드가 끝나면 `DeployToMods` 타깃이 `<GameDir>Mods\`로 DLL을 복사합니다.
 
 ## 문서

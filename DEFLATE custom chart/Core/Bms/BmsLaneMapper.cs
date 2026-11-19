@@ -72,51 +72,19 @@ namespace DEFLATE_custom_chart.Core.Bms
             return !string.IsNullOrEmpty(channel) && ChannelToLane.ContainsKey(channel);
         }
 
-        /// <summary>LaneType 열거형을 박싱/문자열 할당 없이 레인 슬롯 ID로 즉시 변환합니다.</summary>
-        public static string ResolveLaneFromType(LaneType laneType)
-        {
-            switch (laneType)
-            {
-                case LaneType.Kick_Left:
-                case LaneType.HiHat_1:
-                    return Lane1;
-                case LaneType.Kick_Right:
-                case LaneType.HiHat_2:
-                    return Lane2;
-                case LaneType.Snare_Left:
-                case LaneType.HiHat_3:
-                    return Lane3;
-                case LaneType.Snare_Right:
-                case LaneType.HiHat_4:
-                    return Lane4;
-                case LaneType.Drop:
-                    return Drop;
-                default:
-                    return null;
-            }
-        }
-
         /// <summary>
-        /// 인게임 훅이 받은 Koreography trackID와 <see cref="LaneType"/> 열거형으로 레인 슬롯을 판정합니다.
-        /// (열거형 .ToString() 박싱/문자열 할당 제거 및 향후 열거형 확장 시 문자열 폴백 지원)
+        /// 인게임 훅이 받은 Koreography trackID와 <c>LaneController.laneType</c> 값(박싱된 열거형)으로 레인 슬롯을 판정합니다.
+        ///
+        /// 열거형 <b>타입</b>에 컴파일 타임 의존을 두지 않는 이유: 게임 1.2(Build 26402105)에서 최상위 <c>LaneType</c>이
+        /// <c>LaneController.LaneType</c> 중첩 열거형으로 옮겨지고 값이 다른 <c>CommingNote.LaneType</c>이 새로 생겨,
+        /// 열거형 타입을 직접 참조하던 이전 빌드는 런타임 TypeLoadException으로 BMS 노트 주입 전체가 조용히 무력화됐습니다.
+        /// 멤버 이름("HiHat_3", "Kick_Left" 등)은 선언 위치가 바뀌어도 유지되므로 이름 기반으로만 판정합니다.
+        /// (레인 로드 시점에 레인당 1회 호출되므로 ToString 할당 비용은 무시할 수준입니다.)
         /// </summary>
-        public static string ResolveLaneId(string trackID, LaneType laneType)
+        public static string ResolveLaneId(string trackID, object laneTypeValue)
         {
-            if (!string.IsNullOrEmpty(trackID))
-            {
-                foreach (var (keyword, lane) in LaneNameKeywords)
-                {
-                    if (trackID.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        return lane;
-                    }
-                }
-            }
-
-            string fromEnum = ResolveLaneFromType(laneType);
-            if (fromEnum != null) return fromEnum;
-
-            return ResolveLaneId(null, laneType.ToString());
+            // 이전 동작과 동일하게 trackID 판정이 열거형 이름보다 우선한다.
+            return ResolveLaneId(trackID, (string)null) ?? ResolveLaneId(null, laneTypeValue?.ToString());
         }
 
         /// <summary>

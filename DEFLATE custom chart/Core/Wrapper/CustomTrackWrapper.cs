@@ -15,7 +15,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
         public string Title { get; set; } = string.Empty;
         public string Artist { get; set; } = string.Empty;
         public string AlbumName { get; set; } = string.Empty;
-        public int DiscID { get; set; }
+        public string DiscID { get; set; } = string.Empty;
         public string TrackLabel { get; set; } = string.Empty;
         public string PVAuthor { get; set; } = string.Empty;
         public string ChartMaker { get; set; } = string.Empty;
@@ -74,7 +74,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
             Title = ReadBlockMember(NativeBlock, targetObj, b => b.TrackTitle, "TrackTitle", MemberFallbacks.TrackBlock.Title, string.Empty);
             Artist = ReadBlockMember(NativeBlock, targetObj, b => b.TrackAuthor, "TrackAuthor", MemberFallbacks.TrackBlock.Artist, string.Empty);
             AlbumName = ReadBlockMember(NativeBlock, targetObj, b => b.TrackAlbum, "TrackAlbum", MemberFallbacks.TrackBlock.Album, string.Empty);
-            DiscID = ReadBlockMember(NativeBlock, targetObj, b => b.DiscID, "DiscID", MemberFallbacks.TrackBlock.DiscId, 0);
+            DiscID = ReadBlockMember(NativeBlock, targetObj, b => b.DiscID, "DiscID", MemberFallbacks.TrackBlock.DiscId, string.Empty);
             AudioKey = ReadBlockMember(NativeBlock, targetObj, b => b.audioClip_Key, "audioClip_Key", MemberFallbacks.TrackBlock.AudioKey, string.Empty);
             VideoKey = ReadBlockMember(NativeBlock, targetObj, b => b.videoClip_Key, "videoClip_Key", MemberFallbacks.TrackBlock.VideoKey, string.Empty);
             EZ_KoreKey = ReadBlockMember(NativeBlock, targetObj, b => b.EZ_TrackKore_Key, "EZ_TrackKore_Key", MemberFallbacks.TrackBlock.EzKoreKey, string.Empty);
