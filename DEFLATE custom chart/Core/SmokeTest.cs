@@ -24,7 +24,10 @@ namespace DEFLATE_custom_chart.Core
         private const float KoreographyWaitSeconds = 10f;
         private const int MaxNavigationSteps = 200;
         private const int MaxStuckSteps = 15;
-        private const float StuckListWaitSeconds = 60f;
+        // 1.2는 실행할 때 타이틀 화면에 로그인 메뉴(Login with dizzylab / Offline mode …)를 띄우고 선택을 기다릴 수 있다.
+        // 그동안 곡 목록 #1(타이틀 배경용)은 커서가 움직이지 않는다. 사람이 메뉴를 고를 시간을 준다.
+        // (Intro_ctrl.GoToOfflineMode를 자동 호출하지 않는 이유: 로그인/프로필 내부 동작을 모르는 채로 계정 상태를 바꿀 수 있음)
+        private const float StuckListWaitSeconds = 180f;
         private const float InGameProbeSeconds = 12f;
         private const float BgmProgressSeconds = 1f;
 
@@ -48,6 +51,17 @@ namespace DEFLATE_custom_chart.Core
             if (!Enabled || _playConfirmed || list == null || isCustomBlock == null) return;
             int generation = ++_generation;
             MelonCoroutines.Start(SelectAndPlay(list, isCustomBlock, generation));
+        }
+
+        /// <summary>
+        /// 인게임 진입 직전(RhythmGameController.Start Prefix) 호출: 레인·라인바 주입 집계를 곡 단위로 초기화합니다.
+        /// 예전에는 실행 내내 누적돼, 스모크 판정 전에 다른 곡(사용자 경로 플레이 등)이 한 번 돌면 "1104개/18레인 ≠ 552"로 거짓 FAIL했다(2026-11-24).
+        /// </summary>
+        public static void OnGameplayStarting()
+        {
+            _injectedLaneEvents = 0;
+            _injectedLanes = 0;
+            _injectedLineBars = 0;
         }
 
         public static void RecordLaneInjection(int eventCount)
@@ -141,6 +155,7 @@ namespace DEFLATE_custom_chart.Core
                 // 이동을 멈추고 새 목록(세대 교체)을 기다리고, 끝내 안 오면 원인 힌트와 함께 FAIL한다(200회 헛이동 대신).
                 if (stuckSteps >= MaxStuckSteps)
                 {
+                    MelonLogger.Msg($"[SmokeTest] 곡 목록 커서가 움직이지 않습니다. 타이틀 로그인 메뉴가 떠 있으면 'Offline mode'를 골라 주세요({StuckListWaitSeconds:F0}초 대기).");
                     float until = Time.realtimeSinceStartup + StuckListWaitSeconds;
                     while (Time.realtimeSinceStartup < until)
                     {
@@ -148,7 +163,7 @@ namespace DEFLATE_custom_chart.Core
                         yield return null;
                     }
                     MelonLogger.Warning($"[SmokeTest] FAIL: 곡 목록 커서가 {lastIndex}에서 움직이지 않고 {StuckListWaitSeconds:F0}초 동안 새 곡 목록도 오지 않았습니다. "
-                        + "게임이 인트로 화면에 머물러 있을 수 있습니다(게임 창이 백그라운드면 진행이 멈춤). 게임 창을 앞에 둔 채 다시 실행하세요.");
+                        + "타이틀 화면의 로그인 메뉴에서 선택을 기다리는 중일 수 있습니다 → 'Offline mode'(또는 로그인)를 고르면 새 곡 목록에서 테스트가 다시 시작됩니다.");
                     yield break;
                 }
 
