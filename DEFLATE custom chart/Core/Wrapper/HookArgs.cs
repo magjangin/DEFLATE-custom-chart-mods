@@ -1,0 +1,39 @@
+namespace DEFLATE_custom_chart.Core.Wrapper
+{
+    /// <summary>
+    /// Harmony <c>object[] __args</c>에서 인자를 <b>타입</b>으로 찾는 헬퍼 (파라미터 이름 비의존 바인딩).
+    ///
+    /// <b>왜 필요한가:</b> Harmony는 Prefix/Postfix 파라미터를 원본 파라미터 <b>이름</b>으로 연결합니다
+    /// (<c>string trackID, LaneController lane</c>). 게임 업데이트로 이름만 바뀌어도(<c>trackID</c> → <c>trackId</c>)
+    /// 패치 단계에서 예외가 나 그 훅 전체가 빠집니다. BMS 노트·라인바 주입처럼 모드의 핵심 훅이 이렇게 빠지면
+    /// 조용히 원곡 차트로 플레이됩니다. <c>__args</c>를 받아 타입으로 고르면 이름 변경과 인자 순서 변경 모두에 견딥니다.
+    ///
+    /// <b>한계:</b> 같은 타입의 인자가 둘 이상이면 첫 번째를 고릅니다(대상 시그니처를 확인하고 쓸 것).
+    /// 호출마다 <c>object[]</c> 할당·박싱이 생기므로 매 프레임 불리는 핫패스에는 쓰지 마세요(레인 로드처럼 곡당 수 회인 훅용).
+    /// <c>ref</c> 인자를 <b>바꿔야</b> 하는 훅에는 쓰지 말고 이름 바인딩을 유지합니다(<c>__args</c> 쓰기 반영은 Harmony 버전에 따라 다름).
+    /// </summary>
+    public static class HookArgs
+    {
+        /// <summary>인자 중 <typeparamref name="T"/> 타입인 첫 번째 값. 없으면 null.</summary>
+        public static T First<T>(object[] args) where T : class
+        {
+            if (args == null) return null;
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i] is T value) return value;
+            }
+            return null;
+        }
+
+        /// <summary>인자 중 첫 번째 <c>int</c>. 없으면 <paramref name="fallback"/>.</summary>
+        public static int FirstInt(object[] args, int fallback)
+        {
+            if (args == null) return fallback;
+            for (int i = 0; i < args.Length; i++)
+            {
+                if (args[i] is int value) return value;
+            }
+            return fallback;
+        }
+    }
+}

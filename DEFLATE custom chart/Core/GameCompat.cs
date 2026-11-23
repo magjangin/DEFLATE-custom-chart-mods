@@ -24,6 +24,14 @@ namespace DEFLATE_custom_chart.Core
         public const string ReferenceUnityVersion = "2022.3.62f2";
         public const string ReferenceSteamBuildId = "26402105";
 
+        /// <summary>
+        /// 기준 MelonLoader 버전(앞 3자리). 게임과 별개로 MelonLoader를 올리면 Il2CppAssemblies가 다른 생성기로 다시 만들어져
+        /// 타입·멤버 모양이 바뀔 수 있으므로(예: 중첩 타입 이름, 제네릭 표기) 게임 지문과 따로 경고합니다.
+        /// </summary>
+        public const string ReferenceMelonLoaderVersion = "0.7.3";
+
+        public static string CurrentMelonLoaderVersion { get; private set; } = "?";
+
         public static string CurrentGameVersion { get; private set; } = "?";
         public static string CurrentUnityVersion { get; private set; } = "?";
         public static string CurrentSteamBuildId { get; private set; } = "?";
@@ -60,11 +68,26 @@ namespace DEFLATE_custom_chart.Core
                 }
 
                 WarnSteamUpdateState(acfText);
+                CheckMelonLoaderVersion();
             }
             catch (Exception ex)
             {
                 MelonLogger.Warning($"[GameCompat] 빌드 지문 확인 중 예외(무시하고 계속): {ex.Message}");
             }
+        }
+
+        /// <summary>실행 중인 MelonLoader 어셈블리 버전을 기준과 비교합니다(컴파일 시 박제되는 상수가 아니라 런타임 어셈블리 버전을 읽음).</summary>
+        private static void CheckMelonLoaderVersion()
+        {
+            var v = SafeRead(() => typeof(MelonMod).Assembly.GetName().Version?.ToString(3));
+            CurrentMelonLoaderVersion = v;
+            if (IsUnknownOrEqual(v, ReferenceMelonLoaderVersion))
+            {
+                ModLog.Verbose($"[GameCompat] MelonLoader {v} (기준 {ReferenceMelonLoaderVersion}) → 일치");
+                return;
+            }
+            MelonLogger.Warning($"[GameCompat] MelonLoader {v} (기준 {ReferenceMelonLoaderVersion}) → 불일치! "
+                + "Il2CppAssemblies가 다른 생성기로 다시 만들어졌을 수 있습니다. [SafePatcher] 요약을 확인하고, 필요하면 재빌드하세요(AGENTS.md §6).");
         }
 
         private static string SafeRead(Func<string> reader)

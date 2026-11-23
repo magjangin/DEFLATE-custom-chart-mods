@@ -7,7 +7,8 @@
 > **게임플레이 실기 검증 완료:** ① 무인 스모크 테스트(`SmokeTest=1`, §3-⑥) `PASS` — BMS 노트 1104개/9레인·라인바 296개 주입, 커스텀 BGM 재생, BGA URL 일치. ② 사용자 수동 플레이(로딩 씬 경유) 로그에서 곡 목록 주입 → 로딩 UI 메타데이터 → 인게임 노트/라인바/BGM/BGA 주입 확인.
 > **2026-11-20 추가 수정·검증:** 노트 이중 생성(하이햇+킥·스네어 양쪽 복제, 열도 어긋남) 및 48000Hz 음악 타이밍 드리프트 수정 → 스모크 `PASS`, 게임 `AllNoteCount` 552 = BMS 552, 화면에서 노트가 BMS 열대로 한 번씩만 표시됨을 캡처로 확인.
 > **v1.1.0 (2026-11-23, 첫 릴리즈):** 인코딩 자동 판별·Steam 업데이트 대기 경고·릴리즈 스크립트. §7·§8 참고.
-> **v1.1.1 (2026-11-23, 2차 감사):** 클라우드에서 수정해 **빌드·실기 확인 전**. 게임 PC에서 빌드(경고 0)와 스모크 테스트를 먼저 돌릴 것. §10 참고.
+> **v1.1.1 (2026-11-23, 2차 감사):** 클라우드에서 수정. 이후 게임 PC에서 **빌드 경고 0 확인**, 인게임 스모크는 미확인. §10 참고.
+> **v1.1.2 (2026-11-23, 3차 감사):** 파라미터 이름 비의존 훅·지연 로그 보간·BGM 요청 수명·MelonLoader 지문. **빌드 경고 0, 인게임 스모크 PASS 미확인**(게임 창 백그라운드로 실행해 인트로에서 멈춤 — §5-18). §11 참고.
 > **2026-11-23 전수 감사/리팩토링:** §9 참고. 컴파일 경고 0 · 오류 0, `[SafePatcher] 성공 45 / 건너뜀 8(로그 레벨 LogLevel=1 기준) / 실패 0`, 스모크 테스트 `PASS`(BMS 552/552, 라인바 296, 커스텀 BGM·BGA, 컨텍스트 인게임).
 > 미확인: 결과 화면, 롱노트(테스트 차트에 홀드 0개), 드롭 레인(테스트 차트 14번 채널 0개), 킥/스네어 키음 노트(테스트 차트에 없음).
 
@@ -20,7 +21,7 @@
   - 이 값은 `Core/GameCompat.cs`의 `Reference*` 상수와 **항상 같이** 갱신합니다. 불일치 시 시작 로그에 `[GameCompat] … → 불일치!` 경고가 뜹니다.
 - **Unity 버전:** `2022.3.62f2 (7670c08855a9)` (64-bit)
 - **런타임 백엔드:** **Unity Il2Cpp (x64)**
-- **모드 로더:** MelonLoader **v0.7.3 Open-Beta** (`net6` 런타임, 호스트는 시스템 .NET hostfxr 사용). v0.6대에서 개발되었고 0.7.3에서도 API 호환 확인.
+- **모드 로더:** MelonLoader **v0.7.3 Open-Beta** (`net6` 런타임, 호스트는 시스템 .NET hostfxr 사용). v0.6대에서 개발되었고 0.7.3에서도 API 호환 확인. 기준 버전은 `GameCompat.ReferenceMelonLoaderVersion`이며 다르면 시작 로그에 `[GameCompat] MelonLoader … 불일치!`가 뜹니다(v1.1.2~).
 - **버전 고정 & Steam 업데이트 관리 (사실관계 주의):**
   - 현재 `steamapps/appmanifest_3921360.acf`의 `AutoUpdateBehavior`는 `0`(항상 최신 유지)이며, 실제로 2026-11-06 자동 업데이트(1.2)로 모드가 깨졌습니다.
   - `AutoUpdateBehavior`를 `1`로 바꾸면 "실행할 때만 업데이트"가 될 뿐 **Steam으로 실행하는 순간 업데이트는 적용됩니다.** 완전 고정 수단이 아니므로, 업데이트를 감지하는 `[GameCompat]` 경고와 §6 플레이북을 1차 방어선으로 삼습니다.
@@ -86,6 +87,10 @@
 | ⑤ 내성 리플렉션 | `Il2CppReflectionHelper` + `MemberFallbacks` | 필드/프로퍼티 개명·접두사·대소문자 변경 | `[Get/Set/InvokeMethodResilient]` |
 | ⑥ 열거형 타입 비의존 | `BmsLaneMapper.ResolveLaneId(string, object)`, `InGameRhythmHooks.ReadLaneTypeValue` | 열거형 선언 위치 이동(1.2의 `LaneType` → `LaneController.LaneType`) | — |
 | ⑦ 핫패스 서킷 브레이커 | `NoteObject_UpdateNotePosition_Patch` | 매 프레임·노트마다 호출되는 훅이 깨져 예외 비용으로 프레임이 무너지는 상황 | `[NoteSway]` |
+| ⑧ 파라미터 이름 비의존 | `Core/Wrapper/HookArgs.cs` (`object[] __args` + 타입으로 인자 선택) | 게임 메서드의 파라미터 개명(`trackID`→`trackId`)·순서 변경으로 이름 바인딩 훅이 패치 단계에서 통째로 빠지는 상황 | `[SafePatcher]` |
+| ⑨ 로더 지문 | `GameCompat.CheckMelonLoaderVersion` | 게임은 그대로인데 MelonLoader를 올려 Il2CppAssemblies 생성 결과가 바뀐 상황 | `[GameCompat]` |
+
+- **⑧ 적용 범위와 원칙:** BMS 노트·라인바 주입 6개(`LoadKoreographyEvents`, `ReplaceLane…`, `LoadLineBarEvents`, `ReplaceLineBar…`), `TrackAssetManager.LoadAudioClip`/`LoadVideoURL`, 인게임 `RhythmGameController.LoadVideo`. 인자를 **읽기만** 하고 곡당 수 회 불리는 훅에만 씁니다. `ref` 인자를 **바꾸는** 훅(`FavControl.PlayAudioWhenReady`의 `ref clip`, `BindAudioClipWhenReady`)과 매 프레임 훅은 이름 바인딩을 유지합니다(`__args`는 호출마다 배열 할당·박싱). 같은 타입 인자가 둘 이상인 메서드에는 쓰지 마세요(첫 번째를 고름).
 
 - **②가 필요한 이유:** Harmony `PatchAll()`은 패치 클래스를 순서대로 처리하다 하나라도 예외(대상 없음, 오버로드 추가로 인한 모호성, 파라미터명 변경)가 나면 그 뒤 훅이 **전부** 미적용됩니다. `nameof(X.Method)`도 컴파일 시 문자열로 박제되므로, 업데이트 후 재빌드 전 DLL에서는 문자열 훅과 똑같이 깨집니다. 그래서 자동 `PatchAll`을 끄고 `OnInitializeMelon`에서 클래스마다 `CreateClassProcessor(type).Patch()`를 try/catch로 돌립니다. `Prepare()=false`는 실패가 아니라 '건너뜀'으로 집계됩니다. **새 훅을 추가해도 별도 등록은 필요 없습니다**(`[HarmonyPatch]` 속성이 붙은 클래스를 자동 수집).
 - **③이 필요한 이유:** .NET(CoreCLR)은 메서드를 **처음 호출할 때** JIT하며, 이때 참조 멤버가 없으면 `MissingMethodException`/`MissingFieldException`/`TypeLoadException`이 호출 지점(=Harmony가 만든 대체 메서드)에서 터집니다. 즉 훅 내부의 `try/catch`로는 잡히지 않고, Prefix라면 **원본 메서드까지 실행되지 못합니다.** `RuntimeHelpers.PrepareMethod`로 패치 전에 미리 JIT해 깨진 훅을 적용 단계에서 걸러냅니다(최선 노력 검사 — JIT가 해석을 지연하는 경로는 못 잡을 수 있음). 반대로 `GetValueResilient(..., () => gd.NowTrackID, ...)`처럼 **람다로 분리된 직접 접근**은 별도 메서드라서 그 JIT 실패가 래퍼 내부 try/catch에서 잡히고 백업 리플렉션으로 넘어갑니다 — 업데이트에 취약한 멤버 접근은 이렇게 람다/헬퍼로 분리해 두는 것이 원칙입니다.
@@ -108,6 +113,7 @@
 - `0` 요약(기본): 시작 요약(`[GameCompat]`, `[SafePatcher]`, `[ModConfig]`), 곡 라이브러리·`[BMS 파싱]` 한 줄, `[곡 목록 주입 완료]`, 플레이마다 `[커스텀 차트]` 한 줄, 경고/오류. `1` 상세: 레인별 주입·에셋 오버라이드·씬별 메타데이터. `2` 디버그: 커서 이동/클릭/난이도/드럼 모드/10초 진행률·`[진단]` 레인 배치와 원곡 차트 분석.
 - 로그만 찍는 훅(진행률, 드럼 모드, 커서 이동, 클릭, 씬 전환, 노트 수, 영상 시작)은 `ModLog.Prepare(level)`로 **레벨이 모자라면 패치 자체를 생략**합니다. 기본값에서 `[SafePatcher]` 성공 수가 줄어드는 것은 정상입니다.
 - 경고/오류는 레벨과 무관하게 항상 남깁니다. 새 로그를 추가할 때는 `ModLog.Info/Verbose/Debug` 중 하나를 고르고, 이벤트마다 반복되는 로그는 `Debug`로 두세요.
+- **지연 보간(v1.1.2~):** `ModLog.Verbose($"…{x}…")`/`Debug($"…")`는 C# 10 보간 문자열 핸들러(`VerboseHandler`/`DebugHandler`)로 컴파일되어, 레벨이 모자라면 `{…}` 안의 식을 **평가하지 않습니다**. 그래서 ① 구멍 안에 부수효과가 있는 식을 쓰면 안 되고, ② 핸들러는 ref struct라 코루틴(iterator) 안에서는 쓸 수 없습니다(컴파일 오류 → `MelonLogger` 직접 호출 또는 일반 메서드로 분리). 예전에는 LogLevel 0에서도 문자열 조립과 구멍 안의 IL2CPP 프로퍼티 읽기(`VideoPlayer.url`/`name` 등)가 매번 실행됐습니다.
 
 ---
 
@@ -119,12 +125,12 @@
 | `TrackListBlockCtrl.SetSelected` | Postfix | 곡 목록 커서 이동 시 현재 활성 트랙(`HwaAssetManager.Active`) 갱신 및 커버 적용. 1.2에서 시그니처가 `(bool isSelected, bool animated = true)`로 확장됨 — Postfix는 `isSelected`만 받아도 Harmony 바인딩 유지 |
 | `MainTrackList.GotoSceneData` | Prefix / Postfix | Prefix: `ApplyMetaToGameData`로 커스텀 메타데이터 주입. Postfix: `EnterGameplay`. ⚠ 1.2 **사용자 플레이 경로에서는 호출되지 않음**(로딩 씬 경유) — 메타데이터는 `LoadingGamePlay` 훅이 담당 |
 | `MainTrackList.GoToScene` | Prefix | 진단 전용: 전환 씬 이름 로깅(`[씬 전환 탐지]`) |
-| `TrackAssetManager.LoadAudioClip` / `LoadVideoURL` | Prefix | 활성 커스텀 곡의 **숙주 Key와 일치하는 요청만** 커스텀 BGM/BGA로 대체(곡 선택·인게임 공통, §3-②). 1.2 인게임 BGA는 이 경로로 적용됨 |
+| `TrackAssetManager.LoadAudioClip` / `LoadVideoURL` | Prefix (`__args`) | 활성 커스텀 곡의 **숙주 Key와 일치하는 요청만** 커스텀 BGM/BGA로 대체(곡 선택·인게임 공통, §3-②). 1.2 인게임 BGA는 이 경로로 적용됨 |
 | `SimpleRandomVideo.LoadVideoSmart` | Prefix | 곡 선택/결과/인게임 BGA VideoPlayer에 커스텀 MP4 URL 주입 |
 | `LoadingGamePlay.Start` | Postfix | `EnterGameplay`, 로딩 UI 메타데이터 주입(오타 필드 폴백 포함) |
 | `RhythmGameController.Start` | Prefix / Postfix | Prefix: `EnterGameplay`(최후 안전망). Postfix: 인게임 BGM 0ms 즉시 할당(`EnsureInGameCustomBgm`), 오토플레이(`AutoMode` 또는 스모크 테스트) 강제, 판정 파라미터 로깅, 스모크 테스트 점검 예약 |
 | `RhythmGameController.InitializeKoreographyTracks` | Postfix | `dropEventSamples`에 O(1) 드롭 레인 노트 주입 및 원본 잔여 이벤트 정리 |
-| `RhythmGameController.LoadKoreographyEvents` | Postfix | **[핵심]** 게임 레인(`hihat_1~4`, `snare_left`/`kick_left`/`kick_right`/`snare_right`, `drop`)별로 BMS 노트를 O(1) 인덱스로 주입. 노트는 파싱 시 **채널=열, 키음=하이햇/킥·스네어**로 정확히 한 레인에 배정(`docs/bms_mapping_spec.md`) |
+| `RhythmGameController.LoadKoreographyEvents` | Postfix (`__args`) | **[핵심]** 게임 레인(`hihat_1~4`, `snare_left`/`kick_left`/`kick_right`/`snare_right`, `drop`)별로 BMS 노트를 O(1) 인덱스로 주입. 노트는 파싱 시 **채널=열, 키음=하이햇/킥·스네어**로 정확히 한 레인에 배정(`docs/bms_mapping_spec.md`) |
 | `RhythmGameController.ReplaceLaneEventsFromTrack` / `AtSample` | Postfix | 재시작·모드 전환 시 레인 이벤트가 원본 차트로 복원되지 않도록 커스텀 BMS 노트 재주입 |
 | `RhythmGameController.LoadLineBarEvents` / `ReplaceLineBarEventsFromTrack` / `AtSample` | Postfix | BMS 마디/박자 기반 커스텀 라인바 이벤트 주입 및 재시작 복원 방지 |
 | `GameData.SaveGameData` | Prefix | `BlockSave=1`일 때 세이브 방지 (스코어 덮어쓰기 방지) |
@@ -184,6 +190,11 @@
    - **해결:** `TimelineSampleRate` = 커스텀 클립 주파수.
 17. **로그를 기본값에서 이벤트마다 남기기 (로그 스팸):**
    - 커서 이동·클릭마다, 레인마다, 10초마다 여러 줄씩 기본으로 찍혀 콘솔·로그가 묻혔습니다. **해결:** §3-⑧ `LogLevel`.
+18. **스모크 테스트를 게임 창이 백그라운드인 채로 실행 (가짜 FAIL):**
+   - 2026-11-23 22:46 실행: 사용자가 다른 창을 쓰는 중이라 DEFLATE가 백그라운드였고, 인트로용 첫 곡 목록(#1)에서 두 번째 목록(#2)으로 넘어가지 않아 커서가 움직이지 않았습니다 → `200회 이동 후에도 … 도달하지 못했습니다` FAIL. 19:54 실행도 #2 없이 끊겼고 그 세션이 `SmokeTest=1`을 config.txt에 남겨 두었습니다.
+   - **해결:** 스모크 테스트는 게임 창을 앞에 둔 채 돌리고 끝나면 `SmokeTest=0` 원복. v1.1.2부터는 커서가 15회 연속 그대로면 이동을 멈추고 새 목록을 60초 기다린 뒤, 안 오면 원인 힌트와 함께 FAIL합니다.
+19. **'로그 레벨로 막았으니 비용도 없다'고 가정:**
+   - `if (Level >= Detail)` 게이트는 출력만 막고, 호출 전에 보간 문자열(구멍 안 IL2CPP 호출 포함)은 이미 만들어집니다. **해결:** §3-⑧ 지연 보간 핸들러.
 
 ---
 
@@ -220,7 +231,7 @@
 5. **빌드 & 런타임 검증:**
    - `dotnet build -c Release` (경고 0 / 오류 0) → `Get-FileHash "<GameDir>Mods\DEFLATE custom chart.dll"`과 `Latest.log`의 `SHA256 Hash:` 일치 확인.
    - 로그에서 `[GameCompat] … → 일치`, `[SafePatcher] … 실패 0`, `[커스텀 곡 라이브러리] hwa/ 스캔 완료` 확인.
-   - **무인 스모크 테스트(권장):** `<GameDir>savecustomkey\config.txt`를 백업 → 맨 끝에 `SmokeTest=1` 추가 → Steam 경유 실행 → `Latest.log`에서 `[SmokeTest] PASS` 확인 → **config.txt 원복**. 게임 시작 후 약 25~30초면 판정이 나옵니다. 테스트 중에는 게임을 조작하지 마세요(사용자 입력이 끼면 로딩 씬 경로로 진입해 점검이 건너뛰어집니다).
+   - **무인 스모크 테스트(권장):** `<GameDir>savecustomkey\config.txt`를 백업 → 맨 끝에 `SmokeTest=1` 추가 → Steam 경유 실행 → `Latest.log`에서 `[SmokeTest] PASS` 확인 → **config.txt 원복**. 게임 시작 후 약 25~30초면 판정이 나옵니다. **게임 창을 앞에 둔 채** 실행하세요(백그라운드면 인트로에서 멈춤, §5-18). 테스트 중에는 게임을 조작하지 마세요(사용자 입력이 끼면 로딩 씬 경로로 진입해 점검이 건너뛰어집니다).
    - **수동 게임플레이 체크리스트:** 곡 선택 화면에 커스텀 곡 표시(`[곡 목록 주입 완료]`) → 커서 이동 시 커버/BGM·BGA 프리뷰 → 플레이 진입 시 로딩 UI 메타데이터(`[로딩 씬 커스텀 UI 주입]`) → `[HwaAssetManager] 컨텍스트 전환` → 인게임 `[★ HWA BMS 노트 주입 ★]` 레인별 로그와 실제 노트/라인바 → 결과 화면.
 
 ---
@@ -241,7 +252,8 @@
 | 이전 | 노트 이중 생성·타이밍·로그 정리 | BMS 노트 1개=게임 레인 1개(채널=열, 키음=하이햇/킥·스네어, 킥·스네어 실측 열 배치), 노트 샘플 위치를 커스텀 음악 주파수 기준으로 계산(48kHz 드리프트 수정)+`[BMS 타이밍]` 안내, 숙주 `SourceClip` 원복, `LogLevel`(0/1/2)과 로그 전용 훅 Prepare 생략, 곡당 한 줄 `[커스텀 차트]` 요약, `ChartDiagnostics`(레인 배치·원곡 동시 출현), 스모크 테스트에 중복·누락 검사 |
 | `b1483d1` | 전수 감사·정리 | §9 참조: 무동작 `LoadVideoClip` 훅·미사용 코드(`CustomAlbumWrapper` 등) 삭제, 활성 곡 판정 중복 통합, 죽은 디버그 분기 제거, NoteSway 감쇠를 클립 주파수 기준으로 통일, 스모크 PASS |
 | v1.1.0 | 첫 릴리즈·인코딩·업데이트 감지 | `TextDecoder`(Shift-JIS/CP949 BMS·info.txt·config.txt), `GameCompat` Steam 업데이트 대기 경고(`TargetBuildID`/`StateFlags`)·자동 업데이트 안내(LogLevel 1), 지문 기록을 설정 로드 뒤로 이동, 버전 단일 출처 `DeflateMod.Version`, `CHANGELOG.md`, `tools/release.ps1` |
-| v1.1.1 | 2차 감사(미빌드) | BMS `#RANDOM`/`#IF` 1번 분기 고정·STOP/LN 채널 경고, 커버 이름 우선 선택·밉맵 제거, BMS `#ARTIST` 폴백, config.txt 빠진 키 덧붙이기·원자적 저장, NoteSway/Chaos `Mathf`→`MathF`, HUD 로그 훅 LogLevel 게이트. §10 참고 |
+| v1.1.2 | 3차 감사·업데이트 내성 | `HookArgs`(`__args` 타입 바인딩)로 핵심 훅 8개 파라미터 이름 비의존, `ModLog` 지연 보간 핸들러, BGM 스트리밍 요청을 클립 수명과 동일하게, 인게임 BGM 대기 코루틴 1개로, MelonLoader 지문, 스모크 테스트 커서 정지 감지·BGM 진행 검사. §11 참고 |
+| v1.1.1 | 2차 감사(미빌드→v1.1.2 때 빌드 확인) | BMS `#RANDOM`/`#IF` 1번 분기 고정·STOP/LN 채널 경고, 커버 이름 우선 선택·밉맵 제거, BMS `#ARTIST` 폴백, config.txt 빠진 키 덧붙이기·원자적 저장, NoteSway/Chaos `Mathf`→`MathF`, HUD 로그 훅 LogLevel 게이트. §10 참고 |
 
 ---
 
@@ -307,7 +319,7 @@ Start-Process "steam://rungameid/3921360"
 
 **알려진 한계 (미해결)**
 - ~~`BmsParser.ParseFile`의 UTF-8 고정 읽기~~ → v1.1.0에서 `Core/TextDecoder.cs`(BOM → 엄격 UTF-8 → BMS는 Shift-JIS/CP949/GB18030, info.txt·config.txt는 CP949/Shift-JIS/GB18030 → Latin-1)로 해결. Shift-JIS BMS 실곡으로는 아직 실기 확인 안 함(`LogLevel=1`이면 `[BMS 파싱] … 인코딩:` 줄이 남음).
-- `CustomSongEntry.LoadBgmCoroutine`은 `streamAudio=true` 클립을 만든 뒤 요청을 즉시 `Dispose`합니다. 현재 실기(스모크 PASS)에서는 재생되지만, 긴 곡 끝까지 재생되는지는 이 문서 시점에 장시간 검증하지 않았습니다.
+- ~~`CustomSongEntry.LoadBgmCoroutine`은 `streamAudio=true` 클립을 만든 뒤 요청을 즉시 `Dispose`~~ → v1.1.2에서 요청을 클립과 같이 보관하고 `ResetLoadedAssets`에서 해제. 긴 곡 끝까지의 실기 확인은 아직 없음.
 - 결과 화면·롱노트·드롭 레인·킥/스네어 키음 노트는 여전히 실기 미확인(테스트 차트에 없음).
 
 ---
@@ -332,5 +344,26 @@ Start-Process "steam://rungameid/3921360"
 - BMS가 없는 커스텀 곡은 hihat_3에 테스트 롱노트 10개를 넣는다(개발용 동작이 그대로 남아 있음).
 - `BlockSave=1`은 키 설정·볼륨 저장까지 막는다(1.1.0부터 알려진 한계). 커스텀 곡일 때만 막도록 바꾸는 것은 동작 변경이라 사용자 결정 필요.
 
-**미확인**: 위 "적용한 변경" 전부(빌드 포함). 특히 `#RANDOM`이 있는 실곡 BMS, JPG 커버, config.txt 키 덧붙이기.
+**미확인**: 위 "적용한 변경"의 인게임 동작. 빌드는 v1.1.2 작업 때 게임 PC에서 경고 0으로 확인함. 특히 `#RANDOM`이 있는 실곡 BMS, JPG 커버, config.txt 키 덧붙이기(실기 로그에서 `[ModConfig] config.txt 설정 파일 로드 완료`만 확인).
 
+---
+
+## 11. 3차 감사 기록 (2026-11-23, v1.1.2)
+
+범위: `Core/`·`Hooks/` 전 파일(약 6,700줄). 게임 PC에서 진행 — **빌드 경고 0 / 오류 0**. 인게임 스모크는 게임 창이 백그라운드라 인트로에서 멈춰 FAIL(모드 결함 아님, §5-18). 사용자가 포그라운드 재실행을 보류해 **PASS 미확인**인 채로 릴리즈함.
+
+**적용한 변경**
+- 업데이트 내성: `HookArgs` + `object[] __args`로 핵심 훅 8개를 파라미터 **타입**으로 바인딩(§3-⑤ ⑧). 대상 시그니처(덤프 기준): `LoadKoreographyEvents(string, LaneController)`, `ReplaceLaneEventsFromTrack(string, LaneController, Koreography)`, `…AtSample(string, LaneController, Koreography, int)`, 라인바 3종은 `LineBarController`, `TrackAssetManager.LoadAudioClip(string, Action<AudioClip>, Action)`, `LoadVideoURL(string, Action<string>, Action)`, `RhythmGameController.LoadVideo(string, VideoPlayer)`. 모두 같은 타입 인자가 하나뿐이라 타입 선택이 모호하지 않음.
+- 업데이트 내성: `GameCompat`에 MelonLoader 런타임 어셈블리 버전 지문(§3-⑤ ⑨). `BuildInfo` 상수는 컴파일 시 박제되므로 쓰지 않음.
+- 병목: `ModLog` 지연 보간 핸들러(§3-⑧). 스크래치 콘솔로 오버로드 선택(핸들러 우선)과 구멍 미평가를 확인함.
+- 병목: 인게임 BGM 로딩 중 여러 훅이 대기 코루틴을 중복 생성하던 것을 `_inGameBgmLoadPending`로 곡당 하나로.
+- 안정성: BGM 스트리밍 요청을 클립 수명 동안 보관(`_bgmRequest`), `ResetLoadedAssets`에서 해제.
+- 스모크 테스트: 커서 정지 감지(15회) → 새 목록 60초 대기 → 힌트와 함께 FAIL, BGM 재생 위치 1초 진행 검사(`bgmAdvancing`)를 PASS 조건에 추가.
+
+**점검했지만 바꾸지 않은 것 (재논의 방지)**
+- `SimpleRandomVideo.LoadVideoSmart`/`LoadVideo` Prefix와 전역 `VideoPlayer.Play/Prepare` Prefix는 Key 검사 없이 커스텀 곡 활성 시 영상을 바꿉니다. 인접 곡 프리뷰가 이 경로를 쓰는지 실기로 확인한 뒤 `ShouldOverrideVideoKey`처럼 좁힐 것(동작 변경이라 보류).
+- 레인 로드 시점에 커스텀 BGM이 아직 없으면 노트를 숙주 샘플레이트로 배치합니다(`[BMS 타이밍]` 경고). 곡 선택·로딩 씬에서 미리 로드하므로 실제로는 드묾. 로드 완료 후 재주입은 `ReplaceLaneEvents` 재호출이 필요해 보류.
+- BMS `03` 채널(16진 BPM)은 3자리 확장 ID 파일에서 잘못 읽힐 수 있음(비표준 포맷이라 보류).
+- §10의 보류 항목(`DiffCtrl` 별 재생성, 제목 폴백, 커버 동기 디코딩, 난이도별 BMS, BMS 없는 곡의 테스트 롱노트, `BlockSave` 범위)은 그대로입니다.
+
+**다음 세션이 먼저 할 일:** 게임 창을 앞에 두고 `SmokeTest=1` → `[SmokeTest] PASS` 확인(특히 `BMS 노트 주입 552개/9레인`이 그대로인지 = `__args` 바인딩이 Il2Cpp Harmony에서 동작하는지, `t=…→…s` 진행) → `SmokeTest=0` 원복 → 이 절과 CHANGELOG의 "미확인"을 지울 것.

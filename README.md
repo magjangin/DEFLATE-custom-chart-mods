@@ -53,8 +53,8 @@ hwa/
 
 ### 지원 버전 & 게임 업데이트 후 확인
 - 기준 빌드: DEFLATE **1.2** (Steam Build `26402105`) · Unity `2022.3.62f2` · MelonLoader **0.7.3**
-- 게임이 업데이트되면 `MelonLoader/Latest.log` 첫머리에 `[GameCompat] … 불일치!` 경고가 뜹니다. Steam 업데이트가 대기 중이면 `[GameCompat] Steam 업데이트가 대기 중입니다` 경고가 먼저 뜹니다. 이어서 `[SafePatcher] 훅 적용 요약`의 `실패` 개수를 확인하세요 — 깨진 훅만 빠지고 나머지 기능은 계속 동작합니다.
-- 실제 플레이까지 한 번에 확인하려면 `config.txt`에 `SmokeTest=1`을 넣고 실행한 뒤 로그에서 `[SmokeTest] PASS`를 확인하세요.
+- 게임이 업데이트되면 `MelonLoader/Latest.log` 첫머리에 `[GameCompat] … 불일치!` 경고가 뜹니다(MelonLoader 버전이 기준과 달라도 별도로 경고합니다). Steam 업데이트가 대기 중이면 `[GameCompat] Steam 업데이트가 대기 중입니다` 경고가 먼저 뜹니다. 이어서 `[SafePatcher] 훅 적용 요약`의 `실패` 개수를 확인하세요 — 깨진 훅만 빠지고 나머지 기능은 계속 동작합니다.
+- 실제 플레이까지 한 번에 확인하려면 `config.txt`에 `SmokeTest=1`을 넣고 실행한 뒤 로그에서 `[SmokeTest] PASS`를 확인하세요. 테스트하는 약 1분 동안 **게임 창을 앞에 두고** 조작하지 마세요(창이 백그라운드면 인트로에서 진행이 멈춰 FAIL합니다). 끝나면 `SmokeTest=0`으로 되돌리세요.
 - 복구 절차는 [`AGENTS.md` §6 업데이트 대응 플레이북](AGENTS.md)을 따르세요.
 - 게임은 Steam으로 실행하세요(`DEFLATE.exe`를 직접 실행하면 "Another instance is already running" 오류가 날 수 있습니다).
 

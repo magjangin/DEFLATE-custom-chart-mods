@@ -72,6 +72,7 @@ namespace DEFLATE_custom_chart.Hooks
             _summaryTimelineRate = 0;
             _summaryLogged = false;
             _clipMissingWarned = false;
+            _inGameBgmLoadPending = false;
             _rateMismatchWarned = false; // 곡마다 다시 알린다(예전에는 실행당 1회라 두 번째 곡부터 안내가 빠졌음)
         }
 
@@ -139,6 +140,10 @@ namespace DEFLATE_custom_chart.Hooks
                 customClip);
         }
 
+        // 커스텀 BGM이 아직 로딩 중일 때 여러 훅(Start/InitializeKoreographyTracks/EnsureAudioSourceBound/StartAudioWhenReady…)이
+        // 각자 대기 코루틴을 하나씩 더 띄우지 않도록, 인게임 대기 코루틴은 곡당 하나만 둔다.
+        private static bool _inGameBgmLoadPending;
+
         private static void EnsureInGameCustomBgm(RhythmGameController instance, string contextTag)
         {
             if (instance == null || instance.audioCom == null) return;
@@ -171,11 +176,14 @@ namespace DEFLATE_custom_chart.Hooks
             }
             instance.audioCom.clip = null;
             instance.audioCom.mute = true;
+            if (_inGameBgmLoadPending) return;
+            _inGameBgmLoadPending = true;
             MelonCoroutines.Start(HwaAssetManager.LoadCustomBgmCoroutine(
                 instance.audioCom,
                 true,
                 _ =>
                 {
+                    _inGameBgmLoadPending = false;
                     if (instance != null && instance.audioCom != null)
                     {
                         instance.audioCom.mute = false;
@@ -184,6 +192,7 @@ namespace DEFLATE_custom_chart.Hooks
                 },
                 () =>
                 {
+                    _inGameBgmLoadPending = false;
                     if (instance != null && instance.audioCom != null)
                     {
                         instance.audioCom.mute = false;
@@ -538,8 +547,11 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.LoadKoreographyEvents))]
         public static class RhythmGameController_LoadKoreographyEvents_Patch
         {
-            public static void Postfix(RhythmGameController __instance, string trackID, LaneController lane)
+            // 파라미터 이름 비의존(__args 타입 바인딩): 게임이 trackID/lane 이름을 바꿔도 BMS 주입 훅이 빠지지 않게 한다(HookArgs 참고).
+            public static void Postfix(RhythmGameController __instance, object[] __args)
             {
+                string trackID = HookArgs.First<string>(__args);
+                var lane = HookArgs.First<LaneController>(__args);
                 try
                 {
                     if (lane == null) return;
@@ -563,8 +575,10 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.ReplaceLaneEventsFromTrack))]
         public static class RhythmGameController_ReplaceLaneEventsFromTrack_Patch
         {
-            public static void Postfix(RhythmGameController __instance, string trackID, LaneController lane)
+            public static void Postfix(RhythmGameController __instance, object[] __args)
             {
+                string trackID = HookArgs.First<string>(__args);
+                var lane = HookArgs.First<LaneController>(__args);
                 try
                 {
                     var events = BuildBmsLaneEvents(__instance, trackID, lane, "ReplaceLaneEventsFromTrack");
@@ -583,8 +597,11 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.ReplaceLaneEventsFromTrackAtSample))]
         public static class RhythmGameController_ReplaceLaneEventsFromTrackAtSample_Patch
         {
-            public static void Postfix(RhythmGameController __instance, string trackID, LaneController lane, int currentSample)
+            public static void Postfix(RhythmGameController __instance, object[] __args)
             {
+                string trackID = HookArgs.First<string>(__args);
+                var lane = HookArgs.First<LaneController>(__args);
+                int currentSample = HookArgs.FirstInt(__args, __instance != null && __instance.audioCom != null ? __instance.audioCom.timeSamples : 0);
                 try
                 {
                     var events = BuildBmsLaneEvents(__instance, trackID, lane, "ReplaceLaneEventsFromTrackAtSample");
@@ -703,8 +720,10 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.LoadLineBarEvents))]
         public static class RhythmGameController_LoadLineBarEvents_Patch
         {
-            public static void Postfix(string trackID, LineBarController lane)
+            public static void Postfix(object[] __args)
             {
+                string trackID = HookArgs.First<string>(__args);
+                var lane = HookArgs.First<LineBarController>(__args);
                 try
                 {
                     var events = BuildBmsLineBarEvents(lane, trackID, "LoadLineBarEvents");
@@ -727,8 +746,10 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.ReplaceLineBarEventsFromTrack))]
         public static class RhythmGameController_ReplaceLineBarEventsFromTrack_Patch
         {
-            public static void Postfix(RhythmGameController __instance, string trackID, LineBarController lane)
+            public static void Postfix(RhythmGameController __instance, object[] __args)
             {
+                string trackID = HookArgs.First<string>(__args);
+                var lane = HookArgs.First<LineBarController>(__args);
                 try
                 {
                     var events = BuildBmsLineBarEvents(lane, trackID, "ReplaceLineBarEventsFromTrack");
@@ -747,8 +768,11 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.ReplaceLineBarEventsFromTrackAtSample))]
         public static class RhythmGameController_ReplaceLineBarEventsFromTrackAtSample_Patch
         {
-            public static void Postfix(string trackID, LineBarController lane, int currentSample)
+            public static void Postfix(RhythmGameController __instance, object[] __args)
             {
+                string trackID = HookArgs.First<string>(__args);
+                var lane = HookArgs.First<LineBarController>(__args);
+                int currentSample = HookArgs.FirstInt(__args, __instance != null && __instance.audioCom != null ? __instance.audioCom.timeSamples : 0);
                 try
                 {
                     var events = BuildBmsLineBarEvents(lane, trackID, "ReplaceLineBarEventsFromTrackAtSample");
@@ -932,11 +956,12 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "LoadVideo");
 
-            public static bool Prefix(RhythmGameController __instance, ref string addresskey, VideoPlayer thisplayer)
+            public static bool Prefix(object[] __args)
             {
                 try
                 {
-                    ModLog.Verbose($"[인게임 BGA 로드] BGA AddressKey: '{addresskey}'");
+                    var thisplayer = HookArgs.First<VideoPlayer>(__args);
+                    ModLog.Verbose($"[인게임 BGA 로드] BGA AddressKey: '{HookArgs.First<string>(__args)}'");
 
                     // 인게임 BGA VideoPlayer는 audioCom과 이중 재생되지 않도록 반드시 음소거한다.
                     if (HwaAssetManager.IsTargetTrackActive && thisplayer != null && HwaAssetManager.ApplyCustomBga(thisplayer, true, muteAudio: true))
