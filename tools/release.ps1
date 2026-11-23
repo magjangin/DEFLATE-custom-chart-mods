@@ -78,14 +78,23 @@ Write-Host "생성: $notesFile"
 if (-not $Publish) { return }
 
 # ── 4. 게시 ──
-git fetch origin main | Out-Null
+# git/gh는 정상 진행 메시지("From https://…", "To https://…")를 stderr로 쓴다. Windows PowerShell 5.1에서
+# ErrorActionPreference=Stop이면 그 stderr 줄이 종료 오류가 되어 게시가 중간에 멈추므로(2026-11-23 v1.1.2 릴리즈 때 발생),
+# 이 구간은 Continue로 두고 성공 여부는 종료 코드로만 판정한다.
+$ErrorActionPreference = "Continue"
+function Invoke-Native([string]$what, [scriptblock]$cmd) {
+    & $cmd 2>&1 | ForEach-Object { "$_" } | Write-Host
+    if ($LASTEXITCODE -ne 0) { throw "$what 실패 (종료 코드 $LASTEXITCODE)" }
+}
+
+Invoke-Native "git fetch" { git fetch origin main }
 $branch = (git rev-parse --abbrev-ref HEAD).Trim()
 if ($branch -ne "main") { throw "main 브랜치에서 실행하세요 (현재 $branch)" }
 if ((git rev-parse HEAD).Trim() -ne (git rev-parse origin/main).Trim()) { throw "main이 origin/main과 다릅니다. pull/push 후 다시 실행하세요." }
 if (git status --porcelain --untracked-files=no) { throw "작업 트리가 깨끗하지 않습니다." }
 if (git tag --list $tag) { throw "태그 $tag 가 이미 있습니다. 세 곳의 버전을 먼저 올리세요." }
 
-git tag -a $tag -m "DEFLATE Custom Chart $tag"
-git push origin $tag
-gh release create $tag $zip --title "DEFLATE Custom Chart $tag" --notes-file $notesFile
+Invoke-Native "git tag" { git tag -a $tag -m "DEFLATE Custom Chart $tag" }
+Invoke-Native "git push (태그)" { git push origin $tag }
+Invoke-Native "gh release create" { gh release create $tag $zip --title "DEFLATE Custom Chart $tag" --notes-file $notesFile }
 Write-Host "게시 완료: $tag"
