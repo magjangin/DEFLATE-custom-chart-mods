@@ -38,7 +38,6 @@ namespace DEFLATE_custom_chart.Hooks
                 {
                     HwaAssetManager.EnterSongSelect();
                     InGameRhythmHooks.RestoreHostKoreography();
-                    CustomAlbumManager.Clear();
 
                     if (__instance == null || __instance.tracks == null || __instance.tracks.Length == 0) return;
 

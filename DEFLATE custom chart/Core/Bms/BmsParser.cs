@@ -312,8 +312,8 @@ namespace DEFLATE_custom_chart.Core.Bms
                 }
 
                 int objectCount = raw.Data.Length / noteWidth;
-                double mStartTick = measureStartTicks.ContainsKey(raw.Measure) ? measureStartTicks[raw.Measure] : raw.Measure * TicksPerMeasure;
-                double mLengthTicks = (measureStartTicks.ContainsKey(raw.Measure + 1) ? measureStartTicks[raw.Measure + 1] : (raw.Measure + 1) * TicksPerMeasure) - mStartTick;
+                double mStartTick = measureStartTicks.TryGetValue(raw.Measure, out double bms) ? bms : raw.Measure * TicksPerMeasure;
+                double mLengthTicks = (measureStartTicks.TryGetValue(raw.Measure + 1, out double bme) ? bme : (raw.Measure + 1) * TicksPerMeasure) - mStartTick;
 
                 for (int i = 0; i < objectCount; i++)
                 {
@@ -337,9 +337,9 @@ namespace DEFLATE_custom_chart.Core.Bms
                     {
                         // 08 채널: #BPMxx 확장 테이블의 지정 BPM
                         string key = val.ToUpperInvariant();
-                        if (chart.Header.BpmTable.ContainsKey(key))
+                        if (chart.Header.BpmTable.TryGetValue(key, out float tableBpm))
                         {
-                            newBpm = chart.Header.BpmTable[key];
+                            newBpm = tableBpm;
                         }
                     }
 

@@ -29,9 +29,6 @@ namespace DEFLATE_custom_chart.Core
         /// <summary>현재 선택/재생 중인 커스텀 곡. 커스텀 곡이 아닌 원본 곡을 고르면 null.</summary>
         public static CustomSongEntry Active { get; private set; }
 
-        /// <summary>Active가 null일 때 각종 훅이 기본값으로 쓸 폴백 곡 (첫 번째 엔트리).</summary>
-        public static CustomSongEntry Fallback => Entries.Count > 0 ? Entries[0] : null;
-
         public static bool HasSongs => Entries.Count > 0;
 
         public static void Initialize()
@@ -254,18 +251,6 @@ namespace DEFLATE_custom_chart.Core
                 }
             }
             return null;
-        }
-
-        public static void ClearInjectionState()
-        {
-            foreach (var entry in Entries)
-            {
-                entry.InjectedTrackID = null;
-                entry.AudioKey = null;
-                entry.VideoKey = null;
-            }
-            _byTrackId.Clear();
-            Active = null;
         }
     }
 }
