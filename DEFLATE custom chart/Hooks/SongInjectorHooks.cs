@@ -47,6 +47,9 @@ namespace DEFLATE_custom_chart.Hooks
                         return;
                     }
 
+                    // 0) 원곡과 제목이 같은 커스텀 곡을 찾아 제목 폴백 판정에서 뺀다(원곡에 커스텀 에셋이 붙는 것 방지).
+                    RefreshOriginalTitleCollisions(__instance.tracks);
+
                     // 1) 이미 이번 tracks 배열에 사본이 있는 곡은 재생성하지 않고 상태만 재동기화한다.
                     var pending = new List<CustomSongEntry>(CustomSongLibrary.Entries);
 
@@ -155,6 +158,40 @@ namespace DEFLATE_custom_chart.Hooks
                     MelonLogger.Error($"[곡 목록 주입] MainTrackList.Start 주입 처리 중 예외: {ex.Message}\n{ex.StackTrace}");
                 }
             }
+        }
+
+        // 같은 충돌 경고를 곡 목록이 만들어질 때마다(시작 직후 2회 등) 반복하지 않는다.
+        private static readonly HashSet<string> _warnedTitleCollisions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// 원곡 블록 제목 중 커스텀 곡 제목과 같은 것을 모아 <see cref="CustomSongLibrary.SetOriginalTitleCollisions"/>에 넘깁니다.
+        /// 곡 목록 생성 시 1회, 원곡 수(약 116)만큼 제목 문자열을 읽습니다.
+        /// </summary>
+        private static void RefreshOriginalTitleCollisions(Il2CppReferenceArray<MainTrackListBlock> tracks)
+        {
+            var collisions = new List<string>();
+            try
+            {
+                foreach (var track in tracks)
+                {
+                    if (track == null || IsCustomBlock(track)) continue;
+                    var block = track;
+                    string title = Il2CppReflectionHelper.GetValueResilient(block, () => block.TrackTitle, "TrackTitle", MemberFallbacks.TrackBlock.Title, string.Empty);
+                    if (!CustomSongLibrary.HasCustomTitle(title)) continue;
+
+                    collisions.Add(title);
+                    if (_warnedTitleCollisions.Add(title))
+                    {
+                        MelonLogger.Warning($"[곡 목록 주입] 커스텀 곡 '{title}'이 원곡 제목과 같습니다. 이 곡은 제목이 아니라 ID로만 판정합니다"
+                            + "(원곡을 골랐을 때 커스텀 BGM·차트가 붙지 않게). 구분하기 쉽게 info.txt의 title을 바꾸는 것을 권장합니다.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[곡 목록 주입] 원곡 제목 충돌 검사 중 예외(무시하고 계속): {ex.Message}");
+            }
+            CustomSongLibrary.SetOriginalTitleCollisions(collisions);
         }
 
         /// <summary>원본 블록을 복제해 커스텀 곡 하나의 메타데이터/커버를 입힌 새 MainTrackListBlock을 만듭니다.</summary>

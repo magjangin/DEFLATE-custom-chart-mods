@@ -99,6 +99,16 @@ namespace DEFLATE_custom_chart.Core
                 {
                     var enc = Encoding.GetEncoding(codePage, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
                     string text = enc.GetString(bytes);
+
+                    // CP949 한글 완성형(0xB0~0xC8 / 0xA1~0xDF)은 Shift-JIS에서 반각 가타카나 두 글자로 '오류 없이' 읽힌다
+                    // (완성형 2350자 중 약 2/3). 그대로 받으면 한국어 BMS의 제목·키음 이름("홀드 시작.wav" 등)이 깨져
+                    // 홀드·킥/스네어 판정이 조용히 빠진다. 비ASCII 글자 대부분이 반각 가타카나면 CP949로 다시 읽어 본다.
+                    if (codePage == 932 && LooksLikeMisdecodedKorean(text) && TryDecode(949, bytes, out string korean))
+                    {
+                        LastEncodingName = Encoding.GetEncoding(949).WebName;
+                        return korean;
+                    }
+
                     LastEncodingName = enc.WebName;
                     return text;
                 }
@@ -115,6 +125,40 @@ namespace DEFLATE_custom_chart.Core
             // 최후: Latin-1은 모든 바이트를 문자로 대응시키므로 실패하지 않는다(ASCII 부분은 그대로 보존).
             LastEncodingName = "iso-8859-1 (fallback)";
             return Encoding.Latin1.GetString(bytes);
+        }
+
+        /// <summary>
+        /// Shift-JIS로 읽은 결과가 '한국어를 잘못 읽은 것'처럼 보이는지. 실제 일본어 BMS는 비ASCII의 대부분이
+        /// 히라가나·가타카나(전각)·한자이고 반각 가타카나는 드물다. 비ASCII가 4글자 이상이고 그 절반 넘게 반각 가타카나면 의심한다.
+        /// </summary>
+        private const char HalfWidthKanaFirst = (char)0xFF61; // ｡
+        private const char HalfWidthKanaLast = (char)0xFF9F;  // ﾟ
+
+        internal static bool LooksLikeMisdecodedKorean(string text)
+        {
+            int nonAscii = 0, halfWidthKana = 0;
+            foreach (char c in text)
+            {
+                if (c < 0x80) continue;
+                nonAscii++;
+                if (c >= HalfWidthKanaFirst && c <= HalfWidthKanaLast) halfWidthKana++;
+            }
+            return nonAscii >= 4 && halfWidthKana * 2 > nonAscii;
+        }
+
+        private static bool TryDecode(int codePage, byte[] bytes, out string text)
+        {
+            try
+            {
+                var enc = Encoding.GetEncoding(codePage, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback);
+                text = enc.GetString(bytes);
+                return true;
+            }
+            catch (Exception)
+            {
+                text = null;
+                return false;
+            }
         }
 
         private static void EnsureCodePagesProvider()

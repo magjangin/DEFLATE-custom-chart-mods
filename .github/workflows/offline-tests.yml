@@ -1,0 +1,19 @@
+# 게임 DLL 없이 돌아가는 오프라인 단위 테스트(BMS 파서·레인 매퍼·인코딩 판별).
+# 모드 본체(DEFLATE custom chart.csproj)는 게임 interop DLL이 필요해 CI에서 빌드하지 않는다(AGENTS.md §8).
+name: offline-tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: dotnet test
+        run: dotnet test tests/DEFLATE.CustomChart.Tests/DEFLATE.CustomChart.Tests.csproj -c Release --logger "console;verbosity=normal"

@@ -67,13 +67,19 @@ namespace DEFLATE_custom_chart.Core.Bms
             return !string.IsNullOrEmpty(channel) && ChannelToColumn.ContainsKey(channel);
         }
 
-        /// <summary>키음 파일명이 킥·스네어 계열인지 (이름에 kick/snare 포함, 대소문자 무시).</summary>
+        /// <summary>킥·스네어 키음 이름 키워드. 홀드 키음("홀드 시작")처럼 한글 이름도 받는다(v1.1.3~).</summary>
+        private static readonly string[] KickSnareKeywords = { "kick", "snare", "킥", "스네어" };
+
+        /// <summary>키음 파일명이 킥·스네어 계열인지 (이름에 kick/snare/킥/스네어 포함, 대소문자 무시).</summary>
         public static bool IsKickSnareKeysound(string keysoundFile)
         {
             if (string.IsNullOrEmpty(keysoundFile)) return false;
             string name = Path.GetFileNameWithoutExtension(keysoundFile);
-            return name.IndexOf("kick", StringComparison.OrdinalIgnoreCase) >= 0
-                || name.IndexOf("snare", StringComparison.OrdinalIgnoreCase) >= 0;
+            foreach (var kw in KickSnareKeywords)
+            {
+                if (name.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            }
+            return false;
         }
 
         /// <summary>채널 + 키음 파일명 ➔ 게임 레인 ID. 노트 채널이 아니면 null.</summary>
