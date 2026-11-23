@@ -1,5 +1,6 @@
 <Solution>
   <Project Path="DEFLATE custom chart/DEFLATE custom chart.csproj" />
   <Project Path="SignatureDumper/SignatureDumper.csproj" />
+  <Project Path="tests/DEFLATE.CustomChart.Tests/DEFLATE.CustomChart.Tests.csproj" />
 </Solution>
 

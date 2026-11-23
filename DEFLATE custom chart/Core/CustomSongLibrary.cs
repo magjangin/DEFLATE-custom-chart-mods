@@ -26,6 +26,27 @@ namespace DEFLATE_custom_chart.Core
         private static readonly Dictionary<string, CustomSongEntry> _byTrackId = new Dictionary<string, CustomSongEntry>(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, CustomSongEntry> _byTitle = new Dictionary<string, CustomSongEntry>(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// 원곡과 제목이 같은 커스텀 곡 제목. 이 제목으로는 <see cref="FindByTitle"/> 폴백을 하지 않는다.
+        /// 공식 곡을 커스텀 채보로 만들면 제목이 같아지는데, 원곡을 골랐을 때(ID 불일치) 제목 폴백이 커스텀 곡을 잡아
+        /// 원곡에 커스텀 BGM·차트·커버가 붙는 문제가 있었다(AGENTS.md §10 보류 항목, v1.1.3에서 해결).
+        /// 곡 목록이 만들어질 때마다 <see cref="SetOriginalTitleCollisions"/>로 갱신한다.
+        /// </summary>
+        private static readonly HashSet<string> _originalTitleCollisions = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>커스텀 곡 제목 집합(원곡 제목과의 충돌 검사용).</summary>
+        public static bool HasCustomTitle(string title) => !string.IsNullOrEmpty(title) && _byTitle.ContainsKey(title);
+
+        public static void SetOriginalTitleCollisions(IEnumerable<string> titles)
+        {
+            _originalTitleCollisions.Clear();
+            if (titles == null) return;
+            foreach (var t in titles)
+            {
+                if (!string.IsNullOrEmpty(t)) _originalTitleCollisions.Add(t);
+            }
+        }
+
         /// <summary>현재 선택/재생 중인 커스텀 곡. 커스텀 곡이 아닌 원본 곡을 고르면 null.</summary>
         public static CustomSongEntry Active { get; private set; }
 
@@ -200,6 +221,8 @@ namespace DEFLATE_custom_chart.Core
         private static CustomSongEntry FindByTitle(string title)
         {
             if (string.IsNullOrEmpty(title)) return null;
+            // 원곡과 같은 제목이면 제목만으로는 원곡/커스텀을 가를 수 없으므로 ID 판정에만 맡긴다.
+            if (_originalTitleCollisions.Contains(title)) return null;
             if (_byTitle.TryGetValue(title, out var indexed) &&
                 string.Equals(indexed.Meta?.Title, title, StringComparison.OrdinalIgnoreCase))
             {

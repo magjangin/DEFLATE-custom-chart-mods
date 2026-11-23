@@ -354,22 +354,26 @@ namespace DEFLATE_custom_chart.Core.Bms
             {
                 if (raw.Channel != "03" && raw.Channel != "08") continue;
                 if (string.IsNullOrEmpty(raw.Data)) continue;
-                if (raw.Data.Length % noteWidth != 0)
+
+                // 03 채널 값은 오브젝트 ID가 아니라 BPM 자체(16진 00~FF)라서 3자리 확장 ID 파일에서도 항상 2자리다.
+                // 예전에는 ID 폭(3)으로 나눠 "길이 4가 폭 3의 배수가 아님"으로 줄 전체를 버려 변속이 사라졌다.
+                int width = raw.Channel == "03" ? 2 : noteWidth;
+                if (raw.Data.Length % width != 0)
                 {
-                    WarnMisalignedData(chart, raw, noteWidth);
+                    WarnMisalignedData(chart, raw, width);
                     continue;
                 }
 
-                int objectCount = raw.Data.Length / noteWidth;
+                int objectCount = raw.Data.Length / width;
                 double mStartTick = measureStartTicks.TryGetValue(raw.Measure, out double bms) ? bms : raw.Measure * TicksPerMeasure;
                 double mLengthTicks = (measureStartTicks.TryGetValue(raw.Measure + 1, out double bme) ? bme : (raw.Measure + 1) * TicksPerMeasure) - mStartTick;
 
                 for (int i = 0; i < objectCount; i++)
                 {
-                    int startIdx = i * noteWidth;
-                    if (IsAllZeros(raw.Data, startIdx, noteWidth)) continue;
+                    int startIdx = i * width;
+                    if (IsAllZeros(raw.Data, startIdx, width)) continue;
 
-                    string val = raw.Data.Substring(startIdx, noteWidth);
+                    string val = raw.Data.Substring(startIdx, width);
 
                     double eventTick = mStartTick + ((double)i / objectCount) * mLengthTicks;
                     float newBpm = 0.0f;

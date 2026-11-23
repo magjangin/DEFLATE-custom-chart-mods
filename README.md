@@ -23,6 +23,8 @@ DEFLATE custom chart/   # 모드 본체 (MelonLoader Mod, .csproj)
   Hooks/                # Harmony 훅 (SongListHooks, AssetManagerHooks, InGameRhythmHooks ...)
 SignatureDumper/         # 게임 Il2Cpp 어셈블리 시그니처 덤프 도구 (Reflection 기반 독립 툴)
 docs/                    # 아키텍처/훅 포인트/모딩 가이드 문서
+tests/                   # 게임 없이 도는 단위 테스트 (BMS 파서·레인 매퍼·인코딩 판별, CI에서 실행)
+tools/                   # release.ps1(릴리즈), check_hook_targets.py(게임 업데이트 후 훅 대상 대조)
 AGENTS.md                # 멀티 에이전트 및 개발자 프로젝트 인수인계 핸드오버 문서
 CLAUDE.md                # Claude Code 인수인계 링크
 ```
@@ -43,6 +45,8 @@ hwa/
 ```
 
   - 커버는 이름에 `cover`/`jacket`/`thumbnail`이 들어간 `.png`(또는 `.jpg`)를 먼저 고르고, 없으면 처음 나오는 `.png`를 씁니다. info.txt에 아티스트가 없으면 BMS `#ARTIST`를 씁니다.
+- 하이햇/킥·스네어는 키음 파일명으로 정합니다: 이름에 `kick`·`snare` 또는 `킥`·`스네어`가 있으면 킥·스네어, 나머지는 하이햇([매핑 명세](docs/bms_mapping_spec.md)).
+- BMS·info.txt는 UTF-8이 아니어도 됩니다(Shift-JIS, CP949 자동 판별).
 - BMS의 `#RANDOM` 분기는 1번 분기(`#IF 1`)만 읽습니다. STOP(`#STOPxx`/09 채널)과 LN 채널(5x/6x)은 지원하지 않으며, 만나면 로그에 경고가 남습니다(홀드는 키음 이름 "홀드 시작/홀드 끝" 또는 `#LNOBJ`).
 - 곡 폴더로 인정되는 조건: `info.txt`(또는 다른 `.txt`) · BMS 차트(`.bms`/`.bme`/`.bml`) · `.png` · `.mp4` 중 하나라도 폴더에 직접 있을 것 (`.wav`만 모아둔 키음 폴더는 자동으로 제외됩니다)
   - 메타데이터 파일은 `info.txt`를 우선하고, 없으면 처음 나오는 `.txt`를 씁니다
@@ -76,6 +80,8 @@ hwa/
 - 게임 설치 경로는 `.csproj`의 `GameDir` 속성 하나로 지정합니다 (기본값 `H:\steam\steamapps\common\DEFLATE\`). 다른 경로면 `dotnet build -p:GameDir=<게임 폴더>\`로 덮어쓰세요.
 - 참조 DLL은 `MelonLoader/Il2CppAssemblies/`에서 가져옵니다. 이 폴더는 MelonLoader 설치(또는 버전 업그레이드) 후 게임을 **한 번 실행해야** 생성됩니다.
 - 빌드가 끝나면 `DeployToMods` 타깃이 `<GameDir>Mods\`로 DLL을 복사합니다.
+- 단위 테스트(게임 불필요): `dotnet test tests/DEFLATE.CustomChart.Tests`. GitHub Actions가 PR마다 같은 테스트를 돌립니다.
+- 게임 업데이트 후 훅이 깨질지 미리 보기: SignatureDumper로 `Decompiled/`를 다시 만든 뒤 `python tools/check_hook_targets.py`.
 
 ## 릴리즈
 

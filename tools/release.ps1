@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   1) 버전 일치 확인: DeflateMod.Version = CHANGELOG.md 최상단 ## [버전] = AssemblyInfo AssemblyVersion(앞 3자리)
-  2) dotnet build -c Release (경고 0 / 오류 0이어야 통과)
+  2) dotnet test (tests/, 게임 불필요) → dotnet build -c Release (경고 0 / 오류 0이어야 통과)
   3) dist\DEFLATE-custom-chart-v<버전>.zip (DLL 하나) + SHA256 + 릴리즈 노트 초안 생성
   -Publish: main이 origin/main과 같고 작업 트리가 깨끗한지 확인 → 태그 v<버전> 푸시 → gh release create
 
@@ -36,6 +36,12 @@ if (-not $modVer -or $modVer -ne $logVer -or $modVer -ne $asmVer) {
 }
 $tag = "v$modVer"
 Write-Host "버전 $modVer 확인 (DeflateMod / CHANGELOG / AssemblyInfo 일치)"
+
+# ── 2a. 오프라인 단위 테스트 (게임 불필요, CI와 같은 테스트) ──
+$testProj = Join-Path $root "tests\DEFLATE.CustomChart.Tests\DEFLATE.CustomChart.Tests.csproj"
+$testOut = & dotnet test $testProj -c Release -nologo 2>&1
+$testOut | Write-Host
+if ($LASTEXITCODE -ne 0) { throw "단위 테스트 실패" }
 
 # ── 2. 빌드 ──
 # -warnaserror: AGENTS.md §5-7 원칙(경고 0 / 오류 0)을 릴리즈 관문으로 강제

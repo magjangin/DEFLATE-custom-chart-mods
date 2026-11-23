@@ -9,6 +9,7 @@
 > **v1.1.0 (2026-11-23, 첫 릴리즈):** 인코딩 자동 판별·Steam 업데이트 대기 경고·릴리즈 스크립트. §7·§8 참고.
 > **v1.1.1 (2026-11-23, 2차 감사):** 클라우드에서 수정. 이후 게임 PC에서 **빌드 경고 0 확인**, 인게임 스모크는 미확인. §10 참고.
 > **v1.1.2 (2026-11-23, 3차 감사):** 파라미터 이름 비의존 훅·지연 로그 보간·BGM 요청 수명·MelonLoader 지문. **빌드 경고 0, 인게임 스모크 PASS 미확인**(게임 창 백그라운드로 실행해 인트로에서 멈춤 — §5-18). §11 참고.
+> **v1.1.3 (2026-11-24, 4차 감사):** CP949 BMS 오판독·`03` 채널 폭·원곡 제목 충돌 수정, 오프라인 단위 테스트 37개 + GitHub Actions, 훅 대상 대조 스크립트. **빌드 경고 0·테스트 37/37, 인게임 스모크 미확인.** §12 참고.
 > **2026-11-23 전수 감사/리팩토링:** §9 참고. 컴파일 경고 0 · 오류 0, `[SafePatcher] 성공 45 / 건너뜀 8(로그 레벨 LogLevel=1 기준) / 실패 0`, 스모크 테스트 `PASS`(BMS 552/552, 라인바 296, 커스텀 BGM·BGA, 컨텍스트 인게임).
 > 미확인: 결과 화면, 롱노트(테스트 차트에 홀드 0개), 드롭 레인(테스트 차트 14번 채널 0개), 킥/스네어 키음 노트(테스트 차트에 없음).
 
@@ -109,6 +110,13 @@
 - **타이밍 기준 샘플레이트:** 게임 시계는 `audioCom.timeSamples`(재생 중인 클립 단위)이므로 노트/라인바/드롭 샘플은 **커스텀 음악 클립의 주파수**로 계산합니다(`InGameRhythmHooks.TimelineSampleRate`). 숙주 Koreography(44100Hz)로 계산하던 예전 방식은 48000Hz 음악에서 노트가 8.8%씩 일찍 나왔습니다. 판정 범위·진행률 표시는 게임이 Koreography 샘플레이트로 계산하므로, 완전 일치를 원하면 음악을 44100Hz로 변환하도록 `[BMS 타이밍]` 경고로 안내합니다.
 - **숙주 에셋 원복:** 커스텀 곡 플레이 중 바꾼 숙주 `Koreography.SourceClip`은 곡 목록 진입 시 `InGameRhythmHooks.RestoreHostKoreography()`로 되돌립니다(공유 Addressables 에셋이라 그대로 두면 같은 세션의 원곡 플레이에 영향).
 
+### ⑨ 게임 없이 하는 검증: 단위 테스트 & 훅 대상 대조 (v1.1.3~)
+- **단위 테스트 (`tests/DEFLATE.CustomChart.Tests`, xUnit, net8.0):** 모드 소스 중 게임 타입을 참조하지 않는 파일(`Core/Bms/*.cs`, `Core/TextDecoder.cs`)만 **링크**해서 테스트합니다. `ModLog`는 MelonLoader에 의존하므로 `TestStubs.cs`의 스텁으로 대체합니다. → 링크된 파일에 게임/Unity/MelonLoader 타입을 쓰면 테스트 프로젝트가 깨집니다(그런 코드는 다른 파일로 분리).
+  - 실행: `dotnet test tests/DEFLATE.CustomChart.Tests`. GitHub Actions(`.github/workflows/offline-tests.yml`)가 main 푸시·PR마다, `tools/release.ps1`이 빌드 전에 실행합니다.
+  - 주의: BMS 채널 줄은 `#MMMCC` — `#00116`은 **1마디** 16채널입니다(테스트 작성 때 0마디로 착각해 8개가 실패했음).
+- **훅 대상 대조 (`tools/check_hook_targets.py`):** 새 `Decompiled/` 덤프와 `Hooks/*.cs`의 `[HarmonyPatch]`를 대조해 `MISSING`(대상 삭제·개명)·`OVERLOADED`(모호성)·`PARAM`(이름 바인딩 파라미터 개명)을 게임 실행 전에 보고합니다. `object[] __args` 훅은 이름 검사를 건너뜁니다. 2026-11-24 덤프 기준 문제 0건, 파라미터명 변이 주입으로 `PARAM` 검출 확인.
+- **인게임 스모크 테스트(§3-⑥)를 대체하지 않습니다.** 훅·씬·에셋 주입은 여전히 게임에서만 확인됩니다.
+
 ### ⑧ 로그 상세도 (`Core/ModLog.cs`, config `LogLevel`)
 - `0` 요약(기본): 시작 요약(`[GameCompat]`, `[SafePatcher]`, `[ModConfig]`), 곡 라이브러리·`[BMS 파싱]` 한 줄, `[곡 목록 주입 완료]`, 플레이마다 `[커스텀 차트]` 한 줄, 경고/오류. `1` 상세: 레인별 주입·에셋 오버라이드·씬별 메타데이터. `2` 디버그: 커서 이동/클릭/난이도/드럼 모드/10초 진행률·`[진단]` 레인 배치와 원곡 차트 분석.
 - 로그만 찍는 훅(진행률, 드럼 모드, 커서 이동, 클릭, 씬 전환, 노트 수, 영상 시작)은 `ModLog.Prepare(level)`로 **레벨이 모자라면 패치 자체를 생략**합니다. 기본값에서 `[SafePatcher]` 성공 수가 줄어드는 것은 정상입니다.
@@ -195,6 +203,9 @@
    - **해결:** 스모크 테스트는 게임 창을 앞에 둔 채 돌리고 끝나면 `SmokeTest=0` 원복. v1.1.2부터는 커서가 15회 연속 그대로면 이동을 멈추고 새 목록을 60초 기다린 뒤, 안 오면 원인 힌트와 함께 FAIL합니다.
 19. **'로그 레벨로 막았으니 비용도 없다'고 가정:**
    - `if (Level >= Detail)` 게이트는 출력만 막고, 호출 전에 보간 문자열(구멍 안 IL2CPP 호출 포함)은 이미 만들어집니다. **해결:** §3-⑧ 지연 보간 핸들러.
+20. **인코딩 판별을 '예외 없이 디코딩되면 정답'으로 가정 (CP949 BMS가 Shift-JIS로 오판):**
+   - 한글 완성형 2350자 중 1575자(약 2/3)가 Shift-JIS에서 반각 가타카나 두 글자로 **유효하게** 읽힙니다(예: `화영왕` → `ﾈｭｿｵｿﾕ`). 한글이 적은 CP949 BMS는 BMS 우선순위(932 먼저)에서 그대로 Shift-JIS로 판별돼 키음 이름이 깨졌습니다.
+   - **해결:** `TextDecoder.LooksLikeMisdecodedKorean` — 932로 읽은 비ASCII의 절반 넘게 반각 가타카나면 949로 다시 읽음. 반대 방향(일본어 SJIS를 CP949로 오판)은 info.txt/config.txt 우선순위에서만 생길 수 있고 아직 처리하지 않음.
 
 ---
 
@@ -213,16 +224,9 @@
    - `dotnet run --project SignatureDumper -c Release --framework net8.0`
 3. **변경점 특정:**
    - `dotnet build -c Release`의 컴파일 오류가 가장 정확한 1차 목록입니다(단, 선언부 오류가 있으면 C#이 메서드 본문 오류 보고를 생략하므로 고친 뒤 반복 빌드).
-   - 훅 대상 시그니처 대조(Git Bash, 저장소 루트):
-     ```bash
-     grep -ohE 'HarmonyPatch\(typeof\(([A-Za-z_]+)\), (nameof\([A-Za-z_]+\.([A-Za-z_]+)\)|"([A-Za-z_]+)")' "DEFLATE custom chart/Hooks/"*.cs \
-       | sed -E 's/HarmonyPatch\(typeof\(([A-Za-z_]+)\), (nameof\([A-Za-z_]+\.([A-Za-z_]+)\)|"([A-Za-z_]+)")/\1 \3\4/' | sort -u \
-       | while read t m; do f=$(find Decompiled -name "$t.cs" | head -1); [ -z "$f" ] && continue
-           c=$(grep -cE "^\s+(public|private|protected|internal).* $m\(" "$f")
-           [ "$c" = 0 ] && echo "MISSING $t.$m"; [ "$c" -gt 1 ] && echo "OVERLOADED($c) $t.$m"
-           grep -hE "^\s+(public|private|protected|internal).* $m\(" "$f" | sed "s/^ */$t: /"; done
-     ```
-     `MISSING`(대상 삭제·개명), `OVERLOADED`(Harmony 모호성 예외 — `[HarmonyPatch]`에 인자 타입 배열 지정 필요), 그리고 Postfix/Prefix가 이름으로 받는 파라미터(`trackID`, `lane`, `currentSample`, `addresskey`, `thisplayer`, `isSelected` 등)의 개명 여부를 확인합니다.
+   - 훅 대상 시그니처 대조(저장소 루트): `python tools/check_hook_targets.py` (`--verbose`면 정상 훅의 대상 시그니처도 출력). 예전 bash 스니펫을 대체하며, 이름으로 받는 Prefix/Postfix 파라미터(`isSelected`, `__instance` 제외 등)가 새 시그니처에 있는지까지 봅니다(§3-⑨).
+     `MISSING`(대상 삭제·개명), `OVERLOADED`(Harmony 모호성 예외 — `[HarmonyPatch]`에 인자 타입 배열 지정 필요), `PARAM`(파라미터 개명 → 훅 파라미터 수정 또는 `HookArgs`로 전환, §3-⑤ ⑧). 종료 코드 1이면 문제 있음.
+   - 게임 없이 도는 부분(BMS 파서·인코딩)은 `dotnet test tests/DEFLATE.CustomChart.Tests`로 회귀를 확인합니다.
 4. **단일 지점 수정:**
    - 필드/프로퍼티 이름 변경 → `DEFLATE custom chart/Core/Wrapper/MemberFallbacks.cs`의 해당 후보 배열에 새 이름 추가 (모든 래퍼/훅에 자동 전파).
    - 메서드 이름/시그니처 변경 → 해당 훅의 `[HarmonyPatch]` 및 `Prepare()` 대상명 갱신.
@@ -252,6 +256,7 @@
 | 이전 | 노트 이중 생성·타이밍·로그 정리 | BMS 노트 1개=게임 레인 1개(채널=열, 키음=하이햇/킥·스네어, 킥·스네어 실측 열 배치), 노트 샘플 위치를 커스텀 음악 주파수 기준으로 계산(48kHz 드리프트 수정)+`[BMS 타이밍]` 안내, 숙주 `SourceClip` 원복, `LogLevel`(0/1/2)과 로그 전용 훅 Prepare 생략, 곡당 한 줄 `[커스텀 차트]` 요약, `ChartDiagnostics`(레인 배치·원곡 동시 출현), 스모크 테스트에 중복·누락 검사 |
 | `b1483d1` | 전수 감사·정리 | §9 참조: 무동작 `LoadVideoClip` 훅·미사용 코드(`CustomAlbumWrapper` 등) 삭제, 활성 곡 판정 중복 통합, 죽은 디버그 분기 제거, NoteSway 감쇠를 클립 주파수 기준으로 통일, 스모크 PASS |
 | v1.1.0 | 첫 릴리즈·인코딩·업데이트 감지 | `TextDecoder`(Shift-JIS/CP949 BMS·info.txt·config.txt), `GameCompat` Steam 업데이트 대기 경고(`TargetBuildID`/`StateFlags`)·자동 업데이트 안내(LogLevel 1), 지문 기록을 설정 로드 뒤로 이동, 버전 단일 출처 `DeflateMod.Version`, `CHANGELOG.md`, `tools/release.ps1` |
+| v1.1.3 | 4차 감사·테스트 기반 | CP949 BMS 오판독(`LooksLikeMisdecodedKorean`)·3자리 ID `03` 채널 폭·원곡 제목 충돌(`SetOriginalTitleCollisions`) 수정, 한글 킥·스네어 키음, 단위 테스트 37개+CI, `check_hook_targets.py`, 릴리즈 스크립트 테스트 관문. §12 참고 |
 | v1.1.2 | 3차 감사·업데이트 내성 | `HookArgs`(`__args` 타입 바인딩)로 핵심 훅 8개 파라미터 이름 비의존, `ModLog` 지연 보간 핸들러, BGM 스트리밍 요청을 클립 수명과 동일하게, 인게임 BGM 대기 코루틴 1개로, MelonLoader 지문, 스모크 테스트 커서 정지 감지·BGM 진행 검사. §11 참고 |
 | v1.1.1 | 2차 감사(미빌드→v1.1.2 때 빌드 확인) | BMS `#RANDOM`/`#IF` 1번 분기 고정·STOP/LN 채널 경고, 커버 이름 우선 선택·밉맵 제거, BMS `#ARTIST` 폴백, config.txt 빠진 키 덧붙이기·원자적 저장, NoteSway/Chaos `Mathf`→`MathF`, HUD 로그 훅 LogLevel 게이트. §10 참고 |
 
@@ -281,7 +286,7 @@ Start-Process "steam://rungameid/3921360"
 
 ### 릴리즈 (`tools/release.ps1`, 게임이 설치된 PC에서 실행)
 ```powershell
-.\tools\release.ps1            # 버전 일치 확인 + Release 빌드(-warnaserror) → dist\DEFLATE-custom-chart-v<버전>.zip + 노트 초안
+.\tools\release.ps1            # 버전 일치 확인 + 단위 테스트 + Release 빌드(-warnaserror) → dist\DEFLATE-custom-chart-v<버전>.zip + 노트 초안
 .\tools\release.ps1 -Publish   # 위 + main=origin/main·깨끗한 트리 확인 → 태그 v<버전> 푸시 → gh release create
 ```
 - 버전은 세 곳을 같이 올립니다: `Core/DeflateMod.cs`의 `DeflateMod.Version`(MelonInfo·시작 배너가 사용), `Properties/AssemblyInfo.cs`, `CHANGELOG.md` 최상단 `## [버전]`. 하나라도 다르거나 태그가 이미 있으면 스크립트가 멈춥니다.
@@ -337,7 +342,7 @@ Start-Process "steam://rungameid/3921360"
 
 **발견했지만 바꾸지 않은 것 (실기 확인이 먼저)**
 - `DiffCtrl.UpdateStarDisplay` Postfix가 호출마다 `GenerateStarImages`(별 이미지 재생성)를 부른다. 원본이 매 프레임 부르는지, 원본도 별을 다시 만드는지 모르므로 캐싱하면 원본 별이 덮어쓸 수 있다. `LogLevel=2`로 호출 빈도를 먼저 잴 것.
-- `CustomSongLibrary.SetActive`는 ID로 못 찾으면 **제목**으로도 찾는다. 원곡과 제목이 같은 커스텀 곡이 있으면 원곡에 커스텀 에셋이 붙을 수 있다. 제목 폴백을 끄면 ID가 어긋난 경로에서 커스텀 곡 인식이 끊길 수 있어 보류.
+- ~~`CustomSongLibrary.SetActive`는 ID로 못 찾으면 **제목**으로도 찾는다~~ → v1.1.3: 원곡과 겹치는 제목만 제목 폴백에서 제외(§12). 원래 메모: 원곡과 제목이 같은 커스텀 곡이 있으면 원곡에 커스텀 에셋이 붙을 수 있다. 제목 폴백을 끄면 ID가 어긋난 경로에서 커스텀 곡 인식이 끊길 수 있어 보류.
 - `VideoPlayer.Play/Prepare` 전역 Prefix(`EnforceCustomBgaUrl`)는 커스텀 곡이 활성이면 **모든** VideoPlayer URL을 커스텀 BGA로 바꾼다. 배경 영상이 따로 있는 UI가 생기면 범위를 좁혀야 한다.
 - 커버 PNG는 곡 목록 주입 때 곡마다 메인 스레드에서 동기 디코딩한다(곡 수 × 수십 ms). 곡이 많으면 첫 곡 목록 진입이 멈칫할 수 있다 → 지연 로드(커서가 온 곡만) 또는 작업 스레드 디코딩이 다음 과제.
 - 난이도 3개(Easy/Normal/Hard)가 같은 BMS를 쓰고 별 표기만 다르다. 난이도별 BMS는 미구현.
@@ -367,3 +372,23 @@ Start-Process "steam://rungameid/3921360"
 - §10의 보류 항목(`DiffCtrl` 별 재생성, 제목 폴백, 커버 동기 디코딩, 난이도별 BMS, BMS 없는 곡의 테스트 롱노트, `BlockSave` 범위)은 그대로입니다.
 
 **다음 세션이 먼저 할 일:** 게임 창을 앞에 두고 `SmokeTest=1` → `[SmokeTest] PASS` 확인(특히 `BMS 노트 주입 552개/9레인`이 그대로인지 = `__args` 바인딩이 Il2Cpp Harmony에서 동작하는지, `t=…→…s` 진행) → `SmokeTest=0` 원복 → 이 절과 CHANGELOG의 "미확인"을 지울 것.
+
+---
+
+## 12. 4차 감사 기록 (2026-11-24, v1.1.3)
+
+범위: 지난 감사의 보류 항목 재검토 + 게임 없이 검증 가능한 부분 테스트화. 게임 PC에서 진행 — **빌드 경고 0 / 오류 0, 단위 테스트 37/37**. 인게임 스모크는 사용자가 "나중에"를 골라 이번에도 돌리지 않음.
+
+**적용한 변경**
+- 단위 테스트 프로젝트 + CI + 릴리즈 관문(§3-⑨). 테스트가 실제 버그 2건을 재현함(아래 두 항목).
+- `TextDecoder`: Shift-JIS로 읽은 결과가 반각 가타카나투성이면 CP949로 재해석(§5-20).
+- `BmsParser.BuildBpmTimeline`: `03` 채널은 ID 폭과 무관하게 2자리(3자리 ID 파일에서 변속 누락).
+- `BmsLaneMapper.IsKickSnareKeysound`: `킥`·`스네어` 한글 키워드 추가(`docs/bms_mapping_spec.md` 갱신). **동작 변경**: 이름에 `킥`이 든 키음이 하이햇 → 킥·스네어로 바뀜.
+- `CustomSongLibrary`/`SongInjectorHooks`: 곡 목록 생성 시 원곡 제목 ↔ 커스텀 제목 충돌을 모아(`RefreshOriginalTitleCollisions`, 원곡 약 116곡 제목 1회 읽기) 그 제목은 `FindByTitle` 폴백 제외 + 경고 1회. 충돌이 없으면 동작은 예전과 같음. **인게임 미확인**(충돌 곡이 없는 현재 hwa/ 구성에서는 경로 자체가 안 탐).
+- `tools/check_hook_targets.py`(§6 3단계).
+
+**점검했지만 바꾸지 않은 것**
+- §11의 보류 항목 그대로(`SimpleRandomVideo`/전역 `VideoPlayer` 범위, BGM 미로드 시 샘플레이트, `DiffCtrl` 별, 커버 동기 디코딩, 난이도별 BMS, BMS 없는 곡의 테스트 롱노트, `BlockSave` 범위). 모두 실기 확인이나 사용자 결정이 먼저.
+- 일본어 SJIS가 info.txt/config.txt(CP949 우선)에서 CP949로 오판될 가능성 — 해당 파일은 한국어 사용자 전제라 보류.
+
+**다음 세션이 먼저 할 일:** §11과 같음(게임 창 앞에 두고 `SmokeTest=1` → PASS → `SmokeTest=0`). 추가로 `[곡 목록 주입] … 원곡 제목과 같습니다` 경고가 기존 곡 구성에서 **뜨지 않는지**(오탐 없음) 확인.
