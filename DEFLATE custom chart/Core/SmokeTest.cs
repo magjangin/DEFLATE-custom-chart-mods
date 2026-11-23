@@ -23,7 +23,10 @@ namespace DEFLATE_custom_chart.Core
         private const float StepDelaySeconds = 0.3f;
         private const float KoreographyWaitSeconds = 10f;
         private const int MaxNavigationSteps = 200;
+        private const int MaxStuckSteps = 15;
+        private const float StuckListWaitSeconds = 60f;
         private const float InGameProbeSeconds = 12f;
+        private const float BgmProgressSeconds = 1f;
 
         // 게임은 시작 직후 MainTrackList를 두 번 만든다(인트로 → 곡 목록 재로드). 새 목록이 오면 세대를 올려
         // 이전 목록에서 돌던 실행을 조용히 폐기하고 새 목록에서 다시 시작한다. 플레이 확정 후에는 다시 돌지 않는다.
@@ -115,6 +118,8 @@ namespace DEFLATE_custom_chart.Core
             // 사용자 조작과 같은 경로(Next/Last → ChangeTrack → Koreography 비동기 로드)로 이동한다.
             // GoToTrack만 호출하면 currentKoreHandle이 채워지지 않아 GotoSceneData가 네이티브 NRE를 던진다(2026-11-20 확인).
             int steps = 0;
+            int lastIndex = int.MinValue;
+            int stuckSteps = 0;
             while (steps < MaxNavigationSteps)
             {
                 int now;
@@ -123,6 +128,32 @@ namespace DEFLATE_custom_chart.Core
                     now = list.NowIndex;
                     if (now == index) break;
 
+                    stuckSteps = now == lastIndex ? stuckSteps + 1 : 0;
+                    lastIndex = now;
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[SmokeTest] FAIL: 곡 이동(Next/Last) 예외: {ex.Message}");
+                    yield break;
+                }
+
+                // 커서가 움직이지 않는 목록: 게임 시작 직후의 인트로용 첫 목록이 정상적으로 이렇다(약 25초 뒤 두 번째 목록이 온다).
+                // 이동을 멈추고 새 목록(세대 교체)을 기다리고, 끝내 안 오면 원인 힌트와 함께 FAIL한다(200회 헛이동 대신).
+                if (stuckSteps >= MaxStuckSteps)
+                {
+                    float until = Time.realtimeSinceStartup + StuckListWaitSeconds;
+                    while (Time.realtimeSinceStartup < until)
+                    {
+                        if (generation != _generation) yield break; // 새 목록에서 다시 시작됨
+                        yield return null;
+                    }
+                    MelonLogger.Warning($"[SmokeTest] FAIL: 곡 목록 커서가 {lastIndex}에서 움직이지 않고 {StuckListWaitSeconds:F0}초 동안 새 곡 목록도 오지 않았습니다. "
+                        + "게임이 인트로 화면에 머물러 있을 수 있습니다(게임 창이 백그라운드면 진행이 멈춤). 게임 창을 앞에 둔 채 다시 실행하세요.");
+                    yield break;
+                }
+
+                try
+                {
                     int count = list.tracks.Length;
                     int forward = ((index - now) % count + count) % count;
                     if (forward <= count - forward) list.Next(); else list.Last();
@@ -176,6 +207,12 @@ namespace DEFLATE_custom_chart.Core
             var wait = WaitRealtime(InGameProbeSeconds);
             while (wait.MoveNext()) yield return wait.Current;
 
+            // BGM이 실제로 흘러가는지(멈춘 스트리밍·음소거 클립 검출): 1초 간격으로 재생 위치를 두 번 읽는다.
+            float t1 = -1f;
+            try { if (controller != null && controller.audioCom != null) t1 = controller.audioCom.time; } catch { }
+            var progressWait = WaitRealtime(BgmProgressSeconds);
+            while (progressWait.MoveNext()) yield return progressWait.Current;
+
             try
             {
                 if (controller == null)
@@ -189,6 +226,8 @@ namespace DEFLATE_custom_chart.Core
                 bool customActive = HwaAssetManager.IsTargetTrackActive;
                 bool bgmIsCustom = audio != null && customClip != null && audio.clip == customClip;
                 bool bgmPlaying = audio != null && audio.isPlaying && !audio.mute;
+                float t2 = audio != null ? audio.time : -1f;
+                bool bgmAdvancing = t1 >= 0f && t2 - t1 >= BgmProgressSeconds * 0.5f;
                 bool hasChart = HwaAssetManager.LoadedBmsChart != null;
                 int chartNotes = hasChart ? HwaAssetManager.LoadedBmsChart.Notes.Count : 0;
                 // 노트 하나는 정확히 한 레인에만 들어가야 한다(하이햇/킥·스네어 양쪽 복제 회귀 검사).
@@ -203,9 +242,9 @@ namespace DEFLATE_custom_chart.Core
                 bool contextOk = HwaAssetManager.IsInGameplayContext && !HwaAssetManager.IsInSongSelectContext;
                 string videoAudio = controller.videoPlayer != null ? controller.videoPlayer.audioOutputMode.ToString() : "없음";
 
-                bool pass = customActive && bgmIsCustom && bgmPlaying && notesOk && bgaOk && contextOk;
+                bool pass = customActive && bgmIsCustom && bgmPlaying && bgmAdvancing && notesOk && bgaOk && contextOk;
 
-                string detail = $"커스텀 곡 활성={customActive} | BGM 커스텀={bgmIsCustom}('{audio?.clip?.name}') 재생중={bgmPlaying} t={(audio != null ? audio.time : -1f):F1}s"
+                string detail = $"커스텀 곡 활성={customActive} | BGM 커스텀={bgmIsCustom}('{audio?.clip?.name}') 재생중={bgmPlaying} t={t1:F1}→{t2:F1}s{(bgmAdvancing ? "" : " 멈춤!")}"
                     + $" | BMS 노트 주입 {_injectedLaneEvents}개/{_injectedLanes}레인 (차트 {chartNotes}개{(notesOk ? "" : " ≠ 중복/누락!")}) · 라인바 {_injectedLineBars}개 | 게임 AllNoteCount {allNoteCount} | 활성 노트 {activeNotes}"
                     + $" | BGA={(bgaOk ? "OK" : $"불일치('{videoUrl}')")} 영상오디오={videoAudio}"
                     + $" | 컨텍스트={(contextOk ? "인게임" : "곡선택 잔류!")}";

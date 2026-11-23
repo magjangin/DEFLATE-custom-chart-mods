@@ -16,10 +16,14 @@ namespace DEFLATE_custom_chart.Hooks
         {
             // 원본 시그니처의 콜백은 Il2CppInterop이 만든 Il2CppSystem.Action 계열이다.
             // (System.Action으로 받으면 타입이 맞지 않는 객체를 델리게이트로 호출하게 된다)
-            public static bool Prefix(ref string key, Il2CppSystem.Action<AudioClip> onSuccess, Il2CppSystem.Action onFail)
+            // 파라미터 이름 비의존(__args 타입 바인딩): key는 읽기만 하므로 이름 대신 타입으로 고른다(HookArgs 참고).
+            public static bool Prefix(object[] __args)
             {
                 try
                 {
+                    string key = HookArgs.First<string>(__args);
+                    var onSuccess = HookArgs.First<Il2CppSystem.Action<AudioClip>>(__args);
+                    var onFail = HookArgs.First<Il2CppSystem.Action>(__args);
                     // 곡 목록 프리뷰에서 커스텀 사본이 선택된 상태로 자신의 오디오 Key가 요청된 경우에만
                     // hwa/ 커스텀 BGM으로 오버라이드한다 (원본 WindShifter는 같은 Key를 써도 건드리지 않음).
                     // 인접 곡 사전 로드(PreloadNearbyTracks) 로그 스팸을 피하기 위해 커스텀 오버라이드 시에만 기록한다.
@@ -61,10 +65,12 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(TrackAssetManager), nameof(TrackAssetManager.LoadVideoURL))]
         public static class TrackAssetManager_LoadVideoURL_Patch
         {
-            public static bool Prefix(ref string key, Il2CppSystem.Action<string> onSuccess, Il2CppSystem.Action onFail)
+            public static bool Prefix(object[] __args)
             {
                 try
                 {
+                    string key = HookArgs.First<string>(__args);
+                    var onSuccess = HookArgs.First<Il2CppSystem.Action<string>>(__args);
                     if (HwaAssetManager.ShouldOverrideVideoKey(key))
                     {
                         string where = HwaAssetManager.IsInSongSelectContext ? "곡 목록 프리뷰" : "인게임";

@@ -67,6 +67,13 @@ namespace DEFLATE_custom_chart.Core
         public string VideoKey { get; set; }
 
         private bool _isBgmLoading;
+
+        /// <summary>
+        /// 스트리밍(<c>streamAudio=true</c>) 클립의 데이터를 들고 있는 요청. 클립이 살아 있는 동안 Dispose하지 않습니다.
+        /// 예전에는 클립을 받자마자 요청을 Dispose해, 스트리밍 클립이 참조하는 다운로드 버퍼가 곡 도중 해제될 위험이 있었습니다
+        /// (AGENTS.md §9 알려진 한계). 해제는 <see cref="ResetLoadedAssets"/>에서 클립과 함께 합니다.
+        /// </summary>
+        private UnityWebRequest _bgmRequest;
         public bool IsBgmLoading => _isBgmLoading;
 
         private static readonly char[] InfoSeparators = { ':', '=' };
@@ -445,7 +452,9 @@ namespace DEFLATE_custom_chart.Core
             }
             finally
             {
-                www?.Dispose();
+                // 성공하면 스트리밍 클립이 요청의 버퍼를 쓰므로 클립과 수명을 같이한다. 실패한 요청만 즉시 해제.
+                if (loaded) _bgmRequest = www;
+                else www?.Dispose();
                 _isBgmLoading = false;
             }
 
@@ -489,6 +498,12 @@ namespace DEFLATE_custom_chart.Core
             {
                 UnityEngine.Object.Destroy(BgmClip);
                 BgmClip = null;
+            }
+
+            if (_bgmRequest != null)
+            {
+                try { _bgmRequest.Dispose(); } catch (Exception ex) { ModLog.Debug($"[커스텀 곡] BGM 요청 해제 생략 ({ex.GetType().Name})"); }
+                _bgmRequest = null;
             }
 
             _isBgmLoading = false;
