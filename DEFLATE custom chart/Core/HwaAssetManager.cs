@@ -276,7 +276,11 @@ namespace DEFLATE_custom_chart.Core
                 videoPlayer.audioOutputMode = VideoAudioOutputMode.None;
                 videoPlayer.SetDirectAudioMute(0, true);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // 플레이어가 이미 해제됐거나 오디오 트랙이 없는 영상이면 무시해도 된다.
+                ModLog.Debug($"[HwaAssetManager] MuteVideoPlayer 생략 ({ex.GetType().Name})");
+            }
         }
 
         public static bool ApplyCustomBga(VideoPlayer videoPlayer, bool autoPlay = true, bool muteAudio = false)

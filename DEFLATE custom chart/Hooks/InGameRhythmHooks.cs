@@ -415,6 +415,17 @@ namespace DEFLATE_custom_chart.Hooks
             return Il2CppReflectionHelper.GetValueResilient<object>(lane, null, "laneType", MemberFallbacks.Lane.LaneType, null);
         }
 
+        /// <summary>활성 곡이 아직 정해지지 않았다면 GameData의 현재 곡 ID/제목으로 판정합니다(레인 로드가 곡 시작 훅보다 먼저 올 때 대비).</summary>
+        private static void EnsureActiveTrackFromGameData(RhythmGameController instance)
+        {
+            if (HwaAssetManager.Active != null || instance == null || instance.gameData == null) return;
+
+            var gd = instance.gameData;
+            string nowTrackId = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackID, "NowTrackID", MemberFallbacks.GameData.TrackId, string.Empty);
+            string nowTrackTitle = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackTitle, "NowTrackTitle", MemberFallbacks.GameData.Title, string.Empty);
+            HwaAssetManager.SetActiveTrack(nowTrackId, nowTrackTitle);
+        }
+
         private static Il2CppSystem.Collections.Generic.List<KoreographyEvent> BuildBmsLaneEvents(
             RhythmGameController instance,
             string trackID,
@@ -423,13 +434,7 @@ namespace DEFLATE_custom_chart.Hooks
         {
             if (lane == null) return null;
 
-            if (HwaAssetManager.Active == null && instance != null && instance.gameData != null)
-            {
-                var gd = instance.gameData;
-                string nowTrackId = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackID, "NowTrackID", MemberFallbacks.GameData.TrackId, string.Empty);
-                string nowTrackTitle = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackTitle, "NowTrackTitle", MemberFallbacks.GameData.Title, string.Empty);
-                HwaAssetManager.SetActiveTrack(nowTrackId, nowTrackTitle);
-            }
+            EnsureActiveTrackFromGameData(instance);
 
             if (!HwaAssetManager.IsTargetTrackActive) return null;
 
@@ -532,46 +537,11 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.LoadKoreographyEvents))]
         public static class RhythmGameController_LoadKoreographyEvents_Patch
         {
-            // 디버그 스위치: false면 노트 주입 대신 원본 레인 노트(롱노트)만 로깅한다. readonly로 둬 CS0162 경고를 피한다.
-            private static readonly bool NoteManipulationEnabled = true;
-
             public static void Postfix(RhythmGameController __instance, string trackID, LaneController lane)
             {
                 try
                 {
                     if (lane == null) return;
-
-                    if (!NoteManipulationEnabled)
-                    {
-                        if (HwaAssetManager.Active == null && __instance != null && __instance.gameData != null)
-                        {
-                            var gd = __instance.gameData;
-                            string nowTrackId = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackID, "NowTrackID", MemberFallbacks.GameData.TrackId, string.Empty);
-                            string nowTrackTitle = Il2CppReflectionHelper.GetValueResilient(gd, () => gd.NowTrackTitle, "NowTrackTitle", MemberFallbacks.GameData.Title, string.Empty);
-                            HwaAssetManager.SetActiveTrack(nowTrackId, nowTrackTitle);
-                        }
-                        if (!HwaAssetManager.IsTargetTrackActive) return;
-
-                        int count = lane.laneEvents != null ? lane.laneEvents.Count : -1;
-                        ModLog.Debug($"[레인 노트 로드] trackID='{trackID}' | 노트 수: {count}개");
-
-                        const int LongNoteDurationThreshold = 10000;
-                        if (lane.laneEvents != null)
-                        {
-                            for (int i = 0; i < lane.laneEvents.Count; i++)
-                            {
-                                var ev = lane.laneEvents[i];
-                                if (ev == null) continue;
-                                int duration = ev.EndSample - ev.StartSample;
-                                if (duration >= LongNoteDurationThreshold)
-                                {
-                                    ModLog.Debug($"  [롱노트] trackID='{trackID}' [{i}] StartSample={ev.StartSample} EndSample={ev.EndSample} duration={duration}");
-                                }
-                            }
-                        }
-
-                        return;
-                    }
 
                     ChartDiagnostics.RecordOriginalLane(trackID, lane);
                     var events = BuildBmsLaneEvents(__instance, trackID, lane, "LoadKoreographyEvents");
@@ -648,67 +618,67 @@ namespace DEFLATE_custom_chart.Hooks
                 var bmsChart = HwaAssetManager.LoadedBmsChart;
                 if (bmsChart == null || bmsChart.Notes.Count == 0 || bmsChart.BarLines.Count == 0) return null;
 
-            // 1. 원본 라인바 이벤트 관찰: 페이로드 종류별 개수 / 대표 페이로드 / 이벤트 길이 / 평균 간격
-            var original = lane.laneEvents;
-            int originalCount = original != null ? original.Count : 0;
-            var payloadCounts = new Dictionary<string, int>();
-            var payloadSamples = new Dictionary<string, IPayload>();
-            int span = 0;
-            int firstStart = -1, lastStart = -1;
+                // 1. 원본 라인바 이벤트 관찰: 페이로드 종류별 개수 / 대표 페이로드 / 이벤트 길이 / 평균 간격
+                var original = lane.laneEvents;
+                int originalCount = original != null ? original.Count : 0;
+                var payloadCounts = new Dictionary<string, int>();
+                var payloadSamples = new Dictionary<string, IPayload>();
+                int span = 0;
+                int firstStart = -1, lastStart = -1;
 
-            for (int i = 0; i < originalCount; i++)
-            {
-                var ev = original[i];
-                if (ev == null) continue;
-
-                if (firstStart < 0)
+                for (int i = 0; i < originalCount; i++)
                 {
-                    firstStart = ev.StartSample;
-                    span = Math.Max(0, ev.EndSample - ev.StartSample);
+                    var ev = original[i];
+                    if (ev == null) continue;
+
+                    if (firstStart < 0)
+                    {
+                        firstStart = ev.StartSample;
+                        span = Math.Max(0, ev.EndSample - ev.StartSample);
+                    }
+                    lastStart = ev.StartSample;
+
+                    var payload = ev.Payload;
+                    string key = DescribePayload(payload);
+                    payloadCounts[key] = payloadCounts.TryGetValue(key, out int c) ? c + 1 : 1;
+                    if (!payloadSamples.ContainsKey(key)) payloadSamples[key] = payload;
                 }
-                lastStart = ev.StartSample;
 
-                var payload = ev.Payload;
-                string key = DescribePayload(payload);
-                payloadCounts[key] = payloadCounts.TryGetValue(key, out int c) ? c + 1 : 1;
-                if (!payloadSamples.ContainsKey(key)) payloadSamples[key] = payload;
-            }
+                string measureKey = null, beatKey = null;
+                foreach (var kv in payloadCounts)
+                {
+                    if (measureKey == null || kv.Value < payloadCounts[measureKey]) measureKey = kv.Key;
+                    if (beatKey == null || kv.Value > payloadCounts[beatKey]) beatKey = kv.Key;
+                }
+                IPayload measurePayload = measureKey != null ? payloadSamples[measureKey] : null;
+                IPayload beatPayload = beatKey != null ? payloadSamples[beatKey] : null;
 
-            string measureKey = null, beatKey = null;
-            foreach (var kv in payloadCounts)
-            {
-                if (measureKey == null || kv.Value < payloadCounts[measureKey]) measureKey = kv.Key;
-                if (beatKey == null || kv.Value > payloadCounts[beatKey]) beatKey = kv.Key;
-            }
-            IPayload measurePayload = measureKey != null ? payloadSamples[measureKey] : null;
-            IPayload beatPayload = beatKey != null ? payloadSamples[beatKey] : null;
+                // 2. BMS 마디선/박자선 ➔ KoreographyEvent
+                var events = new Il2CppSystem.Collections.Generic.List<KoreographyEvent>();
+                int measureLines = 0;
+                int targetSampleRate = TimelineSampleRate(lane.gameController != null ? lane.gameController.playingKoreo : null, bmsChart);
+                foreach (var bar in bmsChart.BarLines)
+                {
+                    int samplePos = ResolveSamplePosition(bar.TimeSeconds, bar.SamplePosition, bmsChart.SampleRate, targetSampleRate);
+                    if (samplePos <= 0) continue; // 곡 시작 순간의 선은 이미 판정선 위라 보이지 않는다
 
-            // 2. BMS 마디선/박자선 ➔ KoreographyEvent
-            var events = new Il2CppSystem.Collections.Generic.List<KoreographyEvent>();
-            int measureLines = 0;
-            int targetSampleRate = TimelineSampleRate(lane.gameController != null ? lane.gameController.playingKoreo : null, bmsChart);
-            foreach (var bar in bmsChart.BarLines)
-            {
-                int samplePos = ResolveSamplePosition(bar.TimeSeconds, bar.SamplePosition, bmsChart.SampleRate, targetSampleRate);
-                if (samplePos <= 0) continue; // 곡 시작 순간의 선은 이미 판정선 위라 보이지 않는다
+                    var evt = new KoreographyEvent();
+                    evt.StartSample = samplePos;
+                    evt.EndSample = samplePos + span;
+                    var payload = bar.IsMeasureStart ? measurePayload : beatPayload;
+                    if (payload != null) evt.Payload = payload;
+                    events.Add(evt);
+                    if (bar.IsMeasureStart) measureLines++;
+                }
 
-                var evt = new KoreographyEvent();
-                evt.StartSample = samplePos;
-                evt.EndSample = samplePos + span;
-                var payload = bar.IsMeasureStart ? measurePayload : beatPayload;
-                if (payload != null) evt.Payload = payload;
-                events.Add(evt);
-                if (bar.IsMeasureStart) measureLines++;
-            }
+                var dist = new List<string>();
+                foreach (var kv in payloadCounts) dist.Add($"{kv.Key}={kv.Value}");
+                int avgInterval = originalCount > 1 ? (lastStart - firstStart) / (originalCount - 1) : 0;
 
-            var dist = new List<string>();
-            foreach (var kv in payloadCounts) dist.Add($"{kv.Key}={kv.Value}");
-            int avgInterval = originalCount > 1 ? (lastStart - firstStart) / (originalCount - 1) : 0;
-
-            _summaryBarLines = events.Count;
-            ModLog.Verbose($"[★ HWA BMS 라인바 주입 ★] ({source}) trackID='{trackID}' | 원본 {originalCount}개 ➔ BMS {events.Count}개 (마디선 {measureLines} / 박자선 {events.Count - measureLines})");
-            ModLog.Verbose($"  - 원본 페이로드 분포: [{string.Join(", ", dist)}] | 마디선←'{measureKey}' 박자선←'{beatKey}' | 이벤트 길이 {span}샘플 | 원본 평균 간격 {avgInterval}샘플");
-            return events;
+                _summaryBarLines = events.Count;
+                ModLog.Verbose($"[★ HWA BMS 라인바 주입 ★] ({source}) trackID='{trackID}' | 원본 {originalCount}개 ➔ BMS {events.Count}개 (마디선 {measureLines} / 박자선 {events.Count - measureLines})");
+                ModLog.Verbose($"  - 원본 페이로드 분포: [{string.Join(", ", dist)}] | 마디선←'{measureKey}' 박자선←'{beatKey}' | 이벤트 길이 {span}샘플 | 원본 평균 간격 {avgInterval}샘플");
+                return events;
             }
             catch (Exception ex)
             {

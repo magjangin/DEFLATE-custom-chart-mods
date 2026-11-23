@@ -58,15 +58,6 @@ namespace DEFLATE_custom_chart.Hooks
             }
         }
 
-        [HarmonyPatch(typeof(TrackAssetManager), nameof(TrackAssetManager.LoadVideoClip))]
-        public static class TrackAssetManager_LoadVideoClip_Patch
-        {
-            public static bool Prefix(ref string key)
-            {
-                return true;
-            }
-        }
-
         [HarmonyPatch(typeof(TrackAssetManager), nameof(TrackAssetManager.LoadVideoURL))]
         public static class TrackAssetManager_LoadVideoURL_Patch
         {
