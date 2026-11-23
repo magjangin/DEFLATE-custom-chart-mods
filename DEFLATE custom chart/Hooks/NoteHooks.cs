@@ -154,9 +154,11 @@ namespace DEFLATE_custom_chart.Hooks
 
                         _cachedFrame = frame;
                         _cachedSample = (float)gc.audioCom.timeSamples;
-                        _cachedSampleRate = gc.playingKoreo != null && gc.playingKoreo.SampleRate > 0
-                            ? gc.playingKoreo.SampleRate
-                            : 44100;
+                        // 게임 시계(timeSamples)는 재생 중인 클립 단위이므로 클립 주파수를 우선한다(48kHz 커스텀 음악에서 감쇠 시간 오차 방지).
+                        var playingClip = gc.audioCom.clip;
+                        _cachedSampleRate = playingClip != null && playingClip.frequency > 0
+                            ? playingClip.frequency
+                            : (gc.playingKoreo != null && gc.playingKoreo.SampleRate > 0 ? gc.playingKoreo.SampleRate : 44100);
                     }
 
                     float startSample = __instance.moveStartSample;
