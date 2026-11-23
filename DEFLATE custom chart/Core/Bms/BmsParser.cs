@@ -27,6 +27,20 @@ namespace DEFLATE_custom_chart.Core.Bms
             return true;
         }
 
+        // 지원하지 않는 BMS 기능을 만났는지 (파싱 끝에 경고 한 줄씩). 파서 인스턴스는 파일마다 새로 만든다.
+        private bool _sawStop;
+        private bool _sawLnChannel;
+
+        private static bool IsAllZerosOrEmpty(string line, int start)
+        {
+            for (int i = start; i < line.Length; i++)
+            {
+                char c = line[i];
+                if (c != '0' && !char.IsWhiteSpace(c)) return false;
+            }
+            return true;
+        }
+
         private static bool TryParse3Digits(string line, int startIndex, out int value)
         {
             value = 0;
@@ -102,6 +116,7 @@ namespace DEFLATE_custom_chart.Core.Bms
             int maxMeasure = 0;
 
             // 1차 스캔: 헤더 및 마디/채널 데이터 수집
+            var branches = new BranchState();
             using (var reader = new StringReader(bmsContent))
             {
                 string line;
@@ -110,8 +125,25 @@ namespace DEFLATE_custom_chart.Core.Bms
                     line = line.Trim();
                     if (string.IsNullOrEmpty(line) || line[0] != '#') continue;
 
+                    // #RANDOM/#IF 분기: 예전에는 모든 분기의 노트를 한꺼번에 읽어 노트가 겹쳐 나왔다. 1번 분기로 고정한다.
+                    if (branches.TryHandleControlLine(line)) continue;
+                    if (!branches.IsActive) continue;
+
                     ParseLine(line, chart, rawChannelData, measureLengths, noteWidth, ref maxMeasure);
                 }
+            }
+
+            if (branches.SawRandom)
+            {
+                chart.Warnings.Add("#RANDOM 분기가 있어 1번 분기(#IF 1)만 읽었습니다 (무작위 선택은 지원하지 않음)");
+            }
+            if (_sawStop)
+            {
+                chart.Warnings.Add("STOP(#STOPxx / 09 채널)은 지원하지 않습니다. STOP 이후 노트가 그 길이만큼 일찍 나옵니다");
+            }
+            if (_sawLnChannel)
+            {
+                chart.Warnings.Add("LN 채널(5x/6x, #LNTYPE)은 지원하지 않아 무시했습니다. 홀드는 키음 이름(홀드 시작/홀드 끝) 또는 #LNOBJ로 지정하세요");
             }
 
             // 마디별 시작 틱 위치 계산 (마디 배율 #XXX02 적용)
@@ -172,6 +204,14 @@ namespace DEFLATE_custom_chart.Core.Bms
                     {
                         measureLengths[measure] = lenMult;
                     }
+                }
+                else if (channel == "09")
+                {
+                    if (!IsAllZerosOrEmpty(line, 7)) _sawStop = true;
+                }
+                else if ((channel[0] == '5' || channel[0] == '6') && !IsAllZerosOrEmpty(line, 7))
+                {
+                    _sawLnChannel = true;
                 }
                 else if (channel == "03" || channel == "08" || BmsLaneMapper.IsNoteChannel(channel))
                 {
@@ -235,6 +275,10 @@ namespace DEFLATE_custom_chart.Core.Bms
             else if (line.StartsWith("#LNOBJ", StringComparison.OrdinalIgnoreCase))
             {
                 chart.Header.LnObj = ExtractHeaderValue(line, "#LNOBJ").Trim().ToUpperInvariant();
+            }
+            else if (line.StartsWith("#STOP", StringComparison.OrdinalIgnoreCase))
+            {
+                _sawStop = true;
             }
             else if (line.StartsWith("#WAV", StringComparison.OrdinalIgnoreCase) && line.Length >= (4 + noteWidth))
             {
@@ -704,6 +748,99 @@ namespace DEFLATE_custom_chart.Core.Bms
                 note.LongNoteEndTick = 0;
                 note.LongNoteEndTimeSeconds = 0;
                 note.LongNoteEndSamplePosition = 0;
+            }
+        }
+
+        /// <summary>
+        /// #RANDOM / #SETRANDOM / #IF / #ELSEIF / #ELSE / #ENDIF 처리. 무작위 값은 항상 1로 보고(#SETRANDOM이면 그 값),
+        /// 조건이 맞는 분기의 줄만 남깁니다. 중첩 분기도 부모 분기가 활성일 때만 활성입니다.
+        /// </summary>
+        internal sealed class BranchState
+        {
+            private sealed class Frame
+            {
+                public bool ParentActive;
+                public bool Active;
+                public bool Taken;
+            }
+
+            private readonly Stack<Frame> _frames = new Stack<Frame>();
+            private readonly Stack<int> _randomValues = new Stack<int>();
+
+            public bool SawRandom { get; private set; }
+
+            public bool IsActive => _frames.Count == 0 || _frames.Peek().Active;
+
+            private int CurrentRandom => _randomValues.Count > 0 ? _randomValues.Peek() : 1;
+
+            public bool TryHandleControlLine(string line)
+            {
+                // 채널 줄(#00111:...)과 대부분의 헤더는 첫 글자로 바로 거른다(줄마다 문자열 할당 방지).
+                if (line.Length < 3) return false;
+                char c = char.ToUpperInvariant(line[1]);
+                if (c != 'R' && c != 'S' && c != 'I' && c != 'E') return false;
+
+                string keyword = ReadKeyword(line, out string arg);
+                switch (keyword)
+                {
+                    case "#RANDOM":
+                    case "#SETRANDOM":
+                        if (IsActive)
+                        {
+                            int value = 1;
+                            if (keyword == "#SETRANDOM" && int.TryParse(arg, NumberStyles.Integer, CultureInfo.InvariantCulture, out int fixedValue)) value = fixedValue;
+                            if (keyword == "#RANDOM") SawRandom = true;
+                            _randomValues.Push(value);
+                        }
+                        return true;
+                    case "#ENDRANDOM":
+                        if (IsActive && _randomValues.Count > 0) _randomValues.Pop();
+                        return true;
+                    case "#IF":
+                    {
+                        bool parentActive = IsActive;
+                        bool match = parentActive && ParseIntOr(arg, int.MinValue) == CurrentRandom;
+                        _frames.Push(new Frame { ParentActive = parentActive, Active = match, Taken = match });
+                        return true;
+                    }
+                    case "#ELSEIF":
+                    {
+                        if (_frames.Count == 0) return true;
+                        var frame = _frames.Peek();
+                        bool match = frame.ParentActive && !frame.Taken && ParseIntOr(arg, int.MinValue) == CurrentRandom;
+                        frame.Active = match;
+                        frame.Taken |= match;
+                        return true;
+                    }
+                    case "#ELSE":
+                    {
+                        if (_frames.Count == 0) return true;
+                        var frame = _frames.Peek();
+                        frame.Active = frame.ParentActive && !frame.Taken;
+                        frame.Taken = true;
+                        return true;
+                    }
+                    case "#ENDIF":
+                    case "#END":
+                        if (_frames.Count > 0) _frames.Pop();
+                        return true;
+                    default:
+                        return false;
+                }
+            }
+
+            private static int ParseIntOr(string text, int fallback)
+            {
+                return int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out int v) ? v : fallback;
+            }
+
+            /// <summary>줄의 첫 단어(대문자)와 나머지를 돌려줍니다. 채널 줄(#00111:...)은 콜론 앞까지가 단어라 제어문과 겹치지 않습니다.</summary>
+            private static string ReadKeyword(string line, out string arg)
+            {
+                int end = 0;
+                while (end < line.Length && !char.IsWhiteSpace(line[end])) end++;
+                arg = end < line.Length ? line.Substring(end).Trim() : string.Empty;
+                return line.Substring(0, end).ToUpperInvariant();
             }
         }
 

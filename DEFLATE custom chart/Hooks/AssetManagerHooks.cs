@@ -335,8 +335,7 @@ namespace DEFLATE_custom_chart.Hooks
 
                     foreach (var trackBlock in __instance.tracks)
                     {
-                        if (trackBlock == null || trackBlock.gameObject == null) continue;
-                        if (!trackBlock.gameObject.name.Contains("_Custom_")) continue;
+                        if (!SongInjectorHooks.IsCustomBlock(trackBlock)) continue;
 
                         string uniqueId = Il2CppReflectionHelper.GetValueResilient(trackBlock, () => trackBlock.uniqueID, "uniqueID", MemberFallbacks.TrackBlock.UniqueId, string.Empty);
                         var entry = CustomSongLibrary.FindByTrackID(uniqueId);

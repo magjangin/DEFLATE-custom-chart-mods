@@ -19,7 +19,8 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(HUDControl), nameof(HUDControl.RefreshSongMetaUI))]
         public static class HUDControl_RefreshSongMetaUI_Patch
         {
-            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(HUDControl), nameof(HUDControl.RefreshSongMetaUI));
+            // 로그 전용 훅: 로그 레벨이 모자라면 패치하지 않는다(호출마다 IL2CPP 문자열 두 개를 읽던 비용 제거).
+            public static bool Prepare() => ModLog.Prepare(ModLog.Detail) && Il2CppReflectionHelper.HasPatchTarget(typeof(HUDControl), nameof(HUDControl.RefreshSongMetaUI));
 
             private static string _lastCoverName;
             private static string _lastTitle;

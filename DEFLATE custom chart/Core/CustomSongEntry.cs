@@ -79,6 +79,19 @@ namespace DEFLATE_custom_chart.Core
             FolderName = GetDirectoryName(folderPath);
         }
 
+        private static readonly string[] CoverKeywords = { "cover", "jacket", "thumbnail", "thumb", "커버", "자켓" };
+
+        /// <summary>커버 후보 순위: 이름에 커버 키워드가 있는 PNG/JPG = 2, 그 외 PNG = 1, 그 외(JPG) = 0(후보 아님).</summary>
+        private static int CoverRank(string path)
+        {
+            string name = Path.GetFileNameWithoutExtension(path);
+            foreach (var kw in CoverKeywords)
+            {
+                if (name.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0) return 2;
+            }
+            return string.Equals(Path.GetExtension(path), ".png", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        }
+
         private static bool HasBgmKeyword(string fileNameWithoutExt)
         {
             if (string.IsNullOrEmpty(fileNameWithoutExt)) return false;
@@ -129,6 +142,7 @@ namespace DEFLATE_custom_chart.Core
 
             // BGM 음원 파일 선별 (.ogg 최우선 채택 ➔ music/bgm 키워드 ➔ 최대 용량 오디오 순)
             // (.flac은 UnityWebRequestMultimedia가 읽지 못하므로 후보에서 제외)
+            int coverRank = 0;
             string bestBgm = null;
             bool bestIsOgg = false, bestHasKeyword = false;
             long bestSize = -1;
@@ -175,9 +189,16 @@ namespace DEFLATE_custom_chart.Core
                     BgaFilePath = f;
                     BgaFileUrl = BuildFileUri(f);
                 }
-                else if (CoverFilePath == null && string.Equals(ext, ".png", StringComparison.OrdinalIgnoreCase))
+                else if (string.Equals(ext, ".png", StringComparison.OrdinalIgnoreCase) || string.Equals(ext, ".jpg", StringComparison.OrdinalIgnoreCase) || string.Equals(ext, ".jpeg", StringComparison.OrdinalIgnoreCase))
                 {
-                    CoverFilePath = f;
+                    // 커버 이름(cover/jacket/thumbnail/thumb)이 붙은 이미지를 먼저 쓰고, 없으면 처음 나온 PNG를 쓴다.
+                    // (예전에는 정렬상 첫 PNG만 잡아, BMS 배경 이미지 등이 커버로 뽑힐 수 있었음)
+                    int rank = CoverRank(f);
+                    if (rank > 0 && (CoverFilePath == null || rank > coverRank))
+                    {
+                        CoverFilePath = f;
+                        coverRank = rank;
+                    }
                 }
                 else if (string.Equals(ext, ".txt", StringComparison.OrdinalIgnoreCase) &&
                     (InfoFilePath == null || string.Equals(Path.GetFileName(f), "info.txt", StringComparison.OrdinalIgnoreCase)))
@@ -197,6 +218,9 @@ namespace DEFLATE_custom_chart.Core
             BgmFilePath = bestBgm;
         }
 
+        /// <summary>info.txt에 아티스트가 있었는지. 없으면 BMS #ARTIST로 채운다(<see cref="ParseBmsChart"/>).</summary>
+        private bool _artistFromInfo;
+
         /// <summary>
         /// info.txt를 파싱합니다. 제목/앨범이 비어 있으면 폴더 이름 규칙으로 채웁니다.
         /// (제목 = 곡 폴더 이름, 앨범 = 상위 앨범 폴더 이름)
@@ -204,6 +228,7 @@ namespace DEFLATE_custom_chart.Core
         public void ParseInfoTxt()
         {
             Meta = new HwaAssetManager.HwaMetaInfo();
+            _artistFromInfo = false;
 
             bool titleFromFile = false;
             bool albumFromFile = false;
@@ -230,7 +255,7 @@ namespace DEFLATE_custom_chart.Core
 
                         if (key.Contains("제목") || key.Contains("title")) { Meta.Title = val; titleFromFile = true; }
                         else if (isBgaKey) Meta.BgaAuthor = val;
-                        else if (key.Contains("아티스트") || key.Contains("artist")) Meta.Artist = val;
+                        else if (key.Contains("아티스트") || key.Contains("artist")) { Meta.Artist = val; _artistFromInfo = true; }
                         else if (key.Contains("앨범") || key.Contains("album")) { Meta.Album = val; albumFromFile = true; }
                         else if (key.Contains("매퍼") || key.Contains("mapper") || key.Contains("제작자") || key.Contains("maker") || key.Contains("charter")) Meta.ChartAuthor = val;
                         else if (key.Equals("easy", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int ez)) Meta.EasyLevel = ez;
@@ -264,6 +289,11 @@ namespace DEFLATE_custom_chart.Core
                 MelonLogger.Msg($"  - [BMS 파싱] '{Meta.Title}' ➔ '{Chart.Header.Title}' | BPM {Chart.Header.InitialBpm} | 노트 {Chart.Notes.Count}개 ({Chart.DescribeLaneDistribution()})"
                     + (Chart.KeysoundLaneMismatchCount > 0 ? $" | 킥·스네어 키음 이름과 열이 다른 노트 {Chart.KeysoundLaneMismatchCount}개(열 기준 배치)" : ""));
                 ModLog.Verbose($"    홀드 매칭: {Chart.HoldPairedCount}개 성사 | 짝 없는 시작 {Chart.HoldOrphanHeadCount}개(단타 강등) | 짝 없는 끝 {Chart.HoldOrphanTailCount}개(제거)");
+                if (!_artistFromInfo && !string.IsNullOrWhiteSpace(Chart.Header.Artist))
+                {
+                    // info.txt에 아티스트가 없으면 기본값("화영왕") 대신 BMS #ARTIST를 쓴다.
+                    Meta.Artist = Chart.Header.Artist.Trim();
+                }
                 foreach (var warning in Chart.Warnings)
                 {
                     MelonLogger.Warning($"    [BMS 경고] '{FolderName}' {warning}");
@@ -287,7 +317,8 @@ namespace DEFLATE_custom_chart.Core
             try
             {
                 byte[] fileData = File.ReadAllBytes(CoverFilePath);
-                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, true);
+                // UI 전용 스프라이트라 밉맵이 필요 없다(밉맵을 만들면 메모리 +33%, 디코딩 시간도 늘어남).
+                var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false);
                 if (ImageConversion.LoadImage(tex, fileData))
                 {
                     tex.filterMode = FilterMode.Bilinear;

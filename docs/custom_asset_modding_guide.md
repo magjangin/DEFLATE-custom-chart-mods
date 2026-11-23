@@ -53,7 +53,7 @@ DEFLATE/
 
 **곡 폴더 안의 파일 고르기 (`CustomSongEntry.ScanFiles`)**
 - BGM: `.ogg` › 이름에 `music`/`bgm`/`song`/`track`/`audio`가 들어간 파일 › 용량이 큰 파일 순 (지원 확장자 `.ogg`/`.wav`/`.mp3`)
-- BGA: 처음 나오는 `.mp4` / 커버: 처음 나오는 `.png` / 차트: 처음 나오는 `.bms`·`.bme`·`.bml`
+- BGA: 처음 나오는 `.mp4` / 커버: 이름에 `cover`·`jacket`·`thumbnail`·`thumb`·`커버`·`자켓`이 들어간 `.png`/`.jpg`가 우선, 없으면 처음 나오는 `.png` / 차트: 처음 나오는 `.bms`·`.bme`·`.bml`
 - 메타데이터: `info.txt` 우선, 없으면 처음 나오는 `.txt`
 
 ### 🖼️ PNG Cover Sprite Caching & Filtering

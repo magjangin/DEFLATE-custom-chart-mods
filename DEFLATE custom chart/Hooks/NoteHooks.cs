@@ -87,8 +87,9 @@ namespace DEFLATE_custom_chart.Hooks
                     var cfg = ModConfig.Instance;
                     if (!cfg.NoteSpeedChaos || __instance == null) return;
 
-                    float minSpeed = Mathf.Max(0.1f, cfg.NoteSpeedChaosMin);
-                    float maxSpeed = Mathf.Max(minSpeed, cfg.NoteSpeedChaosMax);
+                    // Unity Mathf는 Il2CppInterop에서 IL2CPP 호출이므로 관리 코드 Math를 쓴다(노트마다 불리는 경로).
+                    float minSpeed = Math.Max(0.1f, cfg.NoteSpeedChaosMin);
+                    float maxSpeed = Math.Max(minSpeed, cfg.NoteSpeedChaosMax);
 
                     int seed = cfg.NoteSpeedChaosPerLane
                         ? ((int)__instance.noteType + 100)
@@ -130,6 +131,9 @@ namespace DEFLATE_custom_chart.Hooks
             private static int _consecutiveFailures;
             private static bool _tripped;
 
+            // 매 프레임 × 노트마다 불리는 핫패스: Unity Mathf(IL2CPP 호출) 대신 관리 코드로 계산한다.
+            private static float Clamp01(float v) => v < 0f ? 0f : (v > 1f ? 1f : v);
+
             public static void ResetFrameCache()
             {
                 _cachedFrame = -1;
@@ -168,7 +172,7 @@ namespace DEFLATE_custom_chart.Hooks
                     if (totalSample <= 0f) return;
 
                     float currentSample = _cachedSample;
-                    float progress = Mathf.Clamp01((currentSample - startSample) / totalSample);
+                    float progress = Clamp01((currentSample - startSample) / totalSample);
 
                     float dampingFactor = 1.0f;
                     if (cfg.NoteSwayDamping)
@@ -179,12 +183,12 @@ namespace DEFLATE_custom_chart.Hooks
                             float timeRemaining = (endSample - currentSample) / (float)_cachedSampleRate;
                             if (timeRemaining >= 0f && timeRemaining <= dampingTime)
                             {
-                                dampingFactor = Mathf.Clamp01(timeRemaining / dampingTime);
+                                dampingFactor = Clamp01(timeRemaining / dampingTime);
                             }
                         }
                     }
 
-                    float swayOffset = Mathf.Sin(progress * cfg.NoteSwayAngularFreq)
+                    float swayOffset = MathF.Sin(progress * cfg.NoteSwayAngularFreq)
                         * cfg.NoteSwayAmplitude
                         * dampingFactor;
 

@@ -72,6 +72,7 @@ namespace DEFLATE_custom_chart.Hooks
             _summaryTimelineRate = 0;
             _summaryLogged = false;
             _clipMissingWarned = false;
+            _rateMismatchWarned = false; // 곡마다 다시 알린다(예전에는 실행당 1회라 두 번째 곡부터 안내가 빠졌음)
         }
 
         private static void LogPlaySummaryOnce(RhythmGameController instance)
