@@ -2,6 +2,28 @@
 
 버전 기준은 `DEFLATE custom chart/Core/DeflateMod.cs`의 `DeflateMod.Version`입니다. 릴리즈는 `tools/release.ps1`이 이 값과 이 파일 최상단 `## [버전]`, `Properties/AssemblyInfo.cs`가 같은지 확인한 뒤 만듭니다.
 
+## [1.1.1] - 2026-11-23
+
+기준 게임 빌드는 1.1.0과 같습니다: DEFLATE **1.2** (Steam Build `26402105`), MelonLoader **0.7.3**.
+
+### 수정
+- BMS `#RANDOM`/`#IF` 분기가 있으면 모든 분기의 노트를 한꺼번에 읽어 노트가 겹쳐 나오던 문제: 1번 분기(`#IF 1`, `#SETRANDOM`이면 그 값)만 읽고 경고를 남깁니다
+- 커버로 정렬상 첫 PNG가 잡혀 BMS 배경 이미지 등이 자켓으로 뜨던 문제: 이름에 `cover`/`jacket`/`thumbnail`/`thumb`가 들어간 PNG·JPG를 먼저 고릅니다
+- 48 kHz 음악 안내(`[BMS 타이밍]`)가 실행당 한 번만 나와 두 번째 곡부터 빠지던 문제
+
+### 개선
+- STOP(`#STOPxx`/09 채널)과 LN 채널(5x/6x)을 만나면 조용히 무시하지 않고 경고를 남깁니다(지원하지 않는 기능)
+- info.txt에 아티스트가 없으면 기본값 대신 BMS `#ARTIST`를 씁니다
+- 옛 버전이 만든 `config.txt`에 없는 설정 키(`LogLevel`, `SmokeTest` 등)를 기본값으로 파일 끝에 덧붙입니다(기존 값·주석은 그대로). `config.txt`는 임시 파일에 쓴 뒤 바꿔 넣어 반쯤 쓴 파일이 남지 않습니다
+
+### 성능
+- `NoteSway`/`NoteSpeedChaos`의 노트마다 불리는 경로에서 Unity `Mathf`(IL2CPP 호출) 대신 관리 코드 `MathF`/`Math`를 씁니다
+- 인게임 HUD 로그 훅(`HUDControl.RefreshSongMetaUI`)을 `LogLevel=0`에서는 아예 걸지 않습니다
+- 커버 텍스처를 밉맵 없이 만들어 메모리·디코딩 시간을 줄였습니다
+
+### 확인 상태
+- 클라우드 환경에 게임 DLL이 없어 **빌드·실기 확인 전**입니다. 게임 PC에서 `dotnet build -c Release`(경고 0) 후 스모크 테스트(`SmokeTest=1`)로 확인하세요.
+
 ## [1.1.0] - 2026-11-23
 
 첫 공개 릴리즈입니다. 기준 게임 빌드: DEFLATE **1.2** (Steam Build `26402105`), Unity `2022.3.62f2`, MelonLoader **0.7.3**.

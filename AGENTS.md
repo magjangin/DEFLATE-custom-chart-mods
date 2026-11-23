@@ -7,6 +7,7 @@
 > **게임플레이 실기 검증 완료:** ① 무인 스모크 테스트(`SmokeTest=1`, §3-⑥) `PASS` — BMS 노트 1104개/9레인·라인바 296개 주입, 커스텀 BGM 재생, BGA URL 일치. ② 사용자 수동 플레이(로딩 씬 경유) 로그에서 곡 목록 주입 → 로딩 UI 메타데이터 → 인게임 노트/라인바/BGM/BGA 주입 확인.
 > **2026-11-20 추가 수정·검증:** 노트 이중 생성(하이햇+킥·스네어 양쪽 복제, 열도 어긋남) 및 48000Hz 음악 타이밍 드리프트 수정 → 스모크 `PASS`, 게임 `AllNoteCount` 552 = BMS 552, 화면에서 노트가 BMS 열대로 한 번씩만 표시됨을 캡처로 확인.
 > **v1.1.0 (2026-11-23, 첫 릴리즈):** 인코딩 자동 판별·Steam 업데이트 대기 경고·릴리즈 스크립트. §7·§8 참고.
+> **v1.1.1 (2026-11-23, 2차 감사):** 클라우드에서 수정해 **빌드·실기 확인 전**. 게임 PC에서 빌드(경고 0)와 스모크 테스트를 먼저 돌릴 것. §10 참고.
 > **2026-11-23 전수 감사/리팩토링:** §9 참고. 컴파일 경고 0 · 오류 0, `[SafePatcher] 성공 45 / 건너뜀 8(로그 레벨 LogLevel=1 기준) / 실패 0`, 스모크 테스트 `PASS`(BMS 552/552, 라인바 296, 커스텀 BGM·BGA, 컨텍스트 인게임).
 > 미확인: 결과 화면, 롱노트(테스트 차트에 홀드 0개), 드롭 레인(테스트 차트 14번 채널 0개), 킥/스네어 키음 노트(테스트 차트에 없음).
 
@@ -240,6 +241,7 @@
 | 이전 | 노트 이중 생성·타이밍·로그 정리 | BMS 노트 1개=게임 레인 1개(채널=열, 키음=하이햇/킥·스네어, 킥·스네어 실측 열 배치), 노트 샘플 위치를 커스텀 음악 주파수 기준으로 계산(48kHz 드리프트 수정)+`[BMS 타이밍]` 안내, 숙주 `SourceClip` 원복, `LogLevel`(0/1/2)과 로그 전용 훅 Prepare 생략, 곡당 한 줄 `[커스텀 차트]` 요약, `ChartDiagnostics`(레인 배치·원곡 동시 출현), 스모크 테스트에 중복·누락 검사 |
 | `b1483d1` | 전수 감사·정리 | §9 참조: 무동작 `LoadVideoClip` 훅·미사용 코드(`CustomAlbumWrapper` 등) 삭제, 활성 곡 판정 중복 통합, 죽은 디버그 분기 제거, NoteSway 감쇠를 클립 주파수 기준으로 통일, 스모크 PASS |
 | v1.1.0 | 첫 릴리즈·인코딩·업데이트 감지 | `TextDecoder`(Shift-JIS/CP949 BMS·info.txt·config.txt), `GameCompat` Steam 업데이트 대기 경고(`TargetBuildID`/`StateFlags`)·자동 업데이트 안내(LogLevel 1), 지문 기록을 설정 로드 뒤로 이동, 버전 단일 출처 `DeflateMod.Version`, `CHANGELOG.md`, `tools/release.ps1` |
+| v1.1.1 | 2차 감사(미빌드) | BMS `#RANDOM`/`#IF` 1번 분기 고정·STOP/LN 채널 경고, 커버 이름 우선 선택·밉맵 제거, BMS `#ARTIST` 폴백, config.txt 빠진 키 덧붙이기·원자적 저장, NoteSway/Chaos `Mathf`→`MathF`, HUD 로그 훅 LogLevel 게이트. §10 참고 |
 
 ---
 
@@ -307,3 +309,28 @@ Start-Process "steam://rungameid/3921360"
 - ~~`BmsParser.ParseFile`의 UTF-8 고정 읽기~~ → v1.1.0에서 `Core/TextDecoder.cs`(BOM → 엄격 UTF-8 → BMS는 Shift-JIS/CP949/GB18030, info.txt·config.txt는 CP949/Shift-JIS/GB18030 → Latin-1)로 해결. Shift-JIS BMS 실곡으로는 아직 실기 확인 안 함(`LogLevel=1`이면 `[BMS 파싱] … 인코딩:` 줄이 남음).
 - `CustomSongEntry.LoadBgmCoroutine`은 `streamAudio=true` 클립을 만든 뒤 요청을 즉시 `Dispose`합니다. 현재 실기(스모크 PASS)에서는 재생되지만, 긴 곡 끝까지 재생되는지는 이 문서 시점에 장시간 검증하지 않았습니다.
 - 결과 화면·롱노트·드롭 레인·킥/스네어 키음 노트는 여전히 실기 미확인(테스트 차트에 없음).
+
+---
+
+## 10. 2차 감사 기록 (2026-11-23, v1.1.1)
+
+범위: `Core/`·`Hooks/` 전 파일. **클라우드 세션이라 게임 interop DLL이 없어 빌드·실기 확인을 하지 못했습니다.** 컴파일 위험이 낮은 변경만 넣었고, 게임 PC에서 `dotnet build -c Release`(경고 0) → 스모크 테스트(`SmokeTest=1`) → 이 절의 "미확인"을 지울 것.
+
+**적용한 변경**
+- `BmsParser`: `#RANDOM`/`#SETRANDOM`/`#IF`/`#ELSEIF`/`#ELSE`/`#ENDIF`(`BranchState`) — 무작위 값 1 고정(`#SETRANDOM`은 그 값). 예전에는 모든 분기 노트를 읽어 노트가 겹쳤다. STOP(`#STOPxx`/09)·LN 채널(5x/6x)은 미지원이라 `[BMS 경고]`만 남긴다(값을 무시한다는 사실을 알리는 것이 목적).
+- `CustomSongEntry`: 커버는 이름에 `cover/jacket/thumbnail/thumb/커버/자켓`이 있는 PNG·JPG 우선, 없으면 첫 PNG. 커버 텍스처 밉맵 끔. info.txt에 아티스트가 없으면 BMS `#ARTIST`.
+- `ModConfig`: 옛 config.txt에 빠진 키를 끝에 덧붙임(`AppendMissingKeys`, 키 목록 `KnownKeys` — 새 설정을 추가하면 여기에도 추가). `Save`는 `.tmp` → `File.Move` 교체.
+- 핫패스: `NoteSway`/`NoteSpeedChaos`에서 Unity `Mathf.*`(Il2CppInterop에서는 IL2CPP 호출) → `MathF`/`Math`/자체 `Clamp01`. `HUDControl.RefreshSongMetaUI` 로그 훅은 `LogLevel ≥ 1`일 때만 패치.
+- `[BMS 타이밍]` 샘플레이트 불일치 경고를 곡마다 리셋, 사본 판정 문자열 `"_Custom_"` 중복을 `SongInjectorHooks.IsCustomBlock`으로 통일.
+
+**발견했지만 바꾸지 않은 것 (실기 확인이 먼저)**
+- `DiffCtrl.UpdateStarDisplay` Postfix가 호출마다 `GenerateStarImages`(별 이미지 재생성)를 부른다. 원본이 매 프레임 부르는지, 원본도 별을 다시 만드는지 모르므로 캐싱하면 원본 별이 덮어쓸 수 있다. `LogLevel=2`로 호출 빈도를 먼저 잴 것.
+- `CustomSongLibrary.SetActive`는 ID로 못 찾으면 **제목**으로도 찾는다. 원곡과 제목이 같은 커스텀 곡이 있으면 원곡에 커스텀 에셋이 붙을 수 있다. 제목 폴백을 끄면 ID가 어긋난 경로에서 커스텀 곡 인식이 끊길 수 있어 보류.
+- `VideoPlayer.Play/Prepare` 전역 Prefix(`EnforceCustomBgaUrl`)는 커스텀 곡이 활성이면 **모든** VideoPlayer URL을 커스텀 BGA로 바꾼다. 배경 영상이 따로 있는 UI가 생기면 범위를 좁혀야 한다.
+- 커버 PNG는 곡 목록 주입 때 곡마다 메인 스레드에서 동기 디코딩한다(곡 수 × 수십 ms). 곡이 많으면 첫 곡 목록 진입이 멈칫할 수 있다 → 지연 로드(커서가 온 곡만) 또는 작업 스레드 디코딩이 다음 과제.
+- 난이도 3개(Easy/Normal/Hard)가 같은 BMS를 쓰고 별 표기만 다르다. 난이도별 BMS는 미구현.
+- BMS가 없는 커스텀 곡은 hihat_3에 테스트 롱노트 10개를 넣는다(개발용 동작이 그대로 남아 있음).
+- `BlockSave=1`은 키 설정·볼륨 저장까지 막는다(1.1.0부터 알려진 한계). 커스텀 곡일 때만 막도록 바꾸는 것은 동작 변경이라 사용자 결정 필요.
+
+**미확인**: 위 "적용한 변경" 전부(빌드 포함). 특히 `#RANDOM`이 있는 실곡 BMS, JPG 커버, config.txt 키 덧붙이기.
+

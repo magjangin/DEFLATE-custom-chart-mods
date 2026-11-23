@@ -80,7 +80,8 @@ namespace DEFLATE_custom_chart.Core
 
                 if (File.Exists(ConfigFilePath))
                 {
-                    LoadFromTxt();
+                    var seenKeys = LoadFromTxt();
+                    AppendMissingKeys(seenKeys);
                     MelonLogger.Msg($"[ModConfig] config.txt 설정 파일 로드 완료 (AutoPlay={Instance.AutoPlay}, NoteSway={Instance.NoteSway}, BlockSave={Instance.BlockSave}, LogLevel={Instance.LogLevel}{(Instance.SmokeTest ? ", SmokeTest=ON" : "")})");
                     return;
                 }
@@ -108,8 +109,69 @@ namespace DEFLATE_custom_chart.Core
             "false", "폴스", "거짓", "끄기", "꺼짐", "비활성화", "off", "0", "disable", "disabled", "n", "no"
         };
 
-        private static void LoadFromTxt()
+        /// <summary>config.txt에 쓰는 키 전체(새 버전에서 키가 늘면 여기에도 추가). AutoMode는 AutoPlay의 옛 이름이다.</summary>
+        private static readonly string[] KnownKeys =
         {
+            "AutoPlay", "BlockSave", "NoteSway", "NoteSwayAmplitude", "NoteSwaySpeed", "NoteSwayDamping", "NoteSwayDampingTime",
+            "NoteSpeedChaos", "NoteSpeedChaosMin", "NoteSpeedChaosMax", "NoteSpeedChaosPerLane", "SmokeTest", "LogLevel",
+        };
+
+        /// <summary>
+        /// 옛 버전이 만든 config.txt에는 새로 생긴 키(LogLevel, SmokeTest 등)가 없어 사용자가 존재를 모른다.
+        /// 사용자 주석·값은 그대로 두고, 빠진 키만 현재 값(=기본값)으로 파일 끝에 덧붙인다.
+        /// </summary>
+        private static void AppendMissingKeys(HashSet<string> seenKeys)
+        {
+            try
+            {
+                if (seenKeys.Contains("AutoMode")) seenKeys.Add("AutoPlay");
+                var missing = new List<string>();
+                foreach (var key in KnownKeys)
+                {
+                    if (!seenKeys.Contains(key)) missing.Add(key);
+                }
+                if (missing.Count == 0) return;
+
+                var lines = new List<string> { "", $"# Added by v{DeflateMod.Version} (missing keys, default values)" };
+                foreach (var key in missing)
+                {
+                    lines.Add($"{key}={FormatValue(key)}");
+                }
+                // 원본이 CP949일 수 있으므로 덧붙이는 줄은 ASCII만 쓴다(인코딩이 섞여도 깨지지 않게).
+                File.AppendAllLines(ConfigFilePath, lines);
+                MelonLogger.Msg($"[ModConfig] config.txt에 없던 설정 {missing.Count}개를 기본값으로 추가했습니다: {string.Join(", ", missing)}");
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Warning($"[ModConfig] 빠진 설정 키 추가 실패(무시하고 계속): {ex.Message}");
+            }
+        }
+
+        private static string FormatValue(string key)
+        {
+            var c = Instance;
+            switch (key)
+            {
+                case "AutoPlay": return c.AutoPlay ? "1" : "0";
+                case "BlockSave": return c.BlockSave ? "1" : "0";
+                case "NoteSway": return c.NoteSway ? "1" : "0";
+                case "NoteSwayAmplitude": return c.NoteSwayAmplitude.ToString(CultureInfo.InvariantCulture);
+                case "NoteSwaySpeed": return c.NoteSwaySpeed.ToString(CultureInfo.InvariantCulture);
+                case "NoteSwayDamping": return c.NoteSwayDamping ? "1" : "0";
+                case "NoteSwayDampingTime": return c.NoteSwayDampingTime.ToString(CultureInfo.InvariantCulture);
+                case "NoteSpeedChaos": return c.NoteSpeedChaos ? "1" : "0";
+                case "NoteSpeedChaosMin": return c.NoteSpeedChaosMin.ToString(CultureInfo.InvariantCulture);
+                case "NoteSpeedChaosMax": return c.NoteSpeedChaosMax.ToString(CultureInfo.InvariantCulture);
+                case "NoteSpeedChaosPerLane": return c.NoteSpeedChaosPerLane ? "1" : "0";
+                case "SmokeTest": return c.SmokeTest ? "1" : "0";
+                case "LogLevel": return c.LogLevel.ToString(CultureInfo.InvariantCulture);
+                default: return string.Empty;
+            }
+        }
+
+        private static HashSet<string> LoadFromTxt()
+        {
+            var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var config = new ModConfig();
             string[] lines = TextDecoder.ReadAllLines(ConfigFilePath, TextDecoder.Preference.Korean);
             foreach (var line in lines)
@@ -120,6 +182,7 @@ namespace DEFLATE_custom_chart.Core
                 string[] parts = trimmed.Split(KeyValueSeparators, 2);
                 string key = parts[0].Trim();
                 string val = parts[1].Trim();
+                seenKeys.Add(key);
 
                 if (key.Equals("AutoPlay", StringComparison.OrdinalIgnoreCase) || key.Equals("AutoMode", StringComparison.OrdinalIgnoreCase))
                 {
@@ -177,6 +240,7 @@ namespace DEFLATE_custom_chart.Core
 
             config.UpdateDerivedValues();
             Instance = config;
+            return seenKeys;
         }
 
         private static bool TryParseFloat(string val, out float result)
@@ -255,7 +319,10 @@ namespace DEFLATE_custom_chart.Core
                     "# 로그 상세도: 0 = 요약(기본, 곡당 한 줄), 1 = 상세(레인별 주입·에셋 교체), 2 = 디버그(커서 이동·진행률 등 전부)",
                     $"LogLevel={Instance.LogLevel}"
                 };
-                File.WriteAllLines(ConfigFilePath, lines);
+                // 쓰다가 게임이 꺼져도 반쯤 쓴 config.txt가 남지 않게 임시 파일에 다 쓴 뒤 바꿔 넣는다.
+                string tmp = ConfigFilePath + ".tmp";
+                File.WriteAllLines(tmp, lines);
+                File.Move(tmp, ConfigFilePath, true);
             }
             catch (Exception ex)
             {
