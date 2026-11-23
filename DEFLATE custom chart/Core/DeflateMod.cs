@@ -16,7 +16,7 @@ namespace DEFLATE_custom_chart.Core
         /// 모드 버전의 단일 출처. MelonInfo·시작 배너가 이 값을 쓰고, 릴리즈 스크립트(tools/release.ps1)가
         /// 이 값과 CHANGELOG.md 최상단 버전·AssemblyInfo 버전이 일치하는지 확인합니다.
         /// </summary>
-        public const string Version = "1.1.3";
+        public const string Version = "1.1.4";
 
         public override void OnInitializeMelon()
         {

@@ -208,6 +208,7 @@ namespace DEFLATE_custom_chart.Hooks
             public static void Prefix()
             {
                 HwaAssetManager.EnterGameplay("RhythmGameController.Start");
+                SmokeTest.OnGameplayStarting();
             }
 
             public static void Postfix(RhythmGameController __instance)
