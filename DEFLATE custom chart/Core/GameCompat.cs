@@ -37,7 +37,8 @@ namespace DEFLATE_custom_chart.Core
             {
                 CurrentGameVersion = SafeRead(() => UnityEngine.Application.version);
                 CurrentUnityVersion = SafeRead(() => UnityEngine.Application.unityVersion);
-                CurrentSteamBuildId = ReadSteamBuildId() ?? "?";
+                string acfText = ReadSteamManifest();
+                CurrentSteamBuildId = ReadAcfValue(acfText, "buildid") ?? "?";
 
                 bool gameOk = IsUnknownOrEqual(CurrentGameVersion, ReferenceGameVersion);
                 bool unityOk = IsUnknownOrEqual(CurrentUnityVersion, ReferenceUnityVersion);
@@ -57,6 +58,8 @@ namespace DEFLATE_custom_chart.Core
                     MelonLogger.Warning("[GameCompat] 게임이 업데이트되었습니다. [SafePatcher] 요약과 [HarmonyGuard]/[GetValueResilient] 경고를 확인하고, "
                         + "게임 1회 실행 → SignatureDumper 재덤프 → 재빌드 순서(AGENTS.md §6)로 대응하세요.");
                 }
+
+                WarnSteamUpdateState(acfText);
             }
             catch (Exception ex)
             {
@@ -82,8 +85,33 @@ namespace DEFLATE_custom_chart.Core
             return current == "?" || string.Equals(current, reference, StringComparison.OrdinalIgnoreCase);
         }
 
-        /// <summary>&lt;GameDir&gt;/../../appmanifest_&lt;appid&gt;.acf 의 "buildid" 값을 읽습니다. Steam 외 설치/권한 문제 시 null.</summary>
-        private static string ReadSteamBuildId()
+        /// <summary>
+        /// Steam 업데이트 대기·자동 업데이트 설정을 경고합니다 (1.2 자동 업데이트로 모드가 깨진 사고 대비, AGENTS.md §1).
+        /// <c>TargetBuildID</c>가 0/빈 값이면 "대기 없음"으로 봅니다(거짓 경고 방지). <c>StateFlags</c>의 UpdateRequired(2) 비트도 봅니다.
+        /// </summary>
+        private static void WarnSteamUpdateState(string acfText)
+        {
+            if (string.IsNullOrEmpty(acfText)) return; // Steam 밖 사본(DepotDownloader 등)은 조용히 넘어간다
+
+            string target = ReadAcfValue(acfText, "TargetBuildID");
+            bool targetPending = !string.IsNullOrEmpty(target) && target != "0" && target != CurrentSteamBuildId;
+            bool flagPending = long.TryParse(ReadAcfValue(acfText, "StateFlags"), out long flags) && (flags & 2) != 0;
+            if (targetPending || flagPending)
+            {
+                MelonLogger.Warning($"[GameCompat] Steam 업데이트가 대기 중입니다 (TargetBuildID={target ?? "?"}). "
+                    + "다음 Steam 실행 때 게임이 바뀌어 훅이 깨질 수 있습니다.");
+            }
+
+            string autoUpdate = ReadAcfValue(acfText, "AutoUpdateBehavior");
+            if (autoUpdate == "0")
+            {
+                ModLog.Verbose("[GameCompat] Steam 자동 업데이트가 켜져 있습니다(AutoUpdateBehavior=0). "
+                    + "게임이 바뀌면 이 로그 첫머리의 '불일치!' 경고로 알 수 있습니다.");
+            }
+        }
+
+        /// <summary>&lt;GameDir&gt;/../../appmanifest_&lt;appid&gt;.acf 전체 텍스트. Steam 외 설치/권한 문제 시 null.</summary>
+        private static string ReadSteamManifest()
         {
             try
             {
@@ -92,15 +120,20 @@ namespace DEFLATE_custom_chart.Core
                 if (steamApps == null) return null;
 
                 string acf = Path.Combine(steamApps.FullName, $"appmanifest_{SteamAppId}.acf");
-                if (!File.Exists(acf)) return null;
-
-                var match = Regex.Match(File.ReadAllText(acf), "\"buildid\"\\s+\"(\\d+)\"", RegexOptions.IgnoreCase);
-                return match.Success ? match.Groups[1].Value : null;
+                return File.Exists(acf) ? File.ReadAllText(acf) : null;
             }
             catch
             {
                 return null;
             }
+        }
+
+        /// <summary>ACF(KeyValues) 텍스트에서 <c>"key"  "value"</c> 한 쌍의 값을 읽습니다. 없으면 null.</summary>
+        private static string ReadAcfValue(string acfText, string key)
+        {
+            if (string.IsNullOrEmpty(acfText)) return null;
+            var match = Regex.Match(acfText, "\"" + Regex.Escape(key) + "\"\\s+\"([^\"]*)\"", RegexOptions.IgnoreCase);
+            return match.Success ? match.Groups[1].Value : null;
         }
     }
 }

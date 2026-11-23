@@ -111,7 +111,7 @@ namespace DEFLATE_custom_chart.Core
         private static void LoadFromTxt()
         {
             var config = new ModConfig();
-            string[] lines = File.ReadAllLines(ConfigFilePath);
+            string[] lines = TextDecoder.ReadAllLines(ConfigFilePath, TextDecoder.Preference.Korean);
             foreach (var line in lines)
             {
                 string trimmed = line.Trim().TrimStart('\uFEFF');

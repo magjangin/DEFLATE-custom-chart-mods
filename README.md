@@ -11,6 +11,7 @@ DEFLATE (`dizzylab.castor`, Unity / Il2Cpp) 리듬게임을 위한 **MelonLoader
 - **커스텀 에셋 오버라이드 (`HwaAssetManager`)**: 선택된 커스텀 곡 폴더의 PNG 자켓·MP4 BGA·BGM 오디오를 주입된 사본에만 적용 (원본 곡은 그대로 유지)
 - **곡 목록 프리뷰까지 연동**: 목록에서 커서를 옮길 때의 PV 자동 미리보기(BGA/BGM)에도 커스텀 에셋 적용 (`IsInSongSelectContext` 가드로 로딩/인게임 간섭 원천 차단)
 - **게임 패치 내성 강화 (`Il2CppReflectionHelper`)**: Il2Cpp 객체 프로퍼티/필드 이름 변경 시 다중 후보군 캐시 리플렉션으로 안전하게 폴백 동작
+- **텍스트 인코딩 자동 판별 (`TextDecoder`)**: BMS·info.txt·config.txt를 UTF-8/BOM, Shift-JIS, CP949(EUC-KR), GB18030 중 맞는 것으로 읽음 (일본어 BMS의 제목·키음 이름이 깨지지 않음)
 - **플레이 옵션 (`savecustomkey/config.txt`)**: 오토 플레이, 저장 차단, 노트 흔들림(NoteSway), 노트 카오스 배속(NoteSpeedChaos)
 - **곡 시작 키 가이드 숨김 (`KeyIndicatorHooks`)**: 곡 시작 시 뜨는 `Key_indicator` UI를 모든 곡에서 항상 숨김 (설정으로 끌 수 없음)
 
@@ -50,7 +51,7 @@ hwa/
 
 ### 지원 버전 & 게임 업데이트 후 확인
 - 기준 빌드: DEFLATE **1.2** (Steam Build `26402105`) · Unity `2022.3.62f2` · MelonLoader **0.7.3**
-- 게임이 업데이트되면 `MelonLoader/Latest.log` 첫머리에 `[GameCompat] … 불일치!` 경고가 뜹니다. 이어서 `[SafePatcher] 훅 적용 요약`의 `실패` 개수를 확인하세요 — 깨진 훅만 빠지고 나머지 기능은 계속 동작합니다.
+- 게임이 업데이트되면 `MelonLoader/Latest.log` 첫머리에 `[GameCompat] … 불일치!` 경고가 뜹니다. Steam 업데이트가 대기 중이면 `[GameCompat] Steam 업데이트가 대기 중입니다` 경고가 먼저 뜹니다. 이어서 `[SafePatcher] 훅 적용 요약`의 `실패` 개수를 확인하세요 — 깨진 훅만 빠지고 나머지 기능은 계속 동작합니다.
 - 실제 플레이까지 한 번에 확인하려면 `config.txt`에 `SmokeTest=1`을 넣고 실행한 뒤 로그에서 `[SmokeTest] PASS`를 확인하세요.
 - 복구 절차는 [`AGENTS.md` §6 업데이트 대응 플레이북](AGENTS.md)을 따르세요.
 - 게임은 Steam으로 실행하세요(`DEFLATE.exe`를 직접 실행하면 "Another instance is already running" 오류가 날 수 있습니다).
@@ -73,6 +74,11 @@ hwa/
 - 게임 설치 경로는 `.csproj`의 `GameDir` 속성 하나로 지정합니다 (기본값 `H:\steam\steamapps\common\DEFLATE\`). 다른 경로면 `dotnet build -p:GameDir=<게임 폴더>\`로 덮어쓰세요.
 - 참조 DLL은 `MelonLoader/Il2CppAssemblies/`에서 가져옵니다. 이 폴더는 MelonLoader 설치(또는 버전 업그레이드) 후 게임을 **한 번 실행해야** 생성됩니다.
 - 빌드가 끝나면 `DeployToMods` 타깃이 `<GameDir>Mods\`로 DLL을 복사합니다.
+
+## 릴리즈
+
+- 최신 버전은 [Releases](https://github.com/magjangin/DEFLATE-custom-chart-mods/releases)에서 받으세요. zip 안의 DLL을 `<게임 폴더>\Mods\`에 넣으면 됩니다.
+- 변경 내역은 [CHANGELOG.md](CHANGELOG.md), 릴리즈 절차는 [AGENTS.md §8](AGENTS.md)을 보세요.
 
 ## 문서
 

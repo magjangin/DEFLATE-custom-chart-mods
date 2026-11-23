@@ -49,7 +49,12 @@ namespace DEFLATE_custom_chart.Core.Bms
                 throw new FileNotFoundException($"BMS 파일을 찾을 수 없습니다: {filePath}");
             }
 
-            string content = File.ReadAllText(filePath);
+            // UTF-8 고정으로 읽으면 Shift-JIS/CP949 BMS의 제목·#WAV 키음 이름이 깨진다 → 인코딩 자동 판별.
+            string content = TextDecoder.ReadAllText(filePath, TextDecoder.Preference.Chart);
+            if (!TextDecoder.LastEncodingName.StartsWith("utf-", StringComparison.Ordinal))
+            {
+                ModLog.Verbose($"[BMS 파싱] {Path.GetFileName(filePath)} 인코딩: {TextDecoder.LastEncodingName}");
+            }
             return Parse(content, targetSampleRate);
         }
 
