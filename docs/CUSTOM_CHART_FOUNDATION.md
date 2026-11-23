@@ -147,7 +147,7 @@ $$\text{StartSample} = \text{Time (seconds)} \times \text{SampleRate}$$
 
 ### 4.4 `AssetManagerHooks.cs` (에셋 관리자 인터셉터)
 - `TrackAssetManager.LoadAudioClip` (Prefix): 곡 목록 프리뷰에서 커스텀 곡의 오디오 Key가 요청되면 원본 로드를 건너뛰고 커스텀 BGM을 `onSuccess`로 넘김. 로드에 실패하면 `onFail`을 호출.
-- `TrackAssetManager.LoadVideoClip` / `LoadVideoURL` (Prefix): BGA 비디오 로드 요청 key 로그.
+- `TrackAssetManager.LoadVideoURL` (Prefix): 활성 커스텀 곡의 숙주 비디오 Key 요청만 커스텀 BGA URL로 대체. (`LoadVideoClip` 훅은 동작이 없어 2026-11-23에 삭제)
 - `Bank_PV_Ctrl.PlayPVVideo` / `LoadVideoAndAudio`, `SimpleRandomVideo.LoadVideoSmart` / `LoadVideo` (Prefix): 커스텀 곡이면 커스텀 BGA로 교체.
 - `VideoPlayer.Play` / `Prepare` (Prefix, 전역): 커스텀 곡이 활성 상태면 모든 VideoPlayer의 소스를 커스텀 BGA URL로 강제.
 - `MainTrackList.Start` (Postfix, `Priority.Normal`): 사본 블록의 `TrackCover`를 각자의 커스텀 PNG로 교체.

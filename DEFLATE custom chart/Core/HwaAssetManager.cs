@@ -46,13 +46,6 @@ namespace DEFLATE_custom_chart.Core
         // 커스텀 에셋 주입 대상 트랙 식별
         // =========================================================================
 
-        /// <summary>현재 선택된 커스텀 곡 사본의 고유 ID (없으면 null).</summary>
-        public static string TargetTrackID => Active?.InjectedTrackID;
-
-        /// <summary>사본이 원본에서 복사해온 오디오/비디오 Key. 곡 목록 프리뷰 오버라이드 이중 확인용.</summary>
-        public static string TargetAudioKey => Active?.AudioKey;
-        public static string TargetVideoKey => Active?.VideoKey;
-
         /// <summary>현재 선택/재생 중인 트랙이 커스텀 곡인지 여부. 원본 곡에서는 false여야 합니다.</summary>
         public static bool IsTargetTrackActive
         {
@@ -139,7 +132,6 @@ namespace DEFLATE_custom_chart.Core
             public string Album { get; set; } = "custom albums";
             public string BgaAuthor { get; set; } = "화영왕";
             public string ChartAuthor { get; set; } = "화영왕";
-            public string ChartMaker => ChartAuthor;
 
             public int EasyLevel { get; set; } = 8;
             public int NormalLevel { get; set; } = 8;
@@ -187,12 +179,6 @@ namespace DEFLATE_custom_chart.Core
         public static void Initialize()
         {
             CustomSongLibrary.Initialize();
-        }
-
-        /// <summary>hwa/ 폴더를 다시 스캔합니다 (곡 추가/삭제 후 재적용용).</summary>
-        public static void Rescan()
-        {
-            CustomSongLibrary.Scan();
         }
 
         // =========================================================================
@@ -391,15 +377,6 @@ namespace DEFLATE_custom_chart.Core
             {
                 yield return direct.Current;
             }
-        }
-
-        public static void ResetCache()
-        {
-            foreach (var entry in CustomSongLibrary.Entries)
-            {
-                entry.ResetLoadedAssets();
-            }
-            EnterSongSelect();
         }
     }
 }

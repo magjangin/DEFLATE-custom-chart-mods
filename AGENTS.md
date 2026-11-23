@@ -6,7 +6,7 @@
 > **현재 검증 상태 (2026-11-20, 게임 1.2 / Build `26402105`):** 컴파일 경고 0 · `[SafePatcher] 성공 52 / 건너뜀 2(설정상 비활성) / 실패 0` · `[GameCompat] 일치`.
 > **게임플레이 실기 검증 완료:** ① 무인 스모크 테스트(`SmokeTest=1`, §3-⑥) `PASS` — BMS 노트 1104개/9레인·라인바 296개 주입, 커스텀 BGM 재생, BGA URL 일치. ② 사용자 수동 플레이(로딩 씬 경유) 로그에서 곡 목록 주입 → 로딩 UI 메타데이터 → 인게임 노트/라인바/BGM/BGA 주입 확인.
 > **2026-11-20 추가 수정·검증:** 노트 이중 생성(하이햇+킥·스네어 양쪽 복제, 열도 어긋남) 및 48000Hz 음악 타이밍 드리프트 수정 → 스모크 `PASS`, 게임 `AllNoteCount` 552 = BMS 552, 화면에서 노트가 BMS 열대로 한 번씩만 표시됨을 캡처로 확인.
-> **2026-11-23 감사/리팩토링 (빌드만 검증, 인게임 재검증 필요):** 아래 §9 참고. 컴파일 경고 0 · 오류 0.
+> **2026-11-23 전수 감사/리팩토링:** §9 참고. 컴파일 경고 0 · 오류 0, `[SafePatcher] 성공 45 / 건너뜀 8(로그 레벨 LogLevel=1 기준) / 실패 0`, 스모크 테스트 `PASS`(BMS 552/552, 라인바 296, 커스텀 BGM·BGA, 컨텍스트 인게임).
 > 미확인: 결과 화면, 롱노트(테스트 차트에 홀드 0개), 드롭 레인(테스트 차트 14번 채널 0개), 킥/스네어 키음 노트(테스트 차트에 없음).
 
 ---
@@ -237,7 +237,7 @@
 | `b25a513` | DiffCtrl 스팸·이중 BGM·병목 수정 | `SafeGenerateStarImages`(`new Il2CppSystem.Nullable<Color>()`)로 `DiffCtrl`/`LoadingGamePlay` NRE 스팸 해결, 숙주+커스텀 이중 BGM 차단(인게임 `EnsureAudioSourceBound`/`BindAudioClipWhenReady`/`StartAudioWhenReady`+`SourceClip` 교체+`MuteVideoPlayer`, 곡 선택 `FavControl.SafeLoadAndPlayAudio`/`PlayAudioWhenReady`/`LoadVideoURL`+빠른 스크롤 가드+무BGA 곡 `VideoKey`/`DiscID` 초기화), `ModConfig.Initialize()` 선행 로드로 비활성 핫패스 훅(`NoteSway`/`NoteSpeedChaos`/`BlockSave`) `Prepare()` 스킵, 117곡 전체 카탈로그 덤프/커버 순회/BlockSave/프리로드 로그 스팸 및 할당 병목 제거 |
 | `809250d` | 1.2 실기 검증·컨텍스트 결함 수정·스모크 테스트 | `SmokeTest`(무인 커스텀 곡 자동 플레이·PASS/FAIL 판정, 목록 이중 생성 대응) 추가 및 1.2 실기 PASS, `EnterSongSelect`/`EnterGameplay` 다중 진입점으로 곡 선택 컨텍스트 누수 수정, `LoadAudioClip`/`LoadVideoURL`을 숙주 Key 일치 정책으로 통일(인게임 포함·인게임 콜백 취소 금지·`LoadVideoURL` Key 검사 신설), `MainTrackList.GoToScene` 진단 로그, 커스텀 블록 판정(`SongInjectorHooks.IsCustomBlock`) 단일화 |
 | 이전 | 노트 이중 생성·타이밍·로그 정리 | BMS 노트 1개=게임 레인 1개(채널=열, 키음=하이햇/킥·스네어, 킥·스네어 실측 열 배치), 노트 샘플 위치를 커스텀 음악 주파수 기준으로 계산(48kHz 드리프트 수정)+`[BMS 타이밍]` 안내, 숙주 `SourceClip` 원복, `LogLevel`(0/1/2)과 로그 전용 훅 Prepare 생략, 곡당 한 줄 `[커스텀 차트]` 요약, `ChartDiagnostics`(레인 배치·원곡 동시 출현), 스모크 테스트에 중복·누락 검사 |
-| 현재 | 전체 감사·정리 | §9 참조: 동작 없는 `LoadVideoClip` 훅 제거, 활성 곡 판정 중복 통합(`EnsureActiveTrackFromGameData`), 죽은 디버그 분기 제거, NoteSway 감쇠 샘플레이트를 클립 주파수 기준으로 통일, 빈 `catch` 로깅 |
+| 현재 | 전수 감사·정리 | §9 참조: 무동작 `LoadVideoClip` 훅·미사용 코드(`CustomAlbumWrapper` 등) 삭제, 활성 곡 판정 중복 통합, 죽은 디버그 분기 제거, NoteSway 감쇠를 클립 주파수 기준으로 통일, 스모크 PASS |
 
 ---
 
@@ -275,17 +275,24 @@ Start-Process "steam://rungameid/3921360"
 
 ## 9. 코드 감사 기록 (2026-11-23)
 
-범위: `Hooks/`·`Core/` 전반을 훑고 핫패스(매 프레임·노트), 중복, 죽은 코드, 예외 삼킴을 점검했습니다. **빌드(경고 0/오류 0)만 확인했고 인게임 재검증은 하지 않았습니다** — 다음 게임 실행 시 스모크 테스트(`SmokeTest=1`)로 확인하세요.
+범위: `Core/`·`Hooks/` 전 파일(SignatureDumper·docs 제외)을 읽고 핫패스, 중복, 죽은 코드, 예외 삼킴을 점검했습니다. 빌드(경고 0/오류 0) 후 **스모크 테스트 PASS**까지 확인했습니다(`LogLevel=1`, BMS 노트 552/552, 라인바 296, 컨텍스트 인게임, DLL SHA256이 `Latest.log`와 일치). NoteSway는 기본 꺼짐이라 수정(아래)은 스모크로 검증되지 않았습니다.
 
 **적용한 변경**
-- `TrackAssetManager.LoadVideoClip` 훅 삭제: `Prefix`가 항상 `true`만 반환하는 무동작 훅이라 호출 때마다 비용만 들었습니다.
-- `InGameRhythmHooks`: GameData로 활성 곡을 판정하는 3중 복붙을 `EnsureActiveTrackFromGameData`로 통합, 항상 꺼져 있던 `NoteManipulationEnabled` 디버그 분기 삭제, `BuildBmsLineBarEvents` 들여쓰기 정리.
-- `NoteObject_UpdateNotePosition_Patch`(NoteSway): 감쇠 시간 계산이 숙주 Koreography 샘플레이트를 써서, 게임 시계(재생 클립 기준)와 어긋났습니다(48kHz에서 약 8.8%). 재생 클립 주파수를 우선하도록 수정(§3-⑦과 같은 원칙).
-- `HwaAssetManager.MuteVideoPlayer`: 빈 `catch {}`에 `LogLevel 2` 로그 추가.
+- 무동작 훅 `TrackAssetManager.LoadVideoClip` 삭제(`Prefix`가 항상 `true`).
+- `InGameRhythmHooks`: GameData로 활성 곡을 판정하던 3중 복붙 → `EnsureActiveTrackFromGameData`, 항상 꺼져 있던 `NoteManipulationEnabled` 디버그 분기 삭제, `BuildBmsLineBarEvents` 들여쓰기 정리.
+- NoteSway 감쇠 시간 계산: 숙주 Koreography 샘플레이트 → 재생 클립 주파수 우선(§3-⑦ 원칙, 48kHz에서 약 8.8% 오차). **`NoteSway=1`로 인게임 확인은 아직 안 함.**
+- 호출처가 없던 코드 삭제: `CustomAlbumWrapper.cs`(`CustomAlbumManager` 포함, 등록·조회 호출 0건), `HwaAssetManager.ResetCache/Rescan/TargetTrackID/TargetAudioKey/TargetVideoKey`, `HwaMetaInfo.ChartMaker`, `CustomSongLibrary.ClearInjectionState/Fallback`.
+- `BmsParser`: BPM 타임라인의 `ContainsKey`+인덱서 이중 조회를 `TryGetValue`로 교체(파싱 시 1회성이라 효과는 미미).
+- `MuteVideoPlayer` 빈 `catch`에 `LogLevel 2` 로그, `BmsNote.ResolvedLane` 주석 정정(`lane_1~4` → 실제 레인 ID).
 
 **점검했지만 바꾸지 않은 것 (재논의 방지)**
 - 핫패스(`NoteSway`)의 프레임 캐시·서킷 브레이커는 충분하고, `transform.localPosition` 읽기/쓰기는 효과의 본질이라 줄일 수 없습니다.
 - `Il2CppReflectionHelper`·`GameCompat`·`SmokeTest`의 빈 `catch`는 리플렉션 후보 탐색/최선 노력 점검용이라 의도된 것입니다.
-- `SafePatcher`의 LINQ는 시작 시 1회뿐이라 최적화 대상이 아닙니다.
-- `BmsParser`(712줄)·`InGameRhythmHooks`(~1000줄)는 길지만 응집도가 높아 분할 이득이 작습니다. 분할하려면 먼저 스모크 테스트로 회귀를 막을 수 있어야 합니다.
-- 읽지 못한 파일(이번 감사의 한계): `BmsParser.cs`, `CustomSongEntry.cs`, `SongListHooks.cs`는 정밀 리뷰하지 않고 패턴 검색(LINQ·`Find*`·빈 `catch`)만 했습니다.
+- `SafePatcher`·`CustomSongLibrary.LogCatalog`의 LINQ는 시작 시 1회뿐이고, `FindByTitle/FindByTrackID`의 미스 경로 선형 탐색은 엔트리 수(곡 수)가 작아 무시할 수준입니다.
+- `BmsParser`(~700줄)·`InGameRhythmHooks`(~1000줄)는 길지만 응집도가 높아 분할 이득이 작습니다. 분할하려면 스모크 테스트로 회귀를 막을 수 있어야 하며, 지금은 그 안전망이 있으므로 필요해지면 가능합니다.
+- 훅 이름 중복(`MainTrackList_Start_Patch`가 `AssetManagerHooks`·`SongListHooks`에 각각 존재)은 바깥 클래스가 달라 충돌하지 않으며, 로그의 `DescribeType`도 `Outer.Inner`로 구분합니다.
+
+**알려진 한계 (미해결)**
+- `BmsParser.ParseFile`은 `File.ReadAllText`(UTF-8/BOM 자동 감지)만 씁니다. Shift-JIS BMS는 제목·키음 파일명이 깨질 수 있습니다(키음 이름 기반 홀드/킥·스네어 판정이 영향받을 수 있음). 필요해지면 U+FFFD 감지 후 코드페이지 폴백을 검토하세요.
+- `CustomSongEntry.LoadBgmCoroutine`은 `streamAudio=true` 클립을 만든 뒤 요청을 즉시 `Dispose`합니다. 현재 실기(스모크 PASS)에서는 재생되지만, 긴 곡 끝까지 재생되는지는 이 문서 시점에 장시간 검증하지 않았습니다.
+- 결과 화면·롱노트·드롭 레인·킥/스네어 키음 노트는 여전히 실기 미확인(테스트 차트에 없음).
