@@ -14,3 +14,6 @@
 # OS
 Thumbs.db
 .DS_Store
+
+# 릴리즈 산출물 (tools/release.ps1)
+/dist/

@@ -212,7 +212,7 @@ namespace DEFLATE_custom_chart.Core
             {
                 try
                 {
-                    foreach (var line in File.ReadAllLines(InfoFilePath))
+                    foreach (var line in TextDecoder.ReadAllLines(InfoFilePath, TextDecoder.Preference.Korean))
                     {
                         if (string.IsNullOrWhiteSpace(line)) continue;
 
