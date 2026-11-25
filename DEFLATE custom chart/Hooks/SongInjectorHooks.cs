@@ -125,8 +125,9 @@ namespace DEFLATE_custom_chart.Hooks
                         return;
                     }
 
-                    // 3) 남은 커스텀 곡마다 사본 생성
+                    // 3) 남은 커스텀 곡마다 사본 생성 (커버 PNG 디코딩 포함 — 곡이 많을 때 지연의 대부분)
                     var createdBlocks = new List<MainTrackListBlock>();
+                    var injectWatch = System.Diagnostics.Stopwatch.StartNew();
 
                     foreach (var entry in pending)
                     {
@@ -156,7 +157,7 @@ namespace DEFLATE_custom_chart.Hooks
                     // 5) 곡 목록 진입 시점에는 아직 아무 커스텀 곡도 선택되지 않은 상태로 둔다.
                     HwaAssetManager.IsTargetTrackActive = false;
 
-                    MelonLogger.Msg($"[곡 목록 주입 완료] 원본 '{sourceWrapper.Title}' (ID: {sourceWrapper.UniqueID}) 기반으로 커스텀 곡 {createdBlocks.Count}곡 주입 | 총 {__instance.tracks.Length}곡");
+                    MelonLogger.Msg($"[곡 목록 주입 완료] 원본 '{sourceWrapper.Title}' (ID: {sourceWrapper.UniqueID}) 기반으로 커스텀 곡 {createdBlocks.Count}곡 주입 | 총 {__instance.tracks.Length}곡 ({injectWatch.ElapsedMilliseconds}ms)");
                 }
                 catch (Exception ex)
                 {

@@ -76,7 +76,6 @@ namespace DEFLATE_custom_chart.Core
         private UnityWebRequest _bgmRequest;
         public bool IsBgmLoading => _isBgmLoading;
 
-        private static readonly char[] InfoSeparators = { ':', '=' };
         private static readonly string[] BgmKeywords = { "music", "bgm", "song", "track", "audio" };
 
         private CustomSongEntry(string folderPath, string albumFolderName)
@@ -244,31 +243,16 @@ namespace DEFLATE_custom_chart.Core
             {
                 try
                 {
-                    foreach (var line in TextDecoder.ReadAllLines(InfoFilePath, TextDecoder.Preference.Korean))
-                    {
-                        if (string.IsNullOrWhiteSpace(line)) continue;
-
-                        string[] parts = line.Split(InfoSeparators, 2);
-                        if (parts.Length < 2) continue;
-
-                        string key = parts[0].Trim().TrimStart('\uFEFF').ToLowerInvariant();
-                        string val = parts[1].Trim();
-                        if (string.IsNullOrEmpty(val)) continue;
-
-                        // BGA 키를 아티스트/매퍼보다 먼저 본다. ("BGA 아티스트"가 아티스트로, "영상 제작자"가 매퍼로 들어가는 것 방지)
-                        bool isBgaKey = key.Contains("bga") || key.Contains("pv") ||
-                            ((key.Contains("영상") || key.Contains("video")) &&
-                             (key.Contains("제작") || key.Contains("author") || key.Contains("maker")));
-
-                        if (key.Contains("제목") || key.Contains("title")) { Meta.Title = val; titleFromFile = true; }
-                        else if (isBgaKey) Meta.BgaAuthor = val;
-                        else if (key.Contains("아티스트") || key.Contains("artist")) { Meta.Artist = val; _artistFromInfo = true; }
-                        else if (key.Contains("앨범") || key.Contains("album")) { Meta.Album = val; albumFromFile = true; }
-                        else if (key.Contains("매퍼") || key.Contains("mapper") || key.Contains("제작자") || key.Contains("maker") || key.Contains("charter")) Meta.ChartAuthor = val;
-                        else if (key.Equals("easy", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int ez)) Meta.EasyLevel = ez;
-                        else if (key.Equals("normal", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int nm)) Meta.NormalLevel = nm;
-                        else if (key.Equals("hard", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int hd)) Meta.HardLevel = hd;
-                    }
+                    // 키 판정 규칙은 SongInfoParser(단위 테스트 대상)에 있다.
+                    var info = SongInfoParser.Parse(TextDecoder.ReadAllLines(InfoFilePath, TextDecoder.Preference.Korean));
+                    if (info.Title != null) { Meta.Title = info.Title; titleFromFile = true; }
+                    if (info.Artist != null) { Meta.Artist = info.Artist; _artistFromInfo = true; }
+                    if (info.Album != null) { Meta.Album = info.Album; albumFromFile = true; }
+                    if (info.BgaAuthor != null) Meta.BgaAuthor = info.BgaAuthor;
+                    if (info.ChartAuthor != null) Meta.ChartAuthor = info.ChartAuthor;
+                    if (info.EasyLevel.HasValue) Meta.EasyLevel = info.EasyLevel.Value;
+                    if (info.NormalLevel.HasValue) Meta.NormalLevel = info.NormalLevel.Value;
+                    if (info.HardLevel.HasValue) Meta.HardLevel = info.HardLevel.Value;
                 }
                 catch (Exception ex)
                 {
@@ -330,9 +314,12 @@ namespace DEFLATE_custom_chart.Core
                 {
                     tex.filterMode = FilterMode.Bilinear;
                     tex.wrapMode = TextureWrapMode.Clamp;
-                    CoverSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+                    // FullRect: 기본값(Tight)은 생성 시 알파를 훑어 윤곽 메시를 만든다 — 큰 커버에서 곡마다 메인 스레드 비용이 크고,
+                    // 불투명한 자켓에는 결과가 사각형과 같다(UI Image·SpriteRenderer 모두 동일하게 보임).
+                    CoverSprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f), 100f, 0, SpriteMeshType.FullRect);
                     CoverSprite.name = Path.GetFileNameWithoutExtension(CoverFilePath);
                     ModLog.Verbose($"[커스텀 곡] PNG 커버 로드: '{Meta.Title}' ({tex.width}x{tex.height})");
+                    WarnIfCoverTooLarge(tex.width, tex.height);
                 }
                 else
                 {
@@ -345,6 +332,18 @@ namespace DEFLATE_custom_chart.Core
             }
 
             return CoverSprite;
+        }
+
+        /// <summary>커버는 곡 목록 주입 때 전 곡이 메모리에 올라가므로(RGBA32, 해제는 재스캔 때) 큰 이미지를 알린다.</summary>
+        private const int CoverWarnPixels = 2048 * 2048;
+
+        private void WarnIfCoverTooLarge(int width, int height)
+        {
+            long pixels = (long)width * height;
+            if (pixels <= CoverWarnPixels) return;
+            // 읽기 가능한 텍스처라 GPU 사본 + CPU 사본 = 픽셀당 약 8바이트
+            long mb = pixels * 8 / (1024 * 1024);
+            MelonLogger.Warning($"[커스텀 곡] '{FolderName}' 커버가 {width}x{height}로 큽니다(메모리 약 {mb}MB, 곡 목록 진입 때 디코딩 지연). 1024x1024 이하로 줄이는 것을 권장합니다.");
         }
 
         private static AudioType GetAudioType(string filePath)

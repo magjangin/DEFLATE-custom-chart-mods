@@ -172,6 +172,7 @@ namespace DEFLATE_custom_chart.Core
         private static HashSet<string> LoadFromTxt()
         {
             var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var unknownKeys = new List<string>();
             var config = new ModConfig();
             string[] lines = TextDecoder.ReadAllLines(ConfigFilePath, TextDecoder.Preference.Korean);
             foreach (var line in lines)
@@ -236,11 +237,62 @@ namespace DEFLATE_custom_chart.Core
                 {
                     if (int.TryParse(val, NumberStyles.Integer, CultureInfo.InvariantCulture, out int lv)) config.LogLevel = Math.Clamp(lv, 0, 2);
                 }
+                else
+                {
+                    unknownKeys.Add(key);
+                }
             }
 
             config.UpdateDerivedValues();
             Instance = config;
+            WarnUnknownKeys(unknownKeys);
             return seenKeys;
+        }
+
+        /// <summary>
+        /// 철자가 틀린 키(예: <c>NoteSwy=1</c>)는 예전에는 조용히 무시돼, 사용자는 설정이 왜 안 먹는지 알 수 없었다.
+        /// 모르는 키를 한 번에 알리고, 편집 거리 2 이내의 비슷한 키가 있으면 함께 제안한다.
+        /// </summary>
+        private static void WarnUnknownKeys(List<string> unknownKeys)
+        {
+            if (unknownKeys.Count == 0) return;
+            var parts = new List<string>();
+            foreach (var key in unknownKeys)
+            {
+                string suggestion = SuggestKey(key);
+                parts.Add(suggestion != null ? $"'{key}'('{suggestion}'?)" : $"'{key}'");
+            }
+            MelonLogger.Warning($"[ModConfig] config.txt에 알 수 없는 설정 키가 있어 무시했습니다: {string.Join(", ", parts)}");
+        }
+
+        internal static string SuggestKey(string key)
+        {
+            string best = null;
+            int bestDistance = 3;
+            foreach (var known in KnownKeys)
+            {
+                int d = EditDistance(key.ToLowerInvariant(), known.ToLowerInvariant());
+                if (d < bestDistance) { bestDistance = d; best = known; }
+            }
+            return best;
+        }
+
+        private static int EditDistance(string a, string b)
+        {
+            var prev = new int[b.Length + 1];
+            var cur = new int[b.Length + 1];
+            for (int j = 0; j <= b.Length; j++) prev[j] = j;
+            for (int i = 1; i <= a.Length; i++)
+            {
+                cur[0] = i;
+                for (int j = 1; j <= b.Length; j++)
+                {
+                    int cost = a[i - 1] == b[j - 1] ? 0 : 1;
+                    cur[j] = Math.Min(Math.Min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+                }
+                var t = prev; prev = cur; cur = t;
+            }
+            return prev[b.Length];
         }
 
         private static bool TryParseFloat(string val, out float result)

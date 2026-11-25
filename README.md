@@ -4,13 +4,13 @@ DEFLATE (`dizzylab.castor`, Unity / Il2Cpp) 리듬게임을 위한 **MelonLoader
 
 ## 주요 기능
 
-- **곡 목록/인게임 로깅**: 전체 수록곡 카탈로그, 커서 이동, 난이도 변경, 플레이 진입 등을 상세 로그로 기록
+- **로그 (`LogLevel`)**: 기본은 곡당 한 줄 요약과 경고만 남기고, `LogLevel=1`/`2`에서 레인별 주입·에셋 교체·커서 이동·진행률까지 기록
 - **앨범/곡 폴더 라이브러리 (`CustomSongLibrary`)**: `hwa/` 아래 폴더를 스캔해 여러 커스텀 곡을 앨범 단위로 카탈로그화
 - **곡 복제 주입 (`SongInjectorHooks`)**: 기존 트랙을 `CustomTrackWrapper`로 캐스트·복사해, 커스텀 곡 수만큼 새 `MainTrackListBlock` 인스턴스를 곡 목록에 주입 (ID 재생성 실패 시 자동 폴백 고유 ID 부여 및 안전 가드 내장)
 - **BMS 차트 주입 (`BmsParser` / `BmsLaneMapper`)**: 곡 폴더의 BMS를 읽어 레인 노트·홀드·드롭 노트로 바꾸고, 라인바(마디선/박자선)도 BMS 기준으로 다시 만듦 — 규격은 [docs/bms_mapping_spec.md](docs/bms_mapping_spec.md)
 - **커스텀 에셋 오버라이드 (`HwaAssetManager`)**: 선택된 커스텀 곡 폴더의 PNG 자켓·MP4 BGA·BGM 오디오를 주입된 사본에만 적용 (원본 곡은 그대로 유지)
-- **곡 목록 프리뷰까지 연동**: 목록에서 커서를 옮길 때의 PV 자동 미리보기(BGA/BGM)에도 커스텀 에셋 적용 (`IsInSongSelectContext` 가드로 로딩/인게임 간섭 원천 차단)
-- **게임 패치 내성 강화 (`Il2CppReflectionHelper`)**: Il2Cpp 객체 프로퍼티/필드 이름 변경 시 다중 후보군 캐시 리플렉션으로 안전하게 폴백 동작
+- **곡 목록 프리뷰까지 연동**: 목록에서 커서를 옮길 때의 PV 자동 미리보기(BGA/BGM)에도 커스텀 에셋 적용. 사본이 원곡에서 물려받은 오디오·영상 Key 요청만 바꾸므로 다른 곡 미리보기·인게임 로드에는 끼어들지 않음
+- **게임 업데이트 내성**: 필드·프로퍼티 이름이 바뀌면 후보 이름으로 대신 읽고(`Il2CppReflectionHelper`), 깨진 훅만 빠지고 나머지는 계속 동작(`SafePatcher`). 시작 로그에 게임 빌드 불일치 경고, 플레이 중 BMS 주입이 빠지면 경고
 - **텍스트 인코딩 자동 판별 (`TextDecoder`)**: BMS·info.txt·config.txt를 UTF-8/BOM, Shift-JIS, CP949(EUC-KR), GB18030 중 맞는 것으로 읽음 (일본어 BMS의 제목·키음 이름이 깨지지 않음)
 - **플레이 옵션 (`savecustomkey/config.txt`)**: 오토 플레이, 저장 차단, 노트 흔들림(NoteSway), 노트 카오스 배속(NoteSpeedChaos)
 - **곡 시작 키 가이드 숨김 (`KeyIndicatorHooks`)**: 곡 시작 시 뜨는 `Key_indicator` UI를 모든 곡에서 항상 숨김 (설정으로 끌 수 없음)
@@ -44,7 +44,7 @@ hwa/
     곡 B/  ...
 ```
 
-  - 커버는 이름에 `cover`/`jacket`/`thumbnail`이 들어간 `.png`(또는 `.jpg`)를 먼저 고르고, 없으면 처음 나오는 `.png`를 씁니다. info.txt에 아티스트가 없으면 BMS `#ARTIST`를 씁니다.
+  - 커버는 이름에 `cover`/`jacket`/`thumbnail`/`thumb`/`커버`/`자켓`이 들어간 `.png`(또는 `.jpg`)를 먼저 고르고, 없으면 처음 나오는 `.png`를 씁니다. 2048×2048보다 큰 커버는 메모리를 많이 써서 로그에 경고가 남습니다(1024×1024 이하 권장). info.txt에 아티스트가 없으면 BMS `#ARTIST`를 씁니다.
 - 하이햇/킥·스네어는 키음 파일명으로 정합니다: 이름에 `kick`·`snare` 또는 `킥`·`스네어`가 있으면 킥·스네어, 나머지는 하이햇([매핑 명세](docs/bms_mapping_spec.md)).
 - BMS·info.txt는 UTF-8이 아니어도 됩니다(Shift-JIS, CP949 자동 판별).
 - BMS의 `#RANDOM` 분기는 1번 분기(`#IF 1`)만 읽습니다. STOP(`#STOPxx`/09 채널)과 LN 채널(5x/6x)은 지원하지 않으며, 만나면 로그에 경고가 남습니다(홀드는 키음 이름 "홀드 시작/홀드 끝" 또는 `#LNOBJ`).
@@ -52,11 +52,31 @@ hwa/
   - 메타데이터 파일은 `info.txt`를 우선하고, 없으면 처음 나오는 `.txt`를 씁니다
   - BGM은 `.ogg` › 이름에 `music`/`bgm`/`song`/`track`/`audio`가 들어간 파일 › 용량이 큰 파일 순으로 고릅니다 (지원: `.ogg`/`.wav`/`.mp3`)
   - 곡 제목은 `info.txt`의 `title`, 없으면 곡 폴더 이름 / 앨범명은 `info.txt`의 `album`, 없으면 앨범 폴더 이름을 씁니다
+### info.txt 형식
+
+한 줄에 `키 : 값` 또는 `키 = 값`. 키는 대소문자를 가리지 않고 한국어·영어 모두 됩니다. 없는 항목은 폴더 이름이나 기본값을 씁니다.
+
+```
+제목 : 곡 제목              (title)
+부제 : [Another]            (subtitle — 제목에 영향 없음)
+아티스트 : 작곡가           (artist / 작곡 / composer)
+앨범 : 앨범 이름            (album — 없으면 앨범 폴더 이름)
+채보 제작자 : 매퍼          (mapper / charter / 채보 / 제작자)
+BGA 제작자 : 영상 담당      (bga / pv / 영상 제작자)
+easy = 8                    (ez / 이지)
+normal = 10                 (nm / 노멀 / 노말)
+hard = 12                   (hd / 하드, "★12"처럼 써도 됨)
+```
+
+- `앨범 아티스트`(album artist)는 무시합니다(곡 아티스트를 덮어쓰지 않게).
+- 메모장 ANSI(CP949)·UTF-8 모두 읽습니다.
+
 3. 첫 실행 시 `savecustomkey/config.txt`가 만들어집니다. 아래 [설정](#설정-savecustomkeyconfigtxt)을 참고하세요.
 4. 자세한 훅 포인트와 트러블슈팅은 [`docs/`](docs/) 및 [`AGENTS.md`](AGENTS.md) 문서를 참고하세요.
 
 ### 지원 버전 & 게임 업데이트 후 확인
 - 기준 빌드: DEFLATE **1.2** (Steam Build `26402105`) · Unity `2022.3.62f2` · MelonLoader **0.7.3**
+- 플레이 중 `[커스텀 차트] … 호출되지 않았습니다` 또는 `주입된 노트 N개 ≠ BMS` 경고가 보이면 게임 업데이트로 차트 주입이 빠진 것입니다(원곡 차트로 플레이됨).
 - 게임이 업데이트되면 `MelonLoader/Latest.log` 첫머리에 `[GameCompat] … 불일치!` 경고가 뜹니다(MelonLoader 버전이 기준과 달라도 별도로 경고합니다). Steam 업데이트가 대기 중이면 `[GameCompat] Steam 업데이트가 대기 중입니다` 경고가 먼저 뜹니다. 이어서 `[SafePatcher] 훅 적용 요약`의 `실패` 개수를 확인하세요 — 깨진 훅만 빠지고 나머지 기능은 계속 동작합니다.
 - 실제 플레이까지 한 번에 확인하려면 `config.txt`에 `SmokeTest=1`을 넣고 실행한 뒤 로그에서 `[SmokeTest] PASS`를 확인하세요. 타이틀에 로그인 메뉴가 뜨면 `Offline mode`를 고르세요(고를 때까지 테스트가 기다립니다). 그 뒤 약 30초 동안 조작하지 마세요. 끝나면 `SmokeTest=0`으로 되돌리세요.
 - 복구 절차는 [`AGENTS.md` §6 업데이트 대응 플레이북](AGENTS.md)을 따르세요.
@@ -72,6 +92,8 @@ hwa/
 | `NoteSpeedChaos` | `0` | 노트마다/레인마다 낙하 속도를 다르게 (`NoteSpeedChaosMin` / `NoteSpeedChaosMax` / `NoteSpeedChaosPerLane`) |
 | `LogLevel` | `0` | 로그 상세도. `0` 요약(곡당 한 줄 + 경고/오류), `1` 상세(레인별 주입·에셋 교체), `2` 디버그(커서 이동·10초 진행률·레인 배치/원곡 차트 진단) |
 | `SmokeTest` | `0` | [개발용] 실행 직후 첫 커스텀 곡을 자동 선택·오토플레이하고 로그에 `[SmokeTest] PASS/FAIL`을 남김. 게임 업데이트 후 점검할 때만 켜고 끝나면 0으로 |
+
+> 키 이름을 잘못 쓰면(예: `NoteSwy=1`) 그 줄은 무시되고 로그에 `[ModConfig] … 알 수 없는 설정 키` 경고와 비슷한 키 제안이 남습니다.
 
 > **`BlockSave=1` 주의:** 점수만 막는 것이 아니라 커스텀 곡/원곡 구분 없이 `GameData.SaveGameData` 호출 자체를 건너뜁니다. `GameData`에 함께 들어 있는 키 설정·볼륨·입력 지연(InputDelay/VisualOffset)·즐겨찾기·플레이어 레벨/경험치·구매 목록·점수도 저장되지 않습니다. 게임 설정을 바꿔야 할 때는 `BlockSave=0`으로 두세요.
 
