@@ -2,7 +2,6 @@ using System;
 using MelonLoader;
 using HarmonyLib;
 using Il2Cppdizzylab.castor;
-using UnityEngine.EventSystems;
 using DEFLATE_custom_chart.Core;
 using DEFLATE_custom_chart.Core.Wrapper;
 
@@ -61,11 +60,12 @@ namespace DEFLATE_custom_chart.Hooks
             // 로그 전용 훅: 로그 레벨이 모자라면 패치하지 않는다.
             public static bool Prepare() => ModLog.Prepare(ModLog.DebugLevel);
 
-            public static void Postfix(MainTrackList __instance, int trackIndex)
+            public static void Postfix(MainTrackList __instance, object[] __args)
             {
                 try
                 {
                     if (__instance == null || __instance.tracks == null) return;
+                    int trackIndex = HookArgs.FirstInt(__args, -1);
                     if (trackIndex >= 0 && trackIndex < __instance.tracks.Length)
                     {
                         var track = __instance.tracks[trackIndex];
@@ -118,7 +118,8 @@ namespace DEFLATE_custom_chart.Hooks
             // 로그 전용 훅: 로그 레벨이 모자라면 패치하지 않는다.
             public static bool Prepare() => ModLog.Prepare(ModLog.DebugLevel);
 
-            public static void Postfix(TrackListBlockCtrl __instance, PointerEventData eventData)
+            // 원본 인자(PointerEventData)는 쓰지 않으므로 선언하지 않는다(이름이 바뀌어도 패치 실패 없음).
+            public static void Postfix(TrackListBlockCtrl __instance)
             {
                 try
                 {
@@ -139,11 +140,11 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prepare() => ModLog.Prepare(ModLog.Detail) && Il2CppReflectionHelper.HasPatchTarget(typeof(MainTrackList), "GoToScene");
 
-            public static void Prefix(string SceneName)
+            public static void Prefix(object[] __args)
             {
                 try
                 {
-                    ModLog.Verbose($"[씬 전환 탐지] MainTrackList.GoToScene('{SceneName}') | 커스텀 곡 활성: {HwaAssetManager.IsTargetTrackActive}");
+                    ModLog.Verbose($"[씬 전환 탐지] MainTrackList.GoToScene('{HookArgs.First<string>(__args)}') | 커스텀 곡 활성: {HwaAssetManager.IsTargetTrackActive}");
                 }
                 catch (Exception ex)
                 {

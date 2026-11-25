@@ -146,11 +146,11 @@ namespace DEFLATE_custom_chart.Hooks
             // 로그 전용 훅: 로그 레벨이 모자라면 패치하지 않는다.
             public static bool Prepare() => ModLog.Prepare(ModLog.DebugLevel);
 
-            public static void Prefix(string sceneName)
+            public static void Prefix(object[] __args)
             {
                 try
                 {
-                    ModLog.Debug($"[씬 전환 탐지] target scene -> '{sceneName}'");
+                    ModLog.Debug($"[씬 전환 탐지] target scene -> '{HookArgs.First<string>(__args)}'");
                 }
                 catch (Exception ex)
                 {

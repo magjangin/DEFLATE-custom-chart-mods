@@ -25,7 +25,8 @@ namespace DEFLATE_custom_chart.Hooks
             private static string _lastCoverName;
             private static string _lastTitle;
 
-            public static void Postfix(HUDControl __instance, bool forceUpdate)
+            // 원본 인자(bool forceUpdate)는 쓰지 않으므로 선언하지 않는다.
+            public static void Postfix(HUDControl __instance)
             {
                 try
                 {
