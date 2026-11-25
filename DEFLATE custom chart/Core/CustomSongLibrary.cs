@@ -73,6 +73,7 @@ namespace DEFLATE_custom_chart.Core
 
         public static void Scan()
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             // 재스캔(Rescan) 시 기존 로드된 Texture2D / Sprite / AudioClip 네이티브 리소스 누수 방지
             foreach (var oldEntry in Entries)
             {
@@ -150,7 +151,7 @@ namespace DEFLATE_custom_chart.Core
                 }
             }
 
-            LogCatalog();
+            LogCatalog(sw.ElapsedMilliseconds);
         }
 
         private static void AddScannedEntry(CustomSongEntry entry)
@@ -184,10 +185,11 @@ namespace DEFLATE_custom_chart.Core
             }
         }
 
-        private static void LogCatalog()
+        private static void LogCatalog(long elapsedMs)
         {
             ModLog.Verbose("==================================================");
-            MelonLogger.Msg($"[커스텀 곡 라이브러리] hwa/ 스캔 완료 — 총 {Entries.Count}곡");
+            // 스캔(폴더 분류 + info.txt + BMS 파싱)은 게임 시작 중 메인 스레드에서 돈다. 곡이 많아 느려지면 이 시간으로 판단한다.
+            MelonLogger.Msg($"[커스텀 곡 라이브러리] hwa/ 스캔 완료 — 총 {Entries.Count}곡 ({elapsedMs}ms)");
 
             foreach (var group in Entries.GroupBy(e => string.IsNullOrEmpty(e.Meta.Album) ? "(앨범 없음)" : e.Meta.Album))
             {

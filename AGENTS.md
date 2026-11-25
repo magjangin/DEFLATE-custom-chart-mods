@@ -12,6 +12,7 @@
 > **v1.1.3 (2026-11-24, 4차 감사):** CP949 BMS 오판독·`03` 채널 폭·원곡 제목 충돌 수정, 오프라인 단위 테스트 37개 + GitHub Actions, 훅 대상 대조 스크립트. 빌드 경고 0·테스트 37/37. §12 참고.
 > **v1.1.4 (2026-11-24, 실기 검증):** 인게임 스모크 `PASS`(BMS 552/552·9레인, 라인바 296, 커스텀 BGM 재생 진행, BGA, 컨텍스트) + 사용자 경로(로딩 씬) 플레이로 곡 끝까지·결과 화면까지 확인 → v1.1.2·v1.1.3 변경 실기 확인 완료. 스모크 테스트 집계·안내 수정. §13 참고.
 > **v1.1.5 (2026-11-25, 5차 감사):** 깨진 직접 접근 기억(업데이트 후 예외 반복 제거)·이름 바인딩 훅 정리(`__args` 10개 추가, 미사용 파라미터 삭제)·일반 플레이 BMS 주입 누락 경고·레인 비움 엣지 버그·곡 목록 템플릿 탐색 병목. 빌드 경고 0·테스트 37/37·훅 대조 0건·게임 시작 로그 `성공 45 / 건너뜀 8 / 실패 0`. **인게임 스모크는 사용자가 "나중에"를 골라 미실행.** §14 참고.
+> **v1.1.6 (2026-11-25, 5차 감사 2부):** info.txt 파서 분리(`SongInfoParser`)·`subtitle`/`album artist` 덮어쓰기 버그 수정, config.txt 오타 키 경고, 커버 FullRect·대형 커버 경고, 스캔/주입 시간 로그, 단위 테스트 53개. 훅 변경 없음. 빌드 경고 0·테스트 53/53. **인게임 미확인(v1.1.5와 함께 다음 실기).** §14 참고.
 > **2026-11-23 전수 감사/리팩토링:** §9 참고. 컴파일 경고 0 · 오류 0, `[SafePatcher] 성공 45 / 건너뜀 8(로그 레벨 LogLevel=1 기준) / 실패 0`, 스모크 테스트 `PASS`(BMS 552/552, 라인바 296, 커스텀 BGM·BGA, 컨텍스트 인게임).
 > 미확인: 롱노트(테스트 차트에 홀드 0개), 드롭 레인(테스트 차트 14번 채널 0개), 킥/스네어 키음 노트(테스트 차트에 없음).
 
@@ -117,7 +118,7 @@
 - **숙주 에셋 원복:** 커스텀 곡 플레이 중 바꾼 숙주 `Koreography.SourceClip`은 곡 목록 진입 시 `InGameRhythmHooks.RestoreHostKoreography()`로 되돌립니다(공유 Addressables 에셋이라 그대로 두면 같은 세션의 원곡 플레이에 영향).
 
 ### ⑨ 게임 없이 하는 검증: 단위 테스트 & 훅 대상 대조 (v1.1.3~)
-- **단위 테스트 (`tests/DEFLATE.CustomChart.Tests`, xUnit, net8.0):** 모드 소스 중 게임 타입을 참조하지 않는 파일(`Core/Bms/*.cs`, `Core/TextDecoder.cs`)만 **링크**해서 테스트합니다. `ModLog`는 MelonLoader에 의존하므로 `TestStubs.cs`의 스텁으로 대체합니다. → 링크된 파일에 게임/Unity/MelonLoader 타입을 쓰면 테스트 프로젝트가 깨집니다(그런 코드는 다른 파일로 분리).
+- **단위 테스트 (`tests/DEFLATE.CustomChart.Tests`, xUnit, net8.0, 53개):** 모드 소스 중 게임 타입을 참조하지 않는 파일(`Core/Bms/*.cs`, `Core/TextDecoder.cs`, `Core/SongInfoParser.cs`)만 **링크**해서 테스트합니다. 게임 파일 안의 순수 로직은 이렇게 별도 파일로 떼어 내 테스트에 링크하는 것이 원칙입니다(v1.1.6 info.txt 파서가 그 예). `ModLog`는 MelonLoader에 의존하므로 `TestStubs.cs`의 스텁으로 대체합니다. → 링크된 파일에 게임/Unity/MelonLoader 타입을 쓰면 테스트 프로젝트가 깨집니다(그런 코드는 다른 파일로 분리).
   - 실행: `dotnet test tests/DEFLATE.CustomChart.Tests`. GitHub Actions(`.github/workflows/offline-tests.yml`)가 main 푸시·PR마다, `tools/release.ps1`이 빌드 전에 실행합니다.
   - 주의: BMS 채널 줄은 `#MMMCC` — `#00116`은 **1마디** 16채널입니다(테스트 작성 때 0마디로 착각해 8개가 실패했음).
 - **훅 대상 대조 (`tools/check_hook_targets.py`):** 새 `Decompiled/` 덤프와 `Hooks/*.cs`의 `[HarmonyPatch]`를 대조해 `MISSING`(대상 삭제·개명)·`OVERLOADED`(모호성)·`PARAM`(이름 바인딩 파라미터 개명)을 게임 실행 전에 보고합니다. `object[] __args` 훅은 이름 검사를 건너뜁니다. 2026-11-24 덤프 기준 문제 0건, 파라미터명 변이 주입으로 `PARAM` 검출 확인.
@@ -214,6 +215,9 @@
 20. **인코딩 판별을 '예외 없이 디코딩되면 정답'으로 가정 (CP949 BMS가 Shift-JIS로 오판):**
    - 한글 완성형 2350자 중 1575자(약 2/3)가 Shift-JIS에서 반각 가타카나 두 글자로 **유효하게** 읽힙니다(예: `화영왕` → `ﾈｭｿｵｿﾕ`). 한글이 적은 CP949 BMS는 BMS 우선순위(932 먼저)에서 그대로 Shift-JIS로 판별돼 키음 이름이 깨졌습니다.
    - **해결:** `TextDecoder.LooksLikeMisdecodedKorean` — 932로 읽은 비ASCII의 절반 넘게 반각 가타카나면 949로 다시 읽음. 반대 방향(일본어 SJIS를 CP949로 오판)은 info.txt/config.txt 우선순위에서만 생길 수 있고 아직 처리하지 않음.
+21. **사용자 입력 파일의 키를 `Contains` 한 줄로 판정 (info.txt 덮어쓰기):**
+   - `key.Contains("title")`은 `subtitle`을, `key.Contains("artist")`는 `album artist`를 함께 잡아, 뒤에 나온 줄이 제목·아티스트를 조용히 덮어썼습니다(v1.1.5까지).
+   - **해결:** 더 구체적인 키(부제, 앨범 아티스트, BGA 제작자)를 먼저 판정하는 `SongInfoParser`(v1.1.6) + 단위 테스트. 키를 추가할 때는 기존 키와 부분 문자열이 겹치는지 테스트로 확인하세요.
 
 ---
 
@@ -265,6 +269,7 @@
 | 이전 | 노트 이중 생성·타이밍·로그 정리 | BMS 노트 1개=게임 레인 1개(채널=열, 키음=하이햇/킥·스네어, 킥·스네어 실측 열 배치), 노트 샘플 위치를 커스텀 음악 주파수 기준으로 계산(48kHz 드리프트 수정)+`[BMS 타이밍]` 안내, 숙주 `SourceClip` 원복, `LogLevel`(0/1/2)과 로그 전용 훅 Prepare 생략, 곡당 한 줄 `[커스텀 차트]` 요약, `ChartDiagnostics`(레인 배치·원곡 동시 출현), 스모크 테스트에 중복·누락 검사 |
 | `b1483d1` | 전수 감사·정리 | §9 참조: 무동작 `LoadVideoClip` 훅·미사용 코드(`CustomAlbumWrapper` 등) 삭제, 활성 곡 판정 중복 통합, 죽은 디버그 분기 제거, NoteSway 감쇠를 클립 주파수 기준으로 통일, 스모크 PASS |
 | v1.1.0 | 첫 릴리즈·인코딩·업데이트 감지 | `TextDecoder`(Shift-JIS/CP949 BMS·info.txt·config.txt), `GameCompat` Steam 업데이트 대기 경고(`TargetBuildID`/`StateFlags`)·자동 업데이트 안내(LogLevel 1), 지문 기록을 설정 로드 뒤로 이동, 버전 단일 출처 `DeflateMod.Version`, `CHANGELOG.md`, `tools/release.ps1` |
+| v1.1.6 | 5차 감사 2부·입력 파일 | `SongInfoParser` 분리·`subtitle`/`album artist` 덮어쓰기 수정·키 확장, config.txt 오타 키 경고(`SuggestKey`), 커버 `SpriteMeshType.FullRect`·대형 커버 경고, 스캔/주입 ms 로그, 테스트 53개, README info.txt 형식. §14 참고 |
 | v1.1.5 | 5차 감사·업데이트 내성 | 깨진 직접 접근 기억(⑩), `__args` 훅 10개 추가·미사용 파라미터 삭제(⑧), 일반 플레이 주입 누락 경고(⑪), Koreography 없을 때 레인 비움 수정, 템플릿 탐색 시 원곡 전체 래핑 제거. §14 참고 |
 | v1.1.4 | 실기 검증·스모크 수정 | v1.1.2·v1.1.3 인게임 확인(스모크 PASS, 사용자 경로 끝까지·결과 화면), `SmokeTest` 곡 단위 집계 초기화(`OnGameplayStarting`)·타이틀 로그인 메뉴 안내·대기 180초. §13 참고 |
 | v1.1.3 | 4차 감사·테스트 기반 | CP949 BMS 오판독(`LooksLikeMisdecodedKorean`)·3자리 ID `03` 채널 폭·원곡 제목 충돌(`SetOriginalTitleCollisions`) 수정, 한글 킥·스네어 키음, 단위 테스트 37개+CI, `check_hook_targets.py`, 릴리즈 스크립트 테스트 관문. §12 참고 |
@@ -446,5 +451,13 @@ Start-Process "steam://rungameid/3921360"
 - `TextDecoder.LastEncodingName` 정적 상태: 스캔이 메인 스레드 단일 경로라 문제없음. 배경 스레드 스캔을 도입하면 반환값으로 바꿀 것.
 - §10~§12의 보류 항목(커버 동기 디코딩, `DiffCtrl` 별 재생성, 전역 `VideoPlayer` 범위, 난이도별 BMS, BMS 없는 곡 테스트 롱노트, `BlockSave` 범위)은 그대로.
 
-**미확인 (다음 실기 때 할 것):** `SmokeTest=1` PASS, 특히 `__args`로 바꾼 영상 훅(곡 목록 BGA 프리뷰·인게임 `PlayVideoWithOffset`·PV 메뉴)과 일반 플레이에서 `[커스텀 차트]` 경고가 **뜨지 않는지**(오탐 없음). 확인되면 이 줄과 상단 v1.1.5 요약의 "미실행"을 지울 것.
+**2부 (v1.1.6, 같은 날)** — 사용자 지시로 실기 없이 계속. 훅은 건드리지 않고 입력 파일·에셋 로딩·테스트만.
+- `Core/SongInfoParser.cs`(순수 .NET, 테스트 링크): `CustomSongEntry.ParseInfoTxt`의 `Contains` 판정이 `subtitle`→제목, `album artist`→아티스트로 덮어쓰던 버그 수정. 더 구체적인 키를 먼저 보고, 키 확장(부제·작곡·채보·ez/nm/hd·이지/노멀/하드), 난이도 값 `★12` 허용.
+- `ModConfig.WarnUnknownKeys`/`SuggestKey`: 모르는 키를 편집 거리 2 이내 제안과 함께 1회 경고(이전엔 조용히 무시).
+- `CustomSongEntry.LoadCoverSprite`: `Sprite.Create(..., SpriteMeshType.FullRect)` — 기본 Tight는 생성 때 알파를 훑어 메시를 만든다(큰 커버에서 곡마다 비용). 2048² 초과 커버 경고. **`LoadImage(..., markNonReadable: true)`는 넣지 않음**: CPU 사본을 버리면 메모리는 반이 되지만, 게임이 `NowTrackCover`에서 픽셀을 읽는지(색 추출 등) 확인하지 못했다 → 실기 때 `GetPixels`/"not readable" 오류가 없는지 본 뒤 검토.
+- `CustomSongLibrary.Scan`·곡 목록 주입에 소요 ms 로그(§10 보류 항목 "커버 동기 디코딩"을 결정할 측정치).
+- 테스트 +16개: info.txt 7종, 중첩 `#IF`·BGM/BGA 채널 무시·길이 0 마디 라인바·짝 없는 홀드·CRLF, UTF-16 BOM·`ReadAllLines`.
+- 다음 후보(보류): 핵심 훅에 `TargetMethod()`로 오버로드 추가에 견디는 대상 선택 — 속성과 `TargetMethod`가 함께 있을 때 HarmonyX 동작과 `check_hook_targets.py` 대응을 실기로 확인해야 해서 보류.
+
+**미확인 (다음 실기 때 할 것):** `SmokeTest=1` PASS, 특히 `__args`로 바꾼 영상 훅(곡 목록 BGA 프리뷰·인게임 `PlayVideoWithOffset`·PV 메뉴)과 일반 플레이에서 `[커스텀 차트]` 경고가 **뜨지 않는지**(오탐 없음). v1.1.6에서는 info.txt 해석(곡 목록 제목·아티스트·별 개수가 예전과 같은지), 커버 표시(곡 목록·로딩·인게임·결과 화면), 시작 로그의 스캔/주입 ms도 함께 본다. 확인되면 이 줄과 상단 v1.1.5·v1.1.6 요약의 "미실행/미확인"을 지울 것.
 

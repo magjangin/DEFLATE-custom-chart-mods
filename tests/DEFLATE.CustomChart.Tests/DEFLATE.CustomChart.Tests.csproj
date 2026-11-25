@@ -2,7 +2,7 @@
   <!--
     게임 DLL 없이 돌아가는 오프라인 단위 테스트 (CI에서도 실행).
     모드 소스 중 게임 타입을 참조하지 않는 순수 .NET 파일만 링크합니다:
-    BMS 파서/데이터/레인 매퍼, 인코딩 판별. ModLog는 MelonLoader에 의존하므로 TestStubs.cs의 스텁으로 대체합니다.
+    BMS 파서/데이터/레인 매퍼, 인코딩 판별, info.txt 파서. ModLog는 MelonLoader에 의존하므로 TestStubs.cs의 스텁으로 대체합니다.
     여기 링크한 파일에 게임/Unity/MelonLoader 타입을 쓰면 이 프로젝트가 빌드되지 않으니, 그런 코드는 다른 파일로 분리하세요.
   -->
   <PropertyGroup>
@@ -16,6 +16,7 @@
   <ItemGroup>
     <Compile Include="..\..\DEFLATE custom chart\Core\Bms\*.cs" Link="Linked\Bms\%(Filename)%(Extension)" />
     <Compile Include="..\..\DEFLATE custom chart\Core\TextDecoder.cs" Link="Linked\TextDecoder.cs" />
+    <Compile Include="..\..\DEFLATE custom chart\Core\SongInfoParser.cs" Link="Linked\SongInfoParser.cs" />
   </ItemGroup>
 
   <ItemGroup>
