@@ -77,40 +77,45 @@ namespace DEFLATE_custom_chart.Hooks
                     }
 
                     // 2) 복제 원본이 될 트랙 탐색 (1순위: WindShifter, 2순위: 첫 번째 유효 원곡 블록 폴백)
+                    //    탐색 중에는 판정에 필요한 멤버(제목·ID·차트 키)만 읽고, 고른 블록 하나만 전체 래핑한다.
+                    //    (예전에는 원곡마다 CustomTrackWrapper로 멤버 18개를 읽어, 곡 목록이 만들어질 때마다 수백~수천 번의 IL2CPP 읽기가 생겼다)
                     MainTrackListBlock sourceBlock = null;
-                    CustomTrackWrapper sourceWrapper = null;
                     MainTrackListBlock firstValidBlock = null;
-                    CustomTrackWrapper firstValidWrapper = null;
 
                     foreach (var track in __instance.tracks)
                     {
                         if (track == null || track.gameObject == null) continue;
                         if (track.gameObject.name.Contains(CloneNameMarker)) continue;
 
-                        var tempWrapper = new CustomTrackWrapper(track);
-                        if (firstValidBlock == null && !string.IsNullOrEmpty(tempWrapper.NM_KoreKey))
+                        var block = track;
+                        if (firstValidBlock == null)
                         {
-                            firstValidBlock = track;
-                            firstValidWrapper = tempWrapper;
+                            string nmKey = Il2CppReflectionHelper.GetValueResilient(block, () => block.NM_TrackKore_Key, "NM_TrackKore_Key", MemberFallbacks.TrackBlock.NmKoreKey, string.Empty);
+                            if (!string.IsNullOrEmpty(nmKey)) firstValidBlock = track;
                         }
 
-                        bool titleMatch = !string.IsNullOrEmpty(tempWrapper.Title) &&
-                            tempWrapper.Title.IndexOf(TargetKeyword, StringComparison.OrdinalIgnoreCase) >= 0;
-                        bool idMatch = !string.IsNullOrEmpty(tempWrapper.UniqueID) &&
-                            tempWrapper.UniqueID.IndexOf(TargetKeyword, StringComparison.OrdinalIgnoreCase) >= 0;
+                        string title = Il2CppReflectionHelper.GetValueResilient(block, () => block.TrackTitle, "TrackTitle", MemberFallbacks.TrackBlock.Title, string.Empty);
+                        string uniqueId = Il2CppReflectionHelper.GetValueResilient(block, () => block.uniqueID, "uniqueID", MemberFallbacks.TrackBlock.UniqueId, string.Empty);
+                        bool titleMatch = !string.IsNullOrEmpty(title) && title.IndexOf(TargetKeyword, StringComparison.OrdinalIgnoreCase) >= 0;
+                        bool idMatch = !string.IsNullOrEmpty(uniqueId) && uniqueId.IndexOf(TargetKeyword, StringComparison.OrdinalIgnoreCase) >= 0;
 
                         if (titleMatch || idMatch)
                         {
                             sourceBlock = track;
-                            sourceWrapper = tempWrapper;
                             break;
                         }
                     }
 
+                    bool usedFallback = false;
                     if (sourceBlock == null && firstValidBlock != null)
                     {
                         sourceBlock = firstValidBlock;
-                        sourceWrapper = firstValidWrapper;
+                        usedFallback = true;
+                    }
+
+                    CustomTrackWrapper sourceWrapper = sourceBlock != null ? new CustomTrackWrapper(sourceBlock) : null;
+                    if (usedFallback && sourceWrapper != null)
+                    {
                         MelonLogger.Warning($"[곡 목록 주입] '{TargetKeyword}' 트랙을 찾지 못해 첫 번째 유효 원곡 '{sourceWrapper.Title}'(ID: {sourceWrapper.UniqueID})을 복제 템플릿으로 폴백 사용합니다.");
                     }
 

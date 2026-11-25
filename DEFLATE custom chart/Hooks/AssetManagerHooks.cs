@@ -98,11 +98,13 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(FavControl), "SafeLoadAndPlayAudio");
 
-            public static bool Prefix(string addressKey, AudioSource audioSource)
+            // 파라미터 이름 비의존: (string addressKey, AudioSource audioSource) 중 AudioSource만 쓴다.
+            public static bool Prefix(object[] __args)
             {
                 try
                 {
                     if (!HwaAssetManager.IsInSongSelectContext || !HwaAssetManager.IsTargetTrackActive) return true;
+                    var audioSource = HookArgs.First<AudioSource>(__args);
                     if (audioSource == null || string.IsNullOrEmpty(HwaAssetManager.BgmFilePath)) return true;
 
                     var requestedEntry = HwaAssetManager.Active;
@@ -179,11 +181,12 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(Bank_PV_Ctrl), nameof(Bank_PV_Ctrl.PlayPVVideo))]
         public static class Bank_PV_Ctrl_PlayPVVideo_Patch
         {
-            public static bool Prefix(Bank_PV_Ctrl __instance, ref string pvKey)
+            // pvKey는 로그에만 쓰므로 이름 대신 __args로 읽는다(ref 선언 불필요).
+            public static bool Prefix(Bank_PV_Ctrl __instance, object[] __args)
             {
                 try
                 {
-                    ModLog.Verbose($"[PV 메뉴 BGA 재생] pvKey: '{pvKey}'");
+                    ModLog.Verbose($"[PV 메뉴 BGA 재생] pvKey: '{HookArgs.First<string>(__args)}'");
 
                     if (HwaAssetManager.IsTargetTrackActive && __instance != null && __instance.videoPlayer != null)
                     {
@@ -206,11 +209,12 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(Bank_PV_Ctrl), "LoadVideoAndAudio");
 
-            public static bool Prefix(Bank_PV_Ctrl __instance, ref string videoKey, ref string audioKey)
+            // (string videoKey, string audioKey, MainTrackListBlock track) — 키는 로그에만 쓰므로 __args로 읽는다.
+            public static bool Prefix(Bank_PV_Ctrl __instance, object[] __args)
             {
                 try
                 {
-                    ModLog.Verbose($"[PV 메뉴 미디어 로드] videoKey: '{videoKey}', audioKey: '{audioKey}'");
+                    ModLog.Verbose($"[PV 메뉴 미디어 로드] 인자: {HookArgs.DescribeStrings(__args)}");
 
                     if (HwaAssetManager.IsTargetTrackActive && __instance != null && __instance.videoPlayer != null)
                     {
@@ -232,11 +236,14 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(SimpleRandomVideo), nameof(SimpleRandomVideo.LoadVideoSmart))]
         public static class SimpleRandomVideo_LoadVideoSmart_Patch
         {
-            public static bool Prefix(string pvKey, VideoPlayer videoPlayer, float pvOffset, bool autoPlay)
+            // (string pvKey, VideoPlayer videoPlayer, float pvOffset, bool autoPlay) — 같은 타입 인자가 하나씩이라 타입으로 고른다.
+            public static bool Prefix(object[] __args)
             {
                 try
                 {
-                    ModLog.Verbose($"[★ SimpleRandomVideo.LoadVideoSmart 호출 ★] pvKey: '{pvKey}' | videoPlayer: '{(videoPlayer != null ? videoPlayer.name : "null")}'");
+                    var videoPlayer = HookArgs.First<VideoPlayer>(__args);
+                    bool autoPlay = HookArgs.FirstValue(__args, true);
+                    ModLog.Verbose($"[★ SimpleRandomVideo.LoadVideoSmart 호출 ★] pvKey: '{HookArgs.First<string>(__args)}' | videoPlayer: '{(videoPlayer != null ? videoPlayer.name : "null")}'");
 
                     if (HwaAssetManager.IsTargetTrackActive && videoPlayer != null && HwaAssetManager.ApplyCustomBga(videoPlayer, autoPlay))
                     {
@@ -254,11 +261,13 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(SimpleRandomVideo), nameof(SimpleRandomVideo.LoadVideo))]
         public static class SimpleRandomVideo_LoadVideo_Patch
         {
-            public static bool Prefix(string addressKey, VideoPlayer videoPlayer, float pvOffset, bool autoPlay)
+            public static bool Prefix(object[] __args)
             {
                 try
                 {
-                    ModLog.Verbose($"[★ SimpleRandomVideo.LoadVideo 호출 ★] addressKey: '{addressKey}' | videoPlayer: '{(videoPlayer != null ? videoPlayer.name : "null")}'");
+                    var videoPlayer = HookArgs.First<VideoPlayer>(__args);
+                    bool autoPlay = HookArgs.FirstValue(__args, true);
+                    ModLog.Verbose($"[★ SimpleRandomVideo.LoadVideo 호출 ★] addressKey: '{HookArgs.First<string>(__args)}' | videoPlayer: '{(videoPlayer != null ? videoPlayer.name : "null")}'");
 
                     if (HwaAssetManager.IsTargetTrackActive && videoPlayer != null && HwaAssetManager.ApplyCustomBga(videoPlayer, autoPlay))
                     {

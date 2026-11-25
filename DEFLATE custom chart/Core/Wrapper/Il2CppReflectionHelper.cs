@@ -20,12 +20,42 @@ namespace DEFLATE_custom_chart.Core.Wrapper
         private static readonly ConcurrentDictionary<(Type, string), MethodInfo> MethodCache = new ConcurrentDictionary<(Type, string), MethodInfo>();
         private static readonly ConcurrentDictionary<string, byte> LoggedWarnings = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
 
+        /// <summary>
+        /// 게임 업데이트로 <b>구조적으로</b> 깨진 직접 접근(람다) 목록. (대상 런타임 타입, 멤버 이름, 'g'/'s'/'i' = 읽기/쓰기/호출)
+        ///
+        /// 직접 접근 람다는 참조 멤버가 사라지면 호출될 때마다 JIT 단계에서 <see cref="MissingMemberException"/>/<see cref="TypeLoadException"/>을
+        /// 다시 던집니다(JIT 실패는 캐시되지 않음). 예전에는 업데이트 후 곡 목록 생성(원곡 약 116곡 × 래퍼 멤버 18개)마다 수천 번의 예외가
+        /// 나며 화면이 멈칫할 수 있었습니다. 한 번 구조적으로 실패한 직접 접근은 기억해 두고 곧장 백업 리플렉션으로 갑니다.
+        /// NullReference·Il2Cpp 객체 수거 같은 <b>일시적</b> 실패는 기록하지 않습니다(다음 호출에서 다시 직접 접근).
+        /// </summary>
+        private static readonly ConcurrentDictionary<(Type, string, char), byte> BrokenDirectAccess = new ConcurrentDictionary<(Type, string, char), byte>();
+
         private static void WarnOnce(string warnKey, string message)
         {
             if (LoggedWarnings.TryAdd(warnKey, 0))
             {
                 MelonLogger.Warning(message);
             }
+        }
+
+        /// <summary>업데이트로 멤버·타입이 사라져 생기는 예외인지 (재시도해도 같은 결과).</summary>
+        internal static bool IsStructuralFailure(Exception ex)
+        {
+            return ex is MissingMemberException || ex is TypeLoadException || ex is BadImageFormatException;
+        }
+
+        private static bool IsDirectAccessBroken(object target, string memberName, char kind)
+        {
+            if (BrokenDirectAccess.IsEmpty || string.IsNullOrEmpty(memberName)) return false;
+            return BrokenDirectAccess.ContainsKey((target.GetType(), memberName, kind));
+        }
+
+        /// <summary>구조적 실패면 기록하고 경고 문구에 덧붙일 안내를, 아니면 빈 문자열을 돌려줍니다.</summary>
+        private static string RecordDirectAccessFailure(object target, string memberName, char kind, Exception ex)
+        {
+            if (!IsStructuralFailure(ex) || string.IsNullOrEmpty(memberName)) return string.Empty;
+            BrokenDirectAccess.TryAdd((target.GetType(), memberName, kind), 0);
+            return " 게임 업데이트로 멤버가 사라진 것으로 보고, 이번 실행 동안 이 멤버는 직접 접근을 생략합니다(MemberFallbacks.cs에 새 이름 추가 권장).";
         }
 
         /// <summary>
@@ -96,7 +126,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
             if (target == null) return defaultValue;
 
             // 1. 직접 접근 (Fast Path)
-            if (directGetter != null)
+            if (directGetter != null && !IsDirectAccessBroken(target, directPropertyName, 'g'))
             {
                 try
                 {
@@ -105,8 +135,9 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 }
                 catch (Exception ex)
                 {
+                    string note = RecordDirectAccessFailure(target, directPropertyName, 'g', ex);
                     WarnOnce($"get:{target.GetType().FullName}:{directPropertyName}",
-                        $"[GetValueResilient] 직접 접근 '{directPropertyName}' 실패 ({ex.GetType().Name}), 백업 리플렉션을 시도합니다.");
+                        $"[GetValueResilient] 직접 접근 '{directPropertyName}' 실패 ({ex.GetType().Name}), 백업 리플렉션을 시도합니다.{note}");
                 }
             }
 
@@ -139,7 +170,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
             if (target == null) return false;
 
             // 1. 직접 접근 (Fast Path)
-            if (directSetter != null)
+            if (directSetter != null && !IsDirectAccessBroken(target, directPropertyName, 's'))
             {
                 try
                 {
@@ -148,8 +179,9 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 }
                 catch (Exception ex)
                 {
+                    string note = RecordDirectAccessFailure(target, directPropertyName, 's', ex);
                     WarnOnce($"set:{target.GetType().FullName}:{directPropertyName}",
-                        $"[SetValueResilient] 직접 접근 '{directPropertyName}' 주입 실패 ({ex.GetType().Name}), 백업 리플렉션을 시도합니다.");
+                        $"[SetValueResilient] 직접 접근 '{directPropertyName}' 주입 실패 ({ex.GetType().Name}), 백업 리플렉션을 시도합니다.{note}");
                 }
             }
 
@@ -183,7 +215,7 @@ namespace DEFLATE_custom_chart.Core.Wrapper
         {
             if (target == null) return false;
 
-            if (directCall != null)
+            if (directCall != null && !IsDirectAccessBroken(target, methodName, 'i'))
             {
                 try
                 {
@@ -192,8 +224,9 @@ namespace DEFLATE_custom_chart.Core.Wrapper
                 }
                 catch (Exception ex)
                 {
+                    string note = RecordDirectAccessFailure(target, methodName, 'i', ex);
                     WarnOnce($"invoke:{target.GetType().FullName}:{methodName}",
-                        $"[InvokeMethodResilient] 직접 호출 '{methodName}' 실패 ({ex.GetType().Name}), 백업 리플렉션을 시도합니다.");
+                        $"[InvokeMethodResilient] 직접 호출 '{methodName}' 실패 ({ex.GetType().Name}), 백업 리플렉션을 시도합니다.{note}");
                 }
             }
 

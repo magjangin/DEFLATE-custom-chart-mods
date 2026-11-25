@@ -11,6 +11,7 @@
 > **v1.1.2 (2026-11-23, 3차 감사):** 파라미터 이름 비의존 훅·지연 로그 보간·BGM 요청 수명·MelonLoader 지문. **빌드 경고 0, 인게임 스모크 PASS 미확인**(게임 창 백그라운드로 실행해 인트로에서 멈춤 — §5-18). §11 참고.
 > **v1.1.3 (2026-11-24, 4차 감사):** CP949 BMS 오판독·`03` 채널 폭·원곡 제목 충돌 수정, 오프라인 단위 테스트 37개 + GitHub Actions, 훅 대상 대조 스크립트. 빌드 경고 0·테스트 37/37. §12 참고.
 > **v1.1.4 (2026-11-24, 실기 검증):** 인게임 스모크 `PASS`(BMS 552/552·9레인, 라인바 296, 커스텀 BGM 재생 진행, BGA, 컨텍스트) + 사용자 경로(로딩 씬) 플레이로 곡 끝까지·결과 화면까지 확인 → v1.1.2·v1.1.3 변경 실기 확인 완료. 스모크 테스트 집계·안내 수정. §13 참고.
+> **v1.1.5 (2026-11-25, 5차 감사):** 깨진 직접 접근 기억(업데이트 후 예외 반복 제거)·이름 바인딩 훅 정리(`__args` 10개 추가, 미사용 파라미터 삭제)·일반 플레이 BMS 주입 누락 경고·레인 비움 엣지 버그·곡 목록 템플릿 탐색 병목. 빌드 경고 0·테스트 37/37·훅 대조 0건·게임 시작 로그 `성공 45 / 건너뜀 8 / 실패 0`. **인게임 스모크는 사용자가 "나중에"를 골라 미실행.** §14 참고.
 > **2026-11-23 전수 감사/리팩토링:** §9 참고. 컴파일 경고 0 · 오류 0, `[SafePatcher] 성공 45 / 건너뜀 8(로그 레벨 LogLevel=1 기준) / 실패 0`, 스모크 테스트 `PASS`(BMS 552/552, 라인바 296, 커스텀 BGM·BGA, 컨텍스트 인게임).
 > 미확인: 롱노트(테스트 차트에 홀드 0개), 드롭 레인(테스트 차트 14번 채널 0개), 킥/스네어 키음 노트(테스트 차트에 없음).
 
@@ -91,8 +92,10 @@
 | ⑦ 핫패스 서킷 브레이커 | `NoteObject_UpdateNotePosition_Patch` | 매 프레임·노트마다 호출되는 훅이 깨져 예외 비용으로 프레임이 무너지는 상황 | `[NoteSway]` |
 | ⑧ 파라미터 이름 비의존 | `Core/Wrapper/HookArgs.cs` (`object[] __args` + 타입으로 인자 선택) | 게임 메서드의 파라미터 개명(`trackID`→`trackId`)·순서 변경으로 이름 바인딩 훅이 패치 단계에서 통째로 빠지는 상황 | `[SafePatcher]` |
 | ⑨ 로더 지문 | `GameCompat.CheckMelonLoaderVersion` | 게임은 그대로인데 MelonLoader를 올려 Il2CppAssemblies 생성 결과가 바뀐 상황 | `[GameCompat]` |
+| ⑩ 깨진 직접 접근 기억 | `Il2CppReflectionHelper.BrokenDirectAccess` | ⑤의 직접 접근 람다가 업데이트로 사라진 멤버를 참조해 **호출마다** JIT 예외를 다시 던지는 비용(곡 목록 생성 시 원곡 × 멤버 수) | `[Get/Set/InvokeMethodResilient] … 직접 접근을 생략합니다` |
+| ⑪ 주입 누락 경고 | `InGameRhythmHooks.WarnIfInjectionIncomplete` | 훅은 적용됐지만(실패 0) 게임이 더는 부르지 않아 **조용히 원곡 차트로 플레이**되는 상황을 스모크 테스트 없이 일반 플레이에서 감지 | `[커스텀 차트] … 호출되지 않았습니다` / `주입된 노트 N개 ≠ BMS` |
 
-- **⑧ 적용 범위와 원칙:** BMS 노트·라인바 주입 6개(`LoadKoreographyEvents`, `ReplaceLane…`, `LoadLineBarEvents`, `ReplaceLineBar…`), `TrackAssetManager.LoadAudioClip`/`LoadVideoURL`, 인게임 `RhythmGameController.LoadVideo`. 인자를 **읽기만** 하고 곡당 수 회 불리는 훅에만 씁니다. `ref` 인자를 **바꾸는** 훅(`FavControl.PlayAudioWhenReady`의 `ref clip`, `BindAudioClipWhenReady`)과 매 프레임 훅은 이름 바인딩을 유지합니다(`__args`는 호출마다 배열 할당·박싱). 같은 타입 인자가 둘 이상인 메서드에는 쓰지 마세요(첫 번째를 고름).
+- **⑧ 적용 범위와 원칙:** BMS 노트·라인바 주입 6개(`LoadKoreographyEvents`, `ReplaceLane…`, `LoadLineBarEvents`, `ReplaceLineBar…`), `TrackAssetManager.LoadAudioClip`/`LoadVideoURL`, 인게임 `RhythmGameController.LoadVideo`, v1.1.5부터 `PlayVideoWithOffset`·`OnVideoStarted`·`FavControl.SafeLoadAndPlayAudio`·`Bank_PV_Ctrl.PlayPVVideo`/`LoadVideoAndAudio`·`SimpleRandomVideo.LoadVideoSmart`/`LoadVideo`·`MainTrackList.GoToScene`/`GoToTrack`·`LoadingManager.LoadScene`. **원본 인자를 쓰지 않는 훅은 아예 선언하지 않습니다**(선언만 해도 이름이 바뀌면 패치 실패 — v1.1.5에서 `HUDControl.RefreshSongMetaUI`의 `forceUpdate`, `OnPointerClick`의 `eventData` 삭제). 이름 바인딩이 남은 훅(의도적): `TrackListBlockCtrl.SetSelected`(`bool` 인자 2개라 타입 선택이 모호), `EnsureAudioSourceBound`·`UpdateSongDurationScrollbar`(호출 빈도 미상·매 프레임 가능성). 인자를 **읽기만** 하고 곡당 수 회 불리는 훅에만 씁니다. `ref` 인자를 **바꾸는** 훅(`FavControl.PlayAudioWhenReady`의 `ref clip`, `BindAudioClipWhenReady`)과 매 프레임 훅은 이름 바인딩을 유지합니다(`__args`는 호출마다 배열 할당·박싱). 같은 타입 인자가 둘 이상인 메서드에는 쓰지 마세요(첫 번째를 고름).
 
 - **②가 필요한 이유:** Harmony `PatchAll()`은 패치 클래스를 순서대로 처리하다 하나라도 예외(대상 없음, 오버로드 추가로 인한 모호성, 파라미터명 변경)가 나면 그 뒤 훅이 **전부** 미적용됩니다. `nameof(X.Method)`도 컴파일 시 문자열로 박제되므로, 업데이트 후 재빌드 전 DLL에서는 문자열 훅과 똑같이 깨집니다. 그래서 자동 `PatchAll`을 끄고 `OnInitializeMelon`에서 클래스마다 `CreateClassProcessor(type).Patch()`를 try/catch로 돌립니다. `Prepare()=false`는 실패가 아니라 '건너뜀'으로 집계됩니다. **새 훅을 추가해도 별도 등록은 필요 없습니다**(`[HarmonyPatch]` 속성이 붙은 클래스를 자동 수집).
 - **③이 필요한 이유:** .NET(CoreCLR)은 메서드를 **처음 호출할 때** JIT하며, 이때 참조 멤버가 없으면 `MissingMethodException`/`MissingFieldException`/`TypeLoadException`이 호출 지점(=Harmony가 만든 대체 메서드)에서 터집니다. 즉 훅 내부의 `try/catch`로는 잡히지 않고, Prefix라면 **원본 메서드까지 실행되지 못합니다.** `RuntimeHelpers.PrepareMethod`로 패치 전에 미리 JIT해 깨진 훅을 적용 단계에서 걸러냅니다(최선 노력 검사 — JIT가 해석을 지연하는 경로는 못 잡을 수 있음). 반대로 `GetValueResilient(..., () => gd.NowTrackID, ...)`처럼 **람다로 분리된 직접 접근**은 별도 메서드라서 그 JIT 실패가 래퍼 내부 try/catch에서 잡히고 백업 리플렉션으로 넘어갑니다 — 업데이트에 취약한 멤버 접근은 이렇게 람다/헬퍼로 분리해 두는 것이 원칙입니다.
@@ -223,6 +226,7 @@
    - `[SafePatcher] 훅 적용 요약` → `실패 N`과 실패 훅 이름, 바로 위의 개별 오류(대상 없음/모호성/파라미터명/본문 JIT 실패)를 확인합니다.
    - `[HarmonyGuard]` → `Prepare()`에서 대상 메서드를 못 찾아 건너뛴 훅.
    - `[GetValueResilient]` / `[SetValueResilient]` / `[InvokeMethodResilient]` → `WarnOnce`로 1회만 기록된 변경 필드/프로퍼티.
+   - `[커스텀 차트] … 호출되지 않았습니다` / `주입된 노트 N개 ≠ BMS` → 훅은 적용됐지만 게임이 레인 로드 경로를 바꿔 BMS 주입이 빠진 것(v1.1.5~, §3-⑤ ⑪). `SafePatcher` 실패 0이어도 이 경고가 있으면 깨진 것입니다.
 2. **어셈블리 갱신 & 시그니처 재덤프:**
    - **Steam 경유로** 게임을 1회 실행(`Start-Process "steam://rungameid/3921360"`)해 MelonLoader가 `MelonLoader/Il2CppAssemblies/`를 재생성하게 합니다. MelonLoader를 재설치했거나 버전을 올린 직후에는 이 폴더가 아예 없어 빌드가 불가능합니다.
    - 재덤프 전에 기존 `Decompiled/`를 스크래치 폴더에 복사해 둡니다(구/신 비교용, `Decompiled/`는 gitignore 대상).
@@ -261,6 +265,7 @@
 | 이전 | 노트 이중 생성·타이밍·로그 정리 | BMS 노트 1개=게임 레인 1개(채널=열, 키음=하이햇/킥·스네어, 킥·스네어 실측 열 배치), 노트 샘플 위치를 커스텀 음악 주파수 기준으로 계산(48kHz 드리프트 수정)+`[BMS 타이밍]` 안내, 숙주 `SourceClip` 원복, `LogLevel`(0/1/2)과 로그 전용 훅 Prepare 생략, 곡당 한 줄 `[커스텀 차트]` 요약, `ChartDiagnostics`(레인 배치·원곡 동시 출현), 스모크 테스트에 중복·누락 검사 |
 | `b1483d1` | 전수 감사·정리 | §9 참조: 무동작 `LoadVideoClip` 훅·미사용 코드(`CustomAlbumWrapper` 등) 삭제, 활성 곡 판정 중복 통합, 죽은 디버그 분기 제거, NoteSway 감쇠를 클립 주파수 기준으로 통일, 스모크 PASS |
 | v1.1.0 | 첫 릴리즈·인코딩·업데이트 감지 | `TextDecoder`(Shift-JIS/CP949 BMS·info.txt·config.txt), `GameCompat` Steam 업데이트 대기 경고(`TargetBuildID`/`StateFlags`)·자동 업데이트 안내(LogLevel 1), 지문 기록을 설정 로드 뒤로 이동, 버전 단일 출처 `DeflateMod.Version`, `CHANGELOG.md`, `tools/release.ps1` |
+| v1.1.5 | 5차 감사·업데이트 내성 | 깨진 직접 접근 기억(⑩), `__args` 훅 10개 추가·미사용 파라미터 삭제(⑧), 일반 플레이 주입 누락 경고(⑪), Koreography 없을 때 레인 비움 수정, 템플릿 탐색 시 원곡 전체 래핑 제거. §14 참고 |
 | v1.1.4 | 실기 검증·스모크 수정 | v1.1.2·v1.1.3 인게임 확인(스모크 PASS, 사용자 경로 끝까지·결과 화면), `SmokeTest` 곡 단위 집계 초기화(`OnGameplayStarting`)·타이틀 로그인 메뉴 안내·대기 180초. §13 참고 |
 | v1.1.3 | 4차 감사·테스트 기반 | CP949 BMS 오판독(`LooksLikeMisdecodedKorean`)·3자리 ID `03` 채널 폭·원곡 제목 충돌(`SetOriginalTitleCollisions`) 수정, 한글 킥·스네어 키음, 단위 테스트 37개+CI, `check_hook_targets.py`, 릴리즈 스크립트 테스트 관문. §12 참고 |
 | v1.1.2 | 3차 감사·업데이트 내성 | `HookArgs`(`__args` 타입 바인딩)로 핵심 훅 8개 파라미터 이름 비의존, `ModLog` 지연 보간 핸들러, BGM 스트리밍 요청을 클립 수명과 동일하게, 인게임 BGM 대기 코루틴 1개로, MelonLoader 지문, 스모크 테스트 커서 정지 감지·BGM 진행 검사. §11 참고 |
@@ -419,3 +424,27 @@ Start-Process "steam://rungameid/3921360"
 **시작 로그:** `[GameCompat] … → 일치`, `[GameCompat] MelonLoader 0.7.3 (기준 0.7.3) → 일치`, `[SafePatcher] 성공 45 / 건너뜀 8 / 실패 0`(LogLevel=1 기준).
 
 **아직 미확인:** 롱노트·드롭·킥스네어 노트(테스트 차트에 없음), CP949 BMS 실곡, 원곡과 제목이 같은 커스텀 곡, `NoteSway=1`.
+
+---
+
+## 14. 5차 감사 기록 (2026-11-25, v1.1.5)
+
+범위: `Core/`·`Hooks/` 전 파일(약 7,100줄) + 이전 감사 보류 항목 재검토. 게임 PC에서 진행 — **빌드 경고 0 / 오류 0(`-warnaserror`), 단위 테스트 37/37, `check_hook_targets.py` 문제 0건.** 게임을 Steam 경유로 띄워 시작 로그까지 확인(DLL SHA256 일치, `[GameCompat]` 일치, `[SafePatcher] 성공 45 / 건너뜀 8 / 실패 0` — 바꾼 훅 전부 패치 단계 통과). 타이틀 로그인 메뉴에서 사용자가 실기를 "나중에"로 미뤄 **스모크 테스트는 미실행**, config.txt 원복함.
+
+**적용한 변경**
+- `Il2CppReflectionHelper`: 직접 접근 람다가 `MissingMemberException`/`TypeLoadException`/`BadImageFormatException`(구조적 실패)으로 깨지면 (런타임 타입, 멤버 이름, 읽기/쓰기/호출)을 기억해 이후 직접 접근을 건너뜀(§3-⑤ ⑩). NullReference 등 일시적 실패는 기억하지 않음. 정상일 때 비용은 `ConcurrentDictionary.IsEmpty` 한 번.
+- 훅 파라미터 정리(§3-⑤ ⑧): 읽기 전용 10개 훅을 `object[] __args`로, 미사용 파라미터 2개 삭제. `HookArgs.FirstValue<T>`(bool·float)·`DescribeStrings`(로그용) 추가.
+- `InGameRhythmHooks.WarnIfInjectionIncomplete`(§3-⑤ ⑪): 오디오 시작 시점(`TriggerAudioStartIfReady`)의 곡 요약에서 레인 주입이 0이거나 합계 ≠ BMS 노트 수면 LogLevel 0에서도 경고. 근거: 2026-11-24 로그에서 `[커스텀 차트]` 요약(오디오 시작)이 레인 주입보다 뒤에 찍힘.
+- `BuildBmsLaneEvents`: `playingKoreo`가 null이면 빈 리스트를 돌려줘 레인이 비워지던 것을, BMS 경로는 Koreography 없이 진행하도록(테스트 롱노트 경로만 Koreography 필요).
+- `SongInjectorHooks`: 복제 템플릿 탐색에서 원곡마다 `CustomTrackWrapper`(멤버 18개)를 만들던 것을 제목·ID·NM 차트 키 3개만 읽고, 고른 블록 하나만 래핑.
+
+**점검했지만 바꾸지 않은 것 (재논의 방지)**
+- `FavControl.PlayAudioWhenReady`(IEnumerator) Prefix가 커스텀 BGM 로딩 중 `return false`하면 `__result`가 null이라 호출자가 `StartCoroutine(null)`을 할 수 있음. 지금까지 로그에 오류 0건(대부분 `SafeLoadAndPlayAudio` 훅이 먼저 가로채 이 경로에 안 옴). 빈 Il2Cpp `IEnumerator`를 돌려주는 방법은 실기 확인 없이 넣기 위험해 보류 — 빠른 스크롤 중 `[ERROR]`가 보이면 이것부터 의심.
+- `EnsureAudioSourceBound(Koreography kore)`·`UpdateSongDurationScrollbar(float)`는 매 프레임일 수 있어 이름 바인딩 유지(§3-⑤ ⑧). `SetSelected(bool, bool)`은 bool 두 개라 `__args`로 바꾸면 순서 의존이 됨.
+- Harmony 위치 바인딩(`__0`, `__1`)은 이름 대신 순서에 의존할 뿐이고, 타입이 어긋날 때 Il2Cpp 환경에서의 실패 양상을 확인하지 않아 쓰지 않음.
+- 3자리 ID BMS의 `#BPMxx`(2자리) 정의는 키에 공백이 섞여 08 채널 변속이 안 걸릴 수 있음(비표준 조합, 실곡 사례 없음).
+- `TextDecoder.LastEncodingName` 정적 상태: 스캔이 메인 스레드 단일 경로라 문제없음. 배경 스레드 스캔을 도입하면 반환값으로 바꿀 것.
+- §10~§12의 보류 항목(커버 동기 디코딩, `DiffCtrl` 별 재생성, 전역 `VideoPlayer` 범위, 난이도별 BMS, BMS 없는 곡 테스트 롱노트, `BlockSave` 범위)은 그대로.
+
+**미확인 (다음 실기 때 할 것):** `SmokeTest=1` PASS, 특히 `__args`로 바꾼 영상 훅(곡 목록 BGA 프리뷰·인게임 `PlayVideoWithOffset`·PV 메뉴)과 일반 플레이에서 `[커스텀 차트]` 경고가 **뜨지 않는지**(오탐 없음). 확인되면 이 줄과 상단 v1.1.5 요약의 "미실행"을 지울 것.
+

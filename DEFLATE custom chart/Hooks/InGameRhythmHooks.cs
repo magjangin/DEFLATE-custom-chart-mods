@@ -91,6 +91,36 @@ namespace DEFLATE_custom_chart.Hooks
                     + $" · 킥·스네어 {Lane(BmsLaneMapper.SnareLeft)}/{Lane(BmsLaneMapper.KickLeft)}/{Lane(BmsLaneMapper.KickRight)}/{Lane(BmsLaneMapper.SnareRight)}(1~4열)"
                     + $" · 드롭 {Lane(BmsLaneMapper.Drop)} · 라인바 {_summaryBarLines}";
             ModLog.Info($"[커스텀 차트] '{meta.Title}' — {chartPart} | 음악 '{(clip != null ? clip.name : "없음")}' {(clip != null ? clip.frequency : 0)}Hz (노트 기준 {_summaryTimelineRate}Hz) | BGA {(string.IsNullOrEmpty(HwaAssetManager.BgaFileUrl) ? "없음" : "있음")}");
+            WarnIfInjectionIncomplete(chart);
+        }
+
+        /// <summary>
+        /// 일반 플레이(스모크 테스트가 아닐 때)에서도 BMS 주입이 조용히 빠진 것을 알린다.
+        /// 게임 업데이트로 레인 로드 경로가 바뀌면 훅은 정상 적용(SafePatcher 실패 0)인데 호출되지 않아 원곡 차트로 플레이되는데,
+        /// 예전에는 스모크 테스트를 돌리기 전까지 알 수 없었다. 오디오 시작 시점에는 레인 로드가 끝나 있다(2026-11-24 실기 로그 순서).
+        /// </summary>
+        private static void WarnIfInjectionIncomplete(BmsChart chart)
+        {
+            if (chart == null || chart.Notes.Count == 0) return;
+
+            int injected = 0;
+            foreach (var kv in _summaryLaneCounts) injected += kv.Value;
+
+            if (_summaryLaneCounts.Count == 0)
+            {
+                MelonLogger.Warning("[커스텀 차트] BMS 노트 주입 훅(LoadKoreographyEvents)이 한 번도 호출되지 않았습니다 → 원곡 차트로 플레이 중일 수 있습니다. "
+                    + "게임 업데이트로 레인 로드 경로가 바뀌었는지 확인하세요(AGENTS.md §6, LogLevel=1 또는 SmokeTest=1).");
+            }
+            else if (injected != chart.Notes.Count)
+            {
+                MelonLogger.Warning($"[커스텀 차트] 주입된 노트 {injected}개 ≠ BMS 노트 {chart.Notes.Count}개 (레인 {_summaryLaneCounts.Count}개에 주입). "
+                    + "게임 레인 구성이 바뀌어 일부 레인이 로드되지 않았을 수 있습니다(LogLevel=2의 [진단] 레인 배치 참고).");
+            }
+
+            if (_summaryBarLines == 0 && chart.BarLines.Count > 0)
+            {
+                ModLog.Verbose("[커스텀 차트] 라인바 주입 훅이 호출되지 않아 원곡 박자선이 표시됩니다.");
+            }
         }
 
         // 숙주 Koreography는 Addressables로 캐시되는 공유 에셋이라, SourceClip을 바꾼 채 두면
@@ -450,12 +480,9 @@ namespace DEFLATE_custom_chart.Hooks
             if (!HwaAssetManager.IsTargetTrackActive) return null;
 
             var events = new Il2CppSystem.Collections.Generic.List<KoreographyEvent>();
-            if (instance == null || instance.playingKoreo == null || instance.playingKoreo.Tracks == null)
-            {
-                return events;
-            }
-
-            var koreo = instance.playingKoreo;
+            // BMS 경로는 Koreography가 없어도 된다(샘플레이트는 TimelineSampleRate가 커스텀 클립·차트로 대체).
+            // 예전에는 playingKoreo가 아직 null인 레인 로드에서 빈 리스트를 돌려줘, BMS 노트 대신 레인이 통째로 비워졌다.
+            var koreo = instance != null ? instance.playingKoreo : null;
             int before = lane.laneEvents != null ? lane.laneEvents.Count : -1;
             var bmsChart = HwaAssetManager.LoadedBmsChart;
 
@@ -501,8 +528,13 @@ namespace DEFLATE_custom_chart.Hooks
             }
 
             // =========================================================
-            // 2. BMS 파일이 없을 경우: 테스트 롱노트 10연발 주입
+            // 2. BMS 파일이 없을 경우: 테스트 롱노트 10연발 주입 (숙주 Koreography 기준)
             // =========================================================
+            if (koreo == null || koreo.Tracks == null)
+            {
+                return events;
+            }
+
             int globalFirstStart = int.MaxValue;
             for (int i = 0; i < koreo.Tracks.Count; i++)
             {
@@ -984,16 +1016,18 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "PlayVideoWithOffset");
 
-            public static bool Prefix(RhythmGameController __instance, VideoPlayer player, float offsetSeconds)
+            // (VideoPlayer player, float offsetSeconds) — 읽기만 하므로 이름 대신 타입으로 받는다.
+            public static bool Prefix(object[] __args)
             {
                 try
                 {
+                    var player = HookArgs.First<VideoPlayer>(__args);
                     if (HwaAssetManager.IsTargetTrackActive && player != null)
                     {
                         HwaAssetManager.ApplyCustomBga(player, false, muteAudio: true);
                     }
 
-                    ModLog.Verbose($"[인게임 BGA 동기화 재생] Offset: {offsetSeconds}초 | URL: '{player?.url}'");
+                    ModLog.Verbose($"[인게임 BGA 동기화 재생] Offset: {HookArgs.FirstValue(__args, 0f)}초 | URL: '{player?.url}'");
                 }
                 catch (Exception ex)
                 {
@@ -1008,10 +1042,11 @@ namespace DEFLATE_custom_chart.Hooks
         {
             public static bool Prepare() => ModLog.Prepare(ModLog.Detail) && Il2CppReflectionHelper.HasPatchTarget(typeof(RhythmGameController), "OnVideoStarted");
 
-            public static void Postfix(RhythmGameController __instance, VideoPlayer source)
+            public static void Postfix(object[] __args)
             {
                 try
                 {
+                    var source = HookArgs.First<VideoPlayer>(__args);
                     if (source != null)
                     {
                         ModLog.Verbose($"[인게임 BGA 재생 시작] URL: '{source.url}'");
