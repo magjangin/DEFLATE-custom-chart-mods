@@ -17,6 +17,7 @@
     <Compile Include="..\..\DEFLATE custom chart\Core\Bms\*.cs" Link="Linked\Bms\%(Filename)%(Extension)" />
     <Compile Include="..\..\DEFLATE custom chart\Core\TextDecoder.cs" Link="Linked\TextDecoder.cs" />
     <Compile Include="..\..\DEFLATE custom chart\Core\SongInfoParser.cs" Link="Linked\SongInfoParser.cs" />
+    <Compile Include="..\..\DEFLATE custom chart\Core\Wrapper\MemberFallbacks.cs" Link="Linked\MemberFallbacks.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -76,16 +76,18 @@ namespace DEFLATE_custom_chart.Hooks
                         return;
                     }
 
-                    // 2) 복제 원본이 될 트랙 탐색 (1순위: WindShifter, 2순위: 첫 번째 유효 원곡 블록 폴백)
+                    // 2) 복제 원본이 될 트랙 탐색 (1순위: WindShifter, 2순위: NM_TrackKore_Key가 있는 원곡 블록, 3순위: 첫 번째 유효 원곡 블록 폴백)
                     //    탐색 중에는 판정에 필요한 멤버(제목·ID·차트 키)만 읽고, 고른 블록 하나만 전체 래핑한다.
-                    //    (예전에는 원곡마다 CustomTrackWrapper로 멤버 18개를 읽어, 곡 목록이 만들어질 때마다 수백~수천 번의 IL2CPP 읽기가 생겼다)
                     MainTrackListBlock sourceBlock = null;
                     MainTrackListBlock firstValidBlock = null;
+                    MainTrackListBlock anyOriginalBlock = null;
 
                     foreach (var track in __instance.tracks)
                     {
                         if (track == null || track.gameObject == null) continue;
                         if (track.gameObject.name.Contains(CloneNameMarker)) continue;
+
+                        if (anyOriginalBlock == null) anyOriginalBlock = track;
 
                         var block = track;
                         if (firstValidBlock == null)
@@ -107,10 +109,18 @@ namespace DEFLATE_custom_chart.Hooks
                     }
 
                     bool usedFallback = false;
-                    if (sourceBlock == null && firstValidBlock != null)
+                    if (sourceBlock == null)
                     {
-                        sourceBlock = firstValidBlock;
-                        usedFallback = true;
+                        if (firstValidBlock != null)
+                        {
+                            sourceBlock = firstValidBlock;
+                            usedFallback = true;
+                        }
+                        else if (anyOriginalBlock != null)
+                        {
+                            sourceBlock = anyOriginalBlock;
+                            usedFallback = true;
+                        }
                     }
 
                     CustomTrackWrapper sourceWrapper = sourceBlock != null ? new CustomTrackWrapper(sourceBlock) : null;

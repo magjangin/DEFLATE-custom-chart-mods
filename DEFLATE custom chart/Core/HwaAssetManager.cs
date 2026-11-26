@@ -209,7 +209,7 @@ namespace DEFLATE_custom_chart.Core
             if (sprite == null) return;
 
             var images = root.GetComponentsInChildren<Image>(true);
-            if (images == null) return;
+            if (images == null || images.Length == 0) return;
 
             foreach (var img in images)
             {

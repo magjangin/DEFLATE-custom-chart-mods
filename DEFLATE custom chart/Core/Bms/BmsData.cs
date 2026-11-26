@@ -79,6 +79,7 @@ namespace DEFLATE_custom_chart.Core.Bms
     /// </summary>
     public class BmsBpmEvent
     {
+        public int OrderIndex { get; set; }
         public double Tick { get; set; }
         public float Bpm { get; set; }
         public double TimeSeconds { get; set; }

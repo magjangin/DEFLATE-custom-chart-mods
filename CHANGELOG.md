@@ -2,6 +2,23 @@
 
 버전 기준은 `DEFLATE custom chart/Core/DeflateMod.cs`의 `DeflateMod.Version`입니다. 릴리즈는 `tools/release.ps1`이 이 값과 이 파일 최상단 `## [버전]`, `Properties/AssemblyInfo.cs`가 같은지 확인한 뒤 만듭니다.
 
+## [1.1.7] - 2026-11-26
+
+기준 게임 빌드는 그대로입니다: DEFLATE **1.2** (Steam Build `26402105`), Unity `2022.3.62f2`, MelonLoader **0.7.3**.
+
+### 업데이트 내성 및 안정성 강화
+- **복제 원곡 템플릿 탐색 3차 폴백 마련:** WindShifter 및 NM 차트 키 보유 블록이 모두 누락된 특이 환경에서도 임의의 유효 원곡 블록(`anyOriginalBlock`)으로 자동 폴백하여 곡 목록 사본 주입 파이프라인의 영속성 보장.
+- **로딩 씬 UI 주입 리플렉션 내성 전면 강화:** `LoadingSceneHooks`에서 `NowTrackTitle`, `NowTrackPVAuthor`, `NowTrackDifficulty`, `NowTrackCover` 등 모든 UI 요소를 `Il2CppReflectionHelper` 백업 리플렉션으로 래핑하여 게임 업데이트로 멤버가 개명되어도 JIT 예외 없이 안전 주입.
+- **MemberFallbacks 후보군 대폭 확장:** `LoadingUi` 전용 폴백 정의(Title, Author, Label, PvAuthor, Score, Difficulty, Cover, CoverBg) 및 `TrackBlock`/`GameData` 예비 후보군 보강.
+- **BMS 다중 변속(BPM) 안정 정렬 및 타임라인 음수 방어:** 동일 틱에 여러 BPM 변경이 정의된 경우 원본 출현 순서(`OrderIndex`)를 보존하는 결정적 안정 정렬 적용 및 틱 음수 시간 예외 방어.
+- **BGM 비동기 로딩 생명주기 및 경합 상태 가드:** `CustomSongEntry` BGM 로드 시 세대 카운터(`_loadGeneration`)를 도입하여 씬 전환이나 에셋 재스캔 후 이전 비동기 웹 요청이 뒤늦게 완료되어 생기는 상태 오염 및 누수 원천 차단.
+- **일시정지 중 노트 흔들림(NoteSway) 가드:** `Time.timeScale <= 0f` 감지 시 연산을 즉시 건너뛰어 일시정지 메뉴에서의 미세 떨림 현상 방지.
+- **SafePatcher 타입 로드 진단 로그 강화:** 패치 수집 시 `ReflectionTypeLoadException` 발생 시 내부 `LoaderExceptions`를 상세 로깅하도록 보강.
+
+### 테스트 & 품질
+- 오프라인 단위 테스트 4개 추가 (총 57개 통과 확인): 동일 틱 BPM 정렬 안정성, 역순 홀드 노트 고아 처리 방어, MemberFallbacks 무결성 검증 등.
+- 빌드 경고 0 / 오류 0 (`-warnaserror`), 훅 대상 대조 0건.
+
 ## [1.1.6] - 2026-11-25
 
 기준 게임 빌드는 그대로입니다: DEFLATE **1.2** (Steam Build `26402105`), Unity `2022.3.62f2`, MelonLoader **0.7.3**.

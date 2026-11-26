@@ -13,6 +13,7 @@
 > **v1.1.4 (2026-11-24, 실기 검증):** 인게임 스모크 `PASS`(BMS 552/552·9레인, 라인바 296, 커스텀 BGM 재생 진행, BGA, 컨텍스트) + 사용자 경로(로딩 씬) 플레이로 곡 끝까지·결과 화면까지 확인 → v1.1.2·v1.1.3 변경 실기 확인 완료. 스모크 테스트 집계·안내 수정. §13 참고.
 > **v1.1.5 (2026-11-25, 5차 감사):** 깨진 직접 접근 기억(업데이트 후 예외 반복 제거)·이름 바인딩 훅 정리(`__args` 10개 추가, 미사용 파라미터 삭제)·일반 플레이 BMS 주입 누락 경고·레인 비움 엣지 버그·곡 목록 템플릿 탐색 병목. 빌드 경고 0·테스트 37/37·훅 대조 0건·게임 시작 로그 `성공 45 / 건너뜀 8 / 실패 0`. **인게임 스모크는 사용자가 "나중에"를 골라 미실행.** §14 참고.
 > **v1.1.6 (2026-11-25, 5차 감사 2부):** info.txt 파서 분리(`SongInfoParser`)·`subtitle`/`album artist` 덮어쓰기 버그 수정, config.txt 오타 키 경고, 커버 FullRect·대형 커버 경고, 스캔/주입 시간 로그, 단위 테스트 53개. 훅 변경 없음. 빌드 경고 0·테스트 53/53. **인게임 미확인(v1.1.5와 함께 다음 실기).** §14 참고.
+> **v1.1.7 (2026-11-26, 6차 감사):** 복제 템플릿 3차 폴백(`anyOriginalBlock`)·로딩 씬 UI 전면 리플렉션 내성 강화·MemberFallbacks 대폭 확장·BMS 동일 틱 변속 결정적 안정 정렬(`OrderIndex`) 및 음수 타임라인 방어·BGM 비동기 로딩 세대 가드(`_loadGeneration`)·일시정지 중 노트 흔들림 연산 가드·SafePatcher 타입 로더 예외 상세 진단, 단위 테스트 57개(전체 통과). §15 참고.
 > **2026-11-23 전수 감사/리팩토링:** §9 참고. 컴파일 경고 0 · 오류 0, `[SafePatcher] 성공 45 / 건너뜀 8(로그 레벨 LogLevel=1 기준) / 실패 0`, 스모크 테스트 `PASS`(BMS 552/552, 라인바 296, 커스텀 BGM·BGA, 컨텍스트 인게임).
 > 미확인: 롱노트(테스트 차트에 홀드 0개), 드롭 레인(테스트 차트 14번 채널 0개), 킥/스네어 키음 노트(테스트 차트에 없음).
 
@@ -460,4 +461,23 @@ Start-Process "steam://rungameid/3921360"
 - 다음 후보(보류): 핵심 훅에 `TargetMethod()`로 오버로드 추가에 견디는 대상 선택 — 속성과 `TargetMethod`가 함께 있을 때 HarmonyX 동작과 `check_hook_targets.py` 대응을 실기로 확인해야 해서 보류.
 
 **미확인 (다음 실기 때 할 것):** `SmokeTest=1` PASS, 특히 `__args`로 바꾼 영상 훅(곡 목록 BGA 프리뷰·인게임 `PlayVideoWithOffset`·PV 메뉴)과 일반 플레이에서 `[커스텀 차트]` 경고가 **뜨지 않는지**(오탐 없음). v1.1.6에서는 info.txt 해석(곡 목록 제목·아티스트·별 개수가 예전과 같은지), 커버 표시(곡 목록·로딩·인게임·결과 화면), 시작 로그의 스캔/주입 ms도 함께 본다. 확인되면 이 줄과 상단 v1.1.5·v1.1.6 요약의 "미실행/미확인"을 지울 것.
+
+---
+
+## 15. 6차 감사 기록 (2026-11-26, v1.1.7)
+
+범위: 복제 템플릿 탐색 회복력, 로딩 씬 UI 바인딩 전수 검토, MemberFallbacks 확장, BMS 파서 타임라인 안정 정렬 및 엣지 케이스 방어, BGM 비동기 요청 수명주기, SafePatcher 진단성 강화.
+
+**적용한 변경**
+- `SongInjectorHooks`: 복제 템플릿 탐색 시 `WindShifter` (1순위) → `firstValidBlock` (NM 차트 키 보유, 2순위)에 이어, 어떤 원곡 블록이든 하나를 기억하는 `anyOriginalBlock` (3순위) 폴백 추가. 게임 패치로 차트 키 필드가 변경되더라도 복제 원본을 무조건 확보하여 곡 목록 주입 실패 방지.
+- `LoadingSceneHooks`: 로딩 씬 UI 주입(`ApplyLoadingUiMetadata`) 시 직접 필드 접근을 `Il2CppReflectionHelper.GetValueResilient<Text>/<Image>`로 전면 래핑. 향후 게임 패치로 UI 필드 이름이나 계층이 바뀌어도 JIT 예외 없이 안전 주입 보장.
+- `MemberFallbacks`: `LoadingUi` 클래스 신설 및 `Title`, `Author`, `Label`, `PvAuthor`, `Score`, `Difficulty`, `Cover`, `CoverBg` 후보군 전면 등록. `TrackBlock` 및 `GameData` 후보군도 보강.
+- `BmsParser`: 동일 틱(Tick)에 여러 BPM 변경 이벤트가 나타날 때, 출현 순서(`OrderIndex`)를 보존하는 결정적 안정 정렬 적용. 음수 틱이나 0 틱 계산 시 `Math.Max(0.0, ...)` 방어로 음수 타임라인 생성 차단.
+- `CustomSongEntry`: BGM 비동기 로딩 시 세대 카운터(`_loadGeneration`)를 도입하여, 씬 전환이나 `ResetLoadedAssets()` 후 지연 도착한 이전 비동기 요청의 오디오 클립이 상태를 오염시키는 경쟁 상태 차단.
+- `NoteHooks`: 일시정지(`Time.timeScale <= 0f`) 감지 시 `NoteSway` 연산을 즉시 건너뛰어 일시정지 메뉴에서의 미세 떨림 방지.
+- `SafePatcher`: 어셈블리 타입 수집 시 `ReflectionTypeLoadException` 발생 시 내부 `LoaderExceptions`를 상세 로깅하도록 보강.
+- `DEFLATE.CustomChart.Tests`: 단위 테스트 4개 추가 (동일 틱 BPM 정렬 안정성, 역순 홀드 노트 고아 처리 방어, MemberFallbacks 무결성 검증 등) → 총 57개 통과.
+
+**확인 상태**
+- 빌드 경고 0 / 오류 0 (`-warnaserror`), 단위 테스트 57/57, 훅 대상 대조 0건.
 

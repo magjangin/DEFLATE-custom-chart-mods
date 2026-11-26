@@ -341,10 +341,12 @@ namespace DEFLATE_custom_chart.Core.Bms
             int noteWidth)
         {
             chart.BpmEvents.Clear();
+            int order = 0;
 
             // 0번 Tick에 초기 BPM 설정
             chart.BpmEvents.Add(new BmsBpmEvent
             {
+                OrderIndex = order++,
                 Tick = 0,
                 Bpm = chart.Header.InitialBpm,
                 TimeSeconds = 0.0
@@ -400,6 +402,7 @@ namespace DEFLATE_custom_chart.Core.Bms
                     {
                         chart.BpmEvents.Add(new BmsBpmEvent
                         {
+                            OrderIndex = order++,
                             Tick = eventTick,
                             Bpm = newBpm,
                             TimeSeconds = 0.0 // 아래 누적 연산에서 채움
@@ -408,7 +411,7 @@ namespace DEFLATE_custom_chart.Core.Bms
                 }
             }
 
-            // Tick 순서대로 정렬 후 시간(TimeSeconds) 누적 계산 (LINQ 할당 없이 In-place 정렬)
+            // Tick 순서대로 정렬 후 시간(TimeSeconds) 누적 계산 (Tick 일치 시 출현 순서 OrderIndex 유지)
             chart.BpmEvents.Sort(CompareBpmEventsByTick);
 
             double prevTick = 0.0;
@@ -431,7 +434,8 @@ namespace DEFLATE_custom_chart.Core.Bms
 
         private static int CompareBpmEventsByTick(BmsBpmEvent a, BmsBpmEvent b)
         {
-            return a.Tick.CompareTo(b.Tick);
+            int cmp = a.Tick.CompareTo(b.Tick);
+            return cmp != 0 ? cmp : a.OrderIndex.CompareTo(b.OrderIndex);
         }
 
         /// <summary>
@@ -441,6 +445,7 @@ namespace DEFLATE_custom_chart.Core.Bms
         private double CalculateTimeAtTick(double tick, List<BmsBpmEvent> bpmEvents)
         {
             if (bpmEvents == null || bpmEvents.Count == 0) return 0.0;
+            if (tick <= 0.0) return 0.0;
 
             int lo = 0;
             int hi = bpmEvents.Count - 1;
@@ -464,7 +469,7 @@ namespace DEFLATE_custom_chart.Core.Bms
             double safeBpm = currentEvent.Bpm > 0f ? currentEvent.Bpm : 130.0;
             double deltaTick = tick - currentEvent.Tick;
             double deltaTime = deltaTick * 240.0 / (safeBpm * TicksPerMeasure);
-            return currentEvent.TimeSeconds + deltaTime;
+            return Math.Max(0.0, currentEvent.TimeSeconds + deltaTime);
         }
 
         /// <summary>

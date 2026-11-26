@@ -25,7 +25,13 @@ namespace DEFLATE_custom_chart.Hooks
 
                 HwaAssetManager.ApplyMetaToGameData(gd, customCover, targetStar);
 
-                if (instance.NowTrackTitle != null) instance.NowTrackTitle.text = meta.Title;
+                var titleText = Il2CppReflectionHelper.GetValueResilient<Text>(
+                    instance,
+                    () => instance.NowTrackTitle,
+                    "NowTrackTitle",
+                    MemberFallbacks.LoadingUi.Title,
+                    null);
+                if (titleText != null) titleText.text = meta.Title;
 
                 var authorText = Il2CppReflectionHelper.GetValueResilient<Text>(
                     instance,
@@ -35,7 +41,13 @@ namespace DEFLATE_custom_chart.Hooks
                     null);
                 if (authorText != null) authorText.text = meta.Artist;
 
-                if (instance.NowTrackPVAuthor != null) instance.NowTrackPVAuthor.text = meta.BgaAuthor;
+                var pvAuthorText = Il2CppReflectionHelper.GetValueResilient<Text>(
+                    instance,
+                    () => instance.NowTrackPVAuthor,
+                    "NowTrackPVAuthor",
+                    MemberFallbacks.LoadingUi.PvAuthor,
+                    null);
+                if (pvAuthorText != null) pvAuthorText.text = meta.BgaAuthor;
 
                 var labelText = Il2CppReflectionHelper.GetValueResilient<Text>(
                     instance,
@@ -45,14 +57,41 @@ namespace DEFLATE_custom_chart.Hooks
                     null);
                 if (labelText != null) labelText.text = meta.Album;
 
-                if (instance.NowTrackScore != null) instance.NowTrackScore.text = meta.ChartAuthor;
-                if (instance.NowTrackDifficulty != null) instance.NowTrackDifficulty.text = targetStar.ToString();
+                var scoreText = Il2CppReflectionHelper.GetValueResilient<Text>(
+                    instance,
+                    () => instance.NowTrackScore,
+                    "NowTrackScore",
+                    MemberFallbacks.LoadingUi.Score,
+                    null);
+                if (scoreText != null) scoreText.text = meta.ChartAuthor;
+
+                var diffText = Il2CppReflectionHelper.GetValueResilient<Text>(
+                    instance,
+                    () => instance.NowTrackDifficulty,
+                    "NowTrackDifficulty",
+                    MemberFallbacks.LoadingUi.Difficulty,
+                    null);
+                if (diffText != null) diffText.text = targetStar.ToString();
+
                 if (instance.diffStarsCtrl != null) HwaAssetManager.SafeGenerateStarImages(instance.diffStarsCtrl, targetStar);
 
                 if (customCover != null)
                 {
-                    if (instance.NowTrackCover != null) instance.NowTrackCover.sprite = customCover;
-                    if (instance.NowTrackCover_bg != null) instance.NowTrackCover_bg.sprite = customCover;
+                    var coverImg = Il2CppReflectionHelper.GetValueResilient<Image>(
+                        instance,
+                        () => instance.NowTrackCover,
+                        "NowTrackCover",
+                        MemberFallbacks.LoadingUi.Cover,
+                        null);
+                    if (coverImg != null) coverImg.sprite = customCover;
+
+                    var coverBgImg = Il2CppReflectionHelper.GetValueResilient<Image>(
+                        instance,
+                        () => instance.NowTrackCover_bg,
+                        "NowTrackCover_bg",
+                        MemberFallbacks.LoadingUi.CoverBg,
+                        null);
+                    if (coverBgImg != null) coverBgImg.sprite = customCover;
                 }
 
                 ModLog.Verbose($"[로딩 씬 커스텀 UI 주입] 제목: '{meta.Title}' | 아티스트: '{meta.Artist}' | 매퍼: '{meta.ChartAuthor}' | BGA: '{meta.BgaAuthor}' | 난이도: {gd.nowDifficulty}(★{targetStar}) | 앨범: '{meta.Album}'");
