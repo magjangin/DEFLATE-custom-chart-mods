@@ -67,6 +67,7 @@ namespace DEFLATE_custom_chart.Core
         public string VideoKey { get; set; }
 
         private bool _isBgmLoading;
+        private int _loadGeneration;
 
         /// <summary>
         /// 스트리밍(<c>streamAudio=true</c>) 클립의 데이터를 들고 있는 요청. 클립이 살아 있는 동안 Dispose하지 않습니다.
@@ -398,6 +399,7 @@ namespace DEFLATE_custom_chart.Core
             }
 
             _isBgmLoading = true;
+            int currentGen = ++_loadGeneration;
             bool loaded = false;
             UnityWebRequest www = null;
 
@@ -423,6 +425,13 @@ namespace DEFLATE_custom_chart.Core
             }
 
             yield return www.SendWebRequest();
+
+            // 대기 중 ResetLoadedAssets()가 불렸으면 이전 세대 응답은 파기
+            if (currentGen != _loadGeneration)
+            {
+                www?.Dispose();
+                yield break;
+            }
 
             try
             {
@@ -452,7 +461,7 @@ namespace DEFLATE_custom_chart.Core
             finally
             {
                 // 성공하면 스트리밍 클립이 요청의 버퍼를 쓰므로 클립과 수명을 같이한다. 실패한 요청만 즉시 해제.
-                if (loaded) _bgmRequest = www;
+                if (loaded && currentGen == _loadGeneration) _bgmRequest = www;
                 else www?.Dispose();
                 _isBgmLoading = false;
             }
@@ -483,6 +492,7 @@ namespace DEFLATE_custom_chart.Core
 
         public void ResetLoadedAssets()
         {
+            _loadGeneration++;
             if (CoverSprite != null)
             {
                 if (CoverSprite.texture != null)

@@ -55,6 +55,20 @@ namespace DEFLATE_custom_chart.Core
                     .Where(t => t != null && t.GetCustomAttributes(typeof(HarmonyPatch), false).Length > 0)
                     .ToList();
             }
+            catch (ReflectionTypeLoadException rtlex)
+            {
+                MelonLogger.Error($"[SafePatcher] 패치 클래스 수집 중 타입 로드 예외 ({rtlex.LoaderExceptions?.Length ?? 0}개):");
+                if (rtlex.LoaderExceptions != null)
+                {
+                    foreach (var lex in rtlex.LoaderExceptions)
+                    {
+                        if (lex != null) MelonLogger.Error($"  - {lex.GetType().Name}: {lex.Message}");
+                    }
+                }
+                patchTypes = (rtlex.Types ?? Array.Empty<Type>())
+                    .Where(t => t != null && t.GetCustomAttributes(typeof(HarmonyPatch), false).Length > 0)
+                    .ToList();
+            }
             catch (Exception ex)
             {
                 MelonLogger.Error($"[SafePatcher] 패치 클래스 목록 수집 실패: {ex.GetType().Name}: {ex.Message}");

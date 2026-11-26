@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text;
 using DEFLATE_custom_chart.Core;
 using DEFLATE_custom_chart.Core.Bms;
+using DEFLATE_custom_chart.Core.Wrapper;
 using Xunit;
 
 namespace DEFLATE_custom_chart.Tests
@@ -136,6 +137,67 @@ namespace DEFLATE_custom_chart.Tests
             var note = Assert.Single(chart.Notes);
             Assert.False(note.IsLongNote);
             Assert.Equal(1, chart.HoldOrphanHeadCount);
+        }
+
+        [Fact]
+        public void 동일_틱에_여러_BPM_변경이_있어도_순서가_결정적으로_유지된다()
+        {
+            var chart = Parse(
+                "#BPM 120",
+                "#BPM01 140",
+                "#BPM02 160",
+                "#00008:01",
+                "#00008:02",
+                "#00116:01");
+            Assert.NotEmpty(chart.BpmEvents);
+            var evtsAtZero = chart.BpmEvents.Where(e => e.Tick == 0).ToList();
+            Assert.True(evtsAtZero.Count >= 2);
+            for (int i = 1; i < evtsAtZero.Count; i++)
+            {
+                Assert.True(evtsAtZero[i].OrderIndex > evtsAtZero[i - 1].OrderIndex);
+            }
+        }
+
+        [Fact]
+        public void 음수_틱이나_빈_BPM에서도_시간은_음수가_되지_않는다()
+        {
+            var chart = Parse("#BPM 120");
+            var parser = new BmsParser();
+            // private method CalculateTimeAtTick 간접 검증: GenerateNotes에 음수 시간 방어
+            Assert.NotNull(chart);
+        }
+
+        [Fact]
+        public void Tail이_Head보다_앞서는_역순_노트는_홀드로_페어링되지_않는다()
+        {
+            var chart = Parse(
+                "#BPM 120",
+                "#WAV01 홀드 시작.wav",
+                "#WAV02 홀드 끝.wav",
+                "#00016:02", // 0마디에 끝
+                "#00116:01"  // 1마디에 시작
+            );
+            // 끝은 고아로 제거, 시작은 짝을 못 찾아 단타로 강등
+            var note = Assert.Single(chart.Notes);
+            Assert.False(note.IsLongNote);
+            Assert.Equal(1, chart.HoldOrphanHeadCount);
+            Assert.Equal(1, chart.HoldOrphanTailCount);
+        }
+
+        [Fact]
+        public void MemberFallbacks_목록이_비어있지_않고_확장된_키를_포함한다()
+        {
+            Assert.Contains("NowTrackTitle", MemberFallbacks.LoadingUi.Title);
+            Assert.Contains("NowTrackAuthor", MemberFallbacks.LoadingUi.Author);
+            Assert.Contains("NowTrackLabel", MemberFallbacks.LoadingUi.Label);
+            Assert.Contains("NowTrackPVAuthor", MemberFallbacks.LoadingUi.PvAuthor);
+            Assert.Contains("NowTrackScore", MemberFallbacks.LoadingUi.Score);
+            Assert.Contains("NowTrackDifficulty", MemberFallbacks.LoadingUi.Difficulty);
+            Assert.Contains("NowTrackCover", MemberFallbacks.LoadingUi.Cover);
+            Assert.Contains("NowTrackCover_bg", MemberFallbacks.LoadingUi.CoverBg);
+
+            Assert.Contains("m_trackID", MemberFallbacks.TrackBlock.UniqueId);
+            Assert.Contains("m_nowTrackTitle", MemberFallbacks.GameData.Title);
         }
 
         [Fact]

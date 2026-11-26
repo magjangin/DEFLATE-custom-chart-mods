@@ -149,6 +149,7 @@ namespace DEFLATE_custom_chart.Hooks
                 {
                     var cfg = ModConfig.Instance;
                     if (_tripped || !cfg.NoteSway || __instance == null || __instance.isProcessed) return;
+                    if (Time.timeScale <= 0f) return; // 일시정지 중 불필요한 연산 및 떨림 방지
 
                     int frame = Time.frameCount;
                     if (_cachedFrame != frame)
