@@ -47,7 +47,7 @@ hwa/
   - 커버는 이름에 `cover`/`jacket`/`thumbnail`/`thumb`/`커버`/`자켓`이 들어간 `.png`(또는 `.jpg`)를 먼저 고르고, 없으면 처음 나오는 `.png`를 씁니다. 2048×2048보다 큰 커버는 메모리를 많이 써서 로그에 경고가 남습니다(1024×1024 이하 권장). info.txt에 아티스트가 없으면 BMS `#ARTIST`를 씁니다.
 - 하이햇/킥·스네어는 키음 파일명으로 정합니다: 이름에 `kick`·`snare` 또는 `킥`·`스네어`가 있으면 킥·스네어, 나머지는 하이햇([매핑 명세](docs/bms_mapping_spec.md)).
 - BMS·info.txt는 UTF-8이 아니어도 됩니다(Shift-JIS, CP949 자동 판별).
-- BMS의 `#RANDOM` 분기는 1번 분기(`#IF 1`)만 읽습니다. STOP(`#STOPxx`/09 채널)과 LN 채널(5x/6x)은 지원하지 않으며, 만나면 로그에 경고가 남습니다(홀드는 키음 이름 "홀드 시작/홀드 끝" 또는 `#LNOBJ`).
+- BMS의 `#RANDOM` 분기는 1번 분기(`#IF 1`)만 읽습니다. 롱노트는 키음 이름("홀드 시작/홀드 끝"), `#LNOBJ`, 또는 표준 5x/6x LN 채널을 지원하며, `#STOPxx` 및 `09` 채널 정지 기믹도 지원합니다.
 - 곡 폴더로 인정되는 조건: `info.txt`(또는 다른 `.txt`) · BMS 차트(`.bms`/`.bme`/`.bml`) · `.png` · `.mp4` 중 하나라도 폴더에 직접 있을 것 (`.wav`만 모아둔 키음 폴더는 자동으로 제외됩니다)
   - 메타데이터 파일은 `info.txt`를 우선하고, 없으면 처음 나오는 `.txt`를 씁니다
   - BGM은 `.ogg` › 이름에 `music`/`bgm`/`song`/`track`/`audio`가 들어간 파일 › 용량이 큰 파일 순으로 고릅니다 (지원: `.ogg`/`.wav`/`.mp3`)
@@ -66,6 +66,9 @@ BGA 제작자 : 영상 담당      (bga / pv / 영상 제작자)
 easy = 8                    (ez / 이지)
 normal = 10                 (nm / 노멀 / 노말)
 hard = 12                   (hd / 하드, "★12"처럼 써도 됨)
+chart_easy = easy.bms       (이지 차트 / ez — 없으면 기본 BMS로 자동 폴백)
+chart_normal = normal.bms   (노멀 차트 / nm)
+chart_hard = hard.bms       (하드 차트 / hd)
 ```
 
 - `앨범 아티스트`(album artist)는 무시합니다(곡 아티스트를 덮어쓰지 않게).

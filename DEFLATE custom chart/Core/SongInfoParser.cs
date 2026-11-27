@@ -15,6 +15,9 @@ namespace DEFLATE_custom_chart.Core
         public int? EasyLevel;
         public int? NormalLevel;
         public int? HardLevel;
+        public string EasyChart;
+        public string NormalChart;
+        public string HardChart;
     }
 
     /// <summary>
@@ -77,7 +80,15 @@ namespace DEFLATE_custom_chart.Core
                 ((Has(key, "영상") || Has(key, "video") || Has(key, "movie")) &&
                  (Has(key, "제작") || Has(key, "author") || Has(key, "maker") || Has(key, "artist") || Has(key, "아티스트")));
 
-            if (Has(key, "제목") || Has(key, "title")) info.Title = val;
+            bool isChartKeyword = Has(key, "chart") || Has(key, "bms") || Has(key, "차트") || Has(key, "채보");
+            bool isEasyChart = isChartKeyword && (Has(key, "easy") || Has(key, "ez") || Has(key, "이지") || Has(key, "쉬움"));
+            bool isNormalChart = isChartKeyword && (Has(key, "normal") || Has(key, "nm") || Has(key, "노멀") || Has(key, "노말") || Has(key, "보통"));
+            bool isHardChart = isChartKeyword && (Has(key, "hard") || Has(key, "hd") || Has(key, "하드") || Has(key, "어려움"));
+
+            if (isEasyChart) info.EasyChart = val;
+            else if (isNormalChart) info.NormalChart = val;
+            else if (isHardChart) info.HardChart = val;
+            else if (Has(key, "제목") || Has(key, "title")) info.Title = val;
             else if (isBgaKey) info.BgaAuthor = val;
             else if (Has(key, "아티스트") || Has(key, "artist") || Has(key, "작곡") || Has(key, "composer")) info.Artist = val;
             else if (Has(key, "앨범") || Has(key, "album")) info.Album = val;

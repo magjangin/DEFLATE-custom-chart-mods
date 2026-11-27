@@ -52,10 +52,29 @@ namespace DEFLATE_custom_chart.Core
         public string CoverFilePath { get; private set; }
         public string InfoFilePath { get; private set; }
         public string BmsFilePath { get; private set; }
+        public string EasyBmsFilePath { get; private set; }
+        public string NormalBmsFilePath { get; private set; }
+        public string HardBmsFilePath { get; private set; }
 
         // 파싱/로드된 리소스
         public HwaAssetManager.HwaMetaInfo Meta { get; private set; } = new HwaAssetManager.HwaMetaInfo();
         public Bms.BmsChart Chart { get; private set; }
+        public Bms.BmsChart EasyChart { get; private set; }
+        public Bms.BmsChart NormalChart { get; private set; }
+        public Bms.BmsChart HardChart { get; private set; }
+
+        /// <summary>0=Easy, 1=Normal, 2=Hard 에 해당하는 차트를 반환하며, 미지정 시 기본 Chart로 폴백합니다.</summary>
+        public Bms.BmsChart GetChartForDifficulty(int difficulty)
+        {
+            switch (difficulty)
+            {
+                case 0: return EasyChart ?? Chart;
+                case 1: return NormalChart ?? Chart;
+                case 2: return HardChart ?? Chart;
+                default: return Chart;
+            }
+        }
+
         public Sprite CoverSprite { get; private set; }
         public AudioClip BgmClip { get; private set; }
 
@@ -141,6 +160,9 @@ namespace DEFLATE_custom_chart.Core
             CoverFilePath = null;
             InfoFilePath = null;
             BmsFilePath = null;
+            EasyBmsFilePath = null;
+            NormalBmsFilePath = null;
+            HardBmsFilePath = null;
 
             if (!Directory.Exists(FolderPath)) return;
 
@@ -214,15 +236,38 @@ namespace DEFLATE_custom_chart.Core
                     // (정렬상 info.txt보다 앞서는 readme.txt 등이 먼저 잡히는 것 방지).
                     InfoFilePath = f;
                 }
-                else if (BmsFilePath == null &&
-                    (string.Equals(ext, ".bms", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(ext, ".bme", StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(ext, ".bml", StringComparison.OrdinalIgnoreCase)))
+                else if (string.Equals(ext, ".bms", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(ext, ".bme", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(ext, ".bml", StringComparison.OrdinalIgnoreCase))
                 {
-                    BmsFilePath = f;
+                    if (BmsFilePath == null) BmsFilePath = f;
+
+                    string stem = Path.GetFileNameWithoutExtension(f);
+                    if (EasyBmsFilePath == null && HasDifficultyKeyword(stem, "easy", "ez", "이지", "쉬움")) EasyBmsFilePath = f;
+                    else if (NormalBmsFilePath == null && HasDifficultyKeyword(stem, "normal", "nm", "노멀", "노말", "보통")) NormalBmsFilePath = f;
+                    else if (HardBmsFilePath == null && HasDifficultyKeyword(stem, "hard", "hd", "하드", "어려움")) HardBmsFilePath = f;
                 }
             }
             BgmFilePath = bestBgm;
+        }
+
+        private static bool HasDifficultyKeyword(string text, params string[] keywords)
+        {
+            if (string.IsNullOrEmpty(text) || keywords == null) return false;
+            foreach (var kw in keywords)
+            {
+                if (text.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            }
+            return false;
+        }
+
+        private string ResolveSongFilePath(string relativeOrFileName)
+        {
+            if (string.IsNullOrWhiteSpace(relativeOrFileName)) return null;
+            string full = Path.IsPathRooted(relativeOrFileName)
+                ? relativeOrFileName
+                : Path.Combine(FolderPath, relativeOrFileName);
+            return File.Exists(full) ? full : null;
         }
 
         /// <summary>info.txt에 아티스트가 있었는지. 없으면 BMS #ARTIST로 채운다(<see cref="ParseBmsChart"/>).</summary>
@@ -254,6 +299,22 @@ namespace DEFLATE_custom_chart.Core
                     if (info.EasyLevel.HasValue) Meta.EasyLevel = info.EasyLevel.Value;
                     if (info.NormalLevel.HasValue) Meta.NormalLevel = info.NormalLevel.Value;
                     if (info.HardLevel.HasValue) Meta.HardLevel = info.HardLevel.Value;
+
+                    if (!string.IsNullOrEmpty(info.EasyChart))
+                    {
+                        string p = ResolveSongFilePath(info.EasyChart);
+                        if (p != null) EasyBmsFilePath = p;
+                    }
+                    if (!string.IsNullOrEmpty(info.NormalChart))
+                    {
+                        string p = ResolveSongFilePath(info.NormalChart);
+                        if (p != null) NormalBmsFilePath = p;
+                    }
+                    if (!string.IsNullOrEmpty(info.HardChart))
+                    {
+                        string p = ResolveSongFilePath(info.HardChart);
+                        if (p != null) HardBmsFilePath = p;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -269,31 +330,54 @@ namespace DEFLATE_custom_chart.Core
         /// <summary>hwa/ 루트에 파일을 직접 둔 기존(단일 곡) 방식 엔트리인지 여부.</summary>
         public bool IsRootLegacyEntry { get; set; }
 
-        public void ParseBmsChart(int targetSampleRate = 44100)
+        private Bms.BmsChart ParseSingleBmsChart(string filePath, string diffLabel, int targetSampleRate, bool isPrimary = false)
         {
-            Chart = null;
-            if (string.IsNullOrEmpty(BmsFilePath) || !File.Exists(BmsFilePath)) return;
-
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return null;
             try
             {
                 var parser = new Bms.BmsParser();
-                Chart = parser.ParseFile(BmsFilePath, targetSampleRate);
-                MelonLogger.Msg($"  - [BMS 파싱] '{Meta.Title}' ➔ '{Chart.Header.Title}' | BPM {Chart.Header.InitialBpm} | 노트 {Chart.Notes.Count}개 ({Chart.DescribeLaneDistribution()})"
-                    + (Chart.KeysoundLaneMismatchCount > 0 ? $" | 킥·스네어 키음 이름과 열이 다른 노트 {Chart.KeysoundLaneMismatchCount}개(열 기준 배치)" : ""));
-                ModLog.Verbose($"    홀드 매칭: {Chart.HoldPairedCount}개 성사 | 짝 없는 시작 {Chart.HoldOrphanHeadCount}개(단타 강등) | 짝 없는 끝 {Chart.HoldOrphanTailCount}개(제거)");
-                if (!_artistFromInfo && !string.IsNullOrWhiteSpace(Chart.Header.Artist))
+                var chart = parser.ParseFile(filePath, targetSampleRate);
+                string labelTag = string.IsNullOrEmpty(diffLabel) ? "" : $" [{diffLabel}]";
+                MelonLogger.Msg($"  - [BMS 파싱{labelTag}] '{Meta.Title}' ➔ '{chart.Header.Title}' | BPM {chart.Header.InitialBpm} | 노트 {chart.Notes.Count}개 ({chart.DescribeLaneDistribution()})"
+                    + (chart.KeysoundLaneMismatchCount > 0 ? $" | 킥·스네어 키음 이름과 열이 다른 노트 {chart.KeysoundLaneMismatchCount}개(열 기준 배치)" : ""));
+                ModLog.Verbose($"    홀드 매칭{labelTag}: {chart.HoldPairedCount}개 성사 | 짝 없는 시작 {chart.HoldOrphanHeadCount}개(단타 강등) | 짝 없는 끝 {chart.HoldOrphanTailCount}개(제거)");
+                if (isPrimary && !_artistFromInfo && !string.IsNullOrWhiteSpace(chart.Header.Artist))
                 {
-                    // info.txt에 아티스트가 없으면 기본값("화영왕") 대신 BMS #ARTIST를 쓴다.
-                    Meta.Artist = Chart.Header.Artist.Trim();
+                    Meta.Artist = chart.Header.Artist.Trim();
                 }
-                foreach (var warning in Chart.Warnings)
+                foreach (var warning in chart.Warnings)
                 {
-                    MelonLogger.Warning($"    [BMS 경고] '{FolderName}' {warning}");
+                    MelonLogger.Warning($"    [BMS 경고{labelTag}] '{FolderName}' {warning}");
                 }
+                return chart;
             }
             catch (Exception ex)
             {
-                MelonLogger.Error($"[커스텀 곡] BMS 파싱 예외 ('{FolderName}'): {ex.Message}");
+                MelonLogger.Error($"[커스텀 곡] BMS 파싱 예외 ({diffLabel}) ('{FolderName}'): {ex.Message}");
+                return null;
+            }
+        }
+
+        public void ParseBmsChart(int targetSampleRate = 44100)
+        {
+            Chart = null;
+            EasyChart = null;
+            NormalChart = null;
+            HardChart = null;
+
+            Chart = ParseSingleBmsChart(BmsFilePath, "기본", targetSampleRate, isPrimary: true);
+
+            if (!string.IsNullOrEmpty(EasyBmsFilePath) && !string.Equals(EasyBmsFilePath, BmsFilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                EasyChart = ParseSingleBmsChart(EasyBmsFilePath, "Easy", targetSampleRate);
+            }
+            if (!string.IsNullOrEmpty(NormalBmsFilePath) && !string.Equals(NormalBmsFilePath, BmsFilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                NormalChart = ParseSingleBmsChart(NormalBmsFilePath, "Normal", targetSampleRate);
+            }
+            if (!string.IsNullOrEmpty(HardBmsFilePath) && !string.Equals(HardBmsFilePath, BmsFilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                HardChart = ParseSingleBmsChart(HardBmsFilePath, "Hard", targetSampleRate);
             }
         }
 

@@ -35,6 +35,9 @@ namespace DEFLATE_custom_chart.Core
         public static string BmsFilePath => Active?.BmsFilePath;
         public static Bms.BmsChart LoadedBmsChart => Active?.Chart;
 
+        /// <summary>지정된 난이도(0=Easy, 1=Normal, 2=Hard)에 해당하는 활성 곡의 BMS 차트를 반환합니다. 미지정 시 기본 Chart로 폴백합니다.</summary>
+        public static Bms.BmsChart GetLoadedBmsChart(int difficultyIndex) => Active?.GetChartForDifficulty(difficultyIndex) ?? LoadedBmsChart;
+
         public static AudioClip CustomBgmClip => Active?.BgmClip;
         public static Sprite CustomCoverSprite => Active?.CoverSprite;
 

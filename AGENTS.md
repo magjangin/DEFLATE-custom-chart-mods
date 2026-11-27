@@ -14,6 +14,7 @@
 > **v1.1.5 (2026-11-25, 5차 감사):** 깨진 직접 접근 기억(업데이트 후 예외 반복 제거)·이름 바인딩 훅 정리(`__args` 10개 추가, 미사용 파라미터 삭제)·일반 플레이 BMS 주입 누락 경고·레인 비움 엣지 버그·곡 목록 템플릿 탐색 병목. 빌드 경고 0·테스트 37/37·훅 대조 0건·게임 시작 로그 `성공 45 / 건너뜀 8 / 실패 0`. **인게임 스모크는 사용자가 "나중에"를 골라 미실행.** §14 참고.
 > **v1.1.6 (2026-11-25, 5차 감사 2부):** info.txt 파서 분리(`SongInfoParser`)·`subtitle`/`album artist` 덮어쓰기 버그 수정, config.txt 오타 키 경고, 커버 FullRect·대형 커버 경고, 스캔/주입 시간 로그, 단위 테스트 53개. 훅 변경 없음. 빌드 경고 0·테스트 53/53. **인게임 미확인(v1.1.5와 함께 다음 실기).** §14 참고.
 > **v1.1.7 (2026-11-26, 6차 감사):** 복제 템플릿 3차 폴백(`anyOriginalBlock`)·로딩 씬 UI 전면 리플렉션 내성 강화·MemberFallbacks 대폭 확장·BMS 동일 틱 변속 결정적 안정 정렬(`OrderIndex`) 및 음수 타임라인 방어·BGM 비동기 로딩 세대 가드(`_loadGeneration`)·일시정지 중 노트 흔들림 연산 가드·SafePatcher 타입 로더 예외 상세 진단, 단위 테스트 57개(전체 통과). §15 참고.
+> **v1.1.8 (2026-11-27, 7차 감사):** 난이도별 차트 지원(Easy/Normal/Hard BMS 파일명 패턴 및 info.txt chart_* 키 파싱, 미지정 난이도 자동 폴백) · 표준 5x/6x LN 채널 완벽 지원(`PairLongNotesFromLnChannels`, 고아 Head 단타 강등) · #STOPxx 및 09 채널 완벽 지원(정지 시간 누적 계산 및 타임라인 앵커링으로 싱크 완벽 유지) · 인게임 난이도 연동 주입 · 단위 테스트 61개(전체 통과). §16 참고.
 > **2026-11-23 전수 감사/리팩토링:** §9 참고. 컴파일 경고 0 · 오류 0, `[SafePatcher] 성공 45 / 건너뜀 8(로그 레벨 LogLevel=1 기준) / 실패 0`, 스모크 테스트 `PASS`(BMS 552/552, 라인바 296, 커스텀 BGM·BGA, 컨텍스트 인게임).
 > 미확인: 롱노트(테스트 차트에 홀드 0개), 드롭 레인(테스트 차트 14번 채널 0개), 킥/스네어 키음 노트(테스트 차트에 없음).
 
@@ -480,4 +481,32 @@ Start-Process "steam://rungameid/3921360"
 
 **확인 상태**
 - 빌드 경고 0 / 오류 0 (`-warnaserror`), 단위 테스트 57/57, 훅 대상 대조 0건.
+
+---
+
+## 16. 7차 감사 기록 (2026-11-27, v1.1.8)
+
+범위: 난이도별 차트 지원(Easy/Normal/Hard), 표준 5x/6x LN 채널 파싱 및 페어링, #STOPxx 및 09 채널 완벽 지원, 인게임 난이도별 차트 주입 연동, 단위 테스트 확장.
+
+**적용한 변경**
+- `SongInfoParser`: `info.txt`에서 난이도별 차트 파일명 지정 키워드(`chart_easy`, `chart_normal`, `chart_hard`, `chart_ez/nm/hd`, `이지/노멀/하드 차트` 등) 파싱 지원.
+- `CustomSongEntry`:
+  - 곡 폴더 스캔 시 난이도별 BMS 파일명 패턴(`*easy*.bms`, `*normal*.bms`, `*hard*.bms` 등) 자동 감지 및 `info.txt` 명시 경로 최우선 채택.
+  - `EasyBmsFilePath`/`NormalBmsFilePath`/`HardBmsFilePath` 및 `EasyChart`/`NormalChart`/`HardChart` 캐싱.
+  - `GetChartForDifficulty(int difficulty)`: 특정 난이도 미지정 시 기본 Chart로 안전 폴백(하위 호환 100%).
+- `BmsLaneMapper`:
+  - 표준 BMS 롱노트 채널(51, 52, 53, 54, 56 및 2P 6x) 매핑 추가(`56`→1열, `51`→2열, `52`→3열, `53`→4열, `54`→드롭).
+  - `IsLnChannel`, `NormalizeChannel` 헬퍼 메서드 추가.
+- `BmsParser`:
+  - 5x/6x LN 채널 데이터를 무시하지 않고 파싱한 뒤 `PairLongNotesFromLnChannels`로 2개씩 짝지어(Head~Tail) 롱노트로 변환. 홀수 개일 때 마지막 고아 Head는 단타로 강등.
+  - `#STOPxx <duration>` 확장 정의 테이블 파싱 및 `09` 채널 이벤트 수집.
+  - `BuildBpmTimeline`에서 정지 시간(초, $duration / 192 \times 240 / bpm$)을 틱 순서대로 누적 계산하고 타임라인 앵커를 갱신하여, STOP 기믹 이후의 모든 노트들이 음악과 완벽한 싱크를 유지하도록 보장.
+- `HwaAssetManager` & `InGameRhythmHooks`:
+  - `HwaAssetManager.GetLoadedBmsChart(int difficultyIndex)` 추가.
+  - `InGameRhythmHooks`의 `LogPlaySummaryOnce`, `InitializeKoreographyTracks`, `BuildBmsLaneEvents`에서 인게임 난이도(`gameData.nowDifficulty`)에 따른 맞춤형 차트를 안전하게 주입하고 로그에 상세 표기.
+- `DEFLATE.CustomChart.Tests`:
+  - 단위 테스트 4개 추가 (총 61개 통과): 난이도별 차트 지정 파싱, 5x LN 페어링, 고아 Head 단타 강등, #STOPxx 지연 누적, 16진 STOP 등.
+
+**확인 상태**
+- 빌드 경고 0 / 오류 0 (`-warnaserror`), 단위 테스트 61/61, 훅 대상 대조 0건.
 

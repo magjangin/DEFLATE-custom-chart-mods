@@ -51,20 +51,59 @@ namespace DEFLATE_custom_chart.Core.Bms
             HiHat1, HiHat2, HiHat3, HiHat4, KickLeft, KickRight, SnareLeft, SnareRight, Drop,
         };
 
-        /// <summary>BMS 채널 ➔ 화면 열(1~4). 드롭(14)은 0. 여기 없는 채널의 노트는 무시됩니다.</summary>
+        /// <summary>BMS 채널 ➔ 화면 열(1~4). 드롭(14/54/24/64)은 0. 여기 없는 채널의 노트는 무시됩니다.</summary>
         private static readonly Dictionary<string, int> ChannelToColumn = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
         {
+            // 1P 단타 (16=1열, 11=2열, 12=3열, 13=4열, 14=드롭)
             { "16", 1 },
             { "11", 2 },
             { "12", 3 },
             { "13", 4 },
             { "14", 0 },
+            // 1P 롱노트 (56=1열, 51=2열, 52=3열, 53=4열, 54=드롭)
+            { "56", 1 },
+            { "51", 2 },
+            { "52", 3 },
+            { "53", 4 },
+            { "54", 0 },
+            // 2P 단타 (26=1열, 21=2열, 22=3열, 23=4열, 24=드롭)
+            { "26", 1 },
+            { "21", 2 },
+            { "22", 3 },
+            { "23", 4 },
+            { "24", 0 },
+            // 2P 롱노트 (66=1열, 61=2열, 62=3열, 63=4열, 64=드롭)
+            { "66", 1 },
+            { "61", 2 },
+            { "62", 3 },
+            { "63", 4 },
+            { "64", 0 },
         };
 
-        /// <summary>이 채널이 레인 노트(16/11/12/13/14) 채널인지 판정합니다. 파서가 노트를 생성할지 걸러낼 때 씁니다.</summary>
+        /// <summary>이 채널이 레인 노트(단타 및 롱노트) 채널인지 판정합니다. 파서가 노트를 생성할지 걸러낼 때 씁니다.</summary>
         public static bool IsNoteChannel(string channel)
         {
             return !string.IsNullOrEmpty(channel) && ChannelToColumn.ContainsKey(channel);
+        }
+
+        /// <summary>표준 BMS 롱노트 채널(5x / 6x)인지 판정합니다.</summary>
+        public static bool IsLnChannel(string channel)
+        {
+            if (string.IsNullOrEmpty(channel) || channel.Length < 2) return false;
+            char c = channel[0];
+            return (c == '5' || c == '6') && ChannelToColumn.ContainsKey(channel);
+        }
+
+        /// <summary>롱노트/2P 채널을 표준 1P 채널(16/11/12/13/14)로 정규화합니다.</summary>
+        public static string NormalizeChannel(string channel)
+        {
+            if (string.IsNullOrEmpty(channel) || channel.Length < 2) return channel;
+            char c = channel[0];
+            if (c == '5' || c == '2' || c == '6')
+            {
+                return "1" + channel[1];
+            }
+            return channel;
         }
 
         /// <summary>킥·스네어 키음 이름 키워드. 홀드 키음("홀드 시작")처럼 한글 이름도 받는다(v1.1.3~).</summary>
