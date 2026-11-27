@@ -158,11 +158,72 @@ namespace DEFLATE_custom_chart.Tests
         }
 
         [Fact]
-        public void 지원하지_않는_STOP과_LN채널은_경고한다()
+        public void 표준_5x_채널_롱노트_페어링을_수행한다()
         {
-            var chart = Parse("#BPM 120", "#STOP01 192", "#00109:01", "#00151:01");
-            Assert.Contains(chart.Warnings, w => w.Contains("STOP"));
-            Assert.Contains(chart.Warnings, w => w.Contains("LN"));
+            // 120 BPM: 한 마디 = 2초
+            // 51 채널(2열 롱노트, kick_left): 0마디 시작(0초)에 Head, 0마디 중간(1초)에 Tail
+            var chart = Parse(
+                "#BPM 120",
+                "#WAV01 kick.wav",
+                "#00051:01000100");
+
+            // Tail은 제거되고 Head 하나만 남아야 함
+            var note = Assert.Single(chart.Notes);
+            Assert.True(note.IsLongNote);
+            Assert.Equal("51", note.Channel);
+            Assert.Equal(BmsLaneMapper.KickLeft, note.ResolvedLane);
+            Assert.Equal(0.0, note.TimeSeconds, 6);
+            Assert.Equal(1.0, note.LongNoteEndTimeSeconds, 6);
+            Assert.Equal(1, chart.HoldPairedCount);
+            Assert.Equal(0, chart.HoldOrphanHeadCount);
+        }
+
+        [Fact]
+        public void 홀수_개_5x_채널_롱노트의_고아_Head는_단타로_강등된다()
+        {
+            var chart = Parse(
+                "#BPM 120",
+                "#00056:01"); // 56 채널(1열)에 1개만 있음
+
+            var note = Assert.Single(chart.Notes);
+            Assert.False(note.IsLongNote);
+            Assert.Equal(BmsLaneMapper.HiHat1, note.ResolvedLane);
+            Assert.Equal(0, chart.HoldPairedCount);
+            Assert.Equal(1, chart.HoldOrphanHeadCount);
+        }
+
+        [Fact]
+        public void STOP_명령은_이후_노트들의_시간을_정확히_지연시킨다()
+        {
+            // 120 BPM (1마디 = 2초 = 192단위). STOP01 96 = 96/192 * 2초 = 1.0초 정지.
+            // 0마디 중간(1.0초 시점)에 STOP01 실행 -> 이후의 1마디 시작 노트는 2.0 + 1.0 = 3.0초에 나와야 함.
+            var chart = Parse(
+                "#BPM 120",
+                "#STOP01 96",
+                "#00009:0001",
+                "#00116:01");
+
+            Assert.Single(chart.StopEvents);
+            Assert.Equal(1.0, chart.StopEvents[0].DurationSeconds, 6);
+
+            var note = Assert.Single(chart.Notes);
+            Assert.Equal(3.0, note.TimeSeconds, 6);
+        }
+
+        [Fact]
+        public void 채널09_16진수_직접_지정_STOP을_반영한다()
+        {
+            // 120 BPM. 0x60 = 96단위 = 1.0초 정지
+            var chart = Parse(
+                "#BPM 120",
+                "#00009:0060",
+                "#00116:01");
+
+            Assert.Single(chart.StopEvents);
+            Assert.Equal(1.0, chart.StopEvents[0].DurationSeconds, 6);
+
+            var note = Assert.Single(chart.Notes);
+            Assert.Equal(3.0, note.TimeSeconds, 6);
         }
 
         [Fact]

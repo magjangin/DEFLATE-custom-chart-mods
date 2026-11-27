@@ -86,6 +86,21 @@ namespace DEFLATE_custom_chart.Tests
             Assert.Null(Parse("ez: 쉬움").EasyLevel);
             Assert.Equal(3, Parse("이지: 3", "노말: 5").EasyLevel);
         }
+
+        [Fact]
+        public void 난이도별_차트_파일명_지정을_파싱한다()
+        {
+            var info = Parse(
+                "chart_easy : easy.bms",
+                "chart_normal = normal.bme",
+                "chart_hard : hard.bml",
+                "이지 차트 : ez.bms",
+                "하드 채보 : hd.bms");
+
+            Assert.Equal("ez.bms", info.EasyChart);
+            Assert.Equal("normal.bme", info.NormalChart);
+            Assert.Equal("hd.bms", info.HardChart);
+        }
     }
 
     /// <summary>기존 테스트가 다루지 않던 BMS 파서 경로.</summary>

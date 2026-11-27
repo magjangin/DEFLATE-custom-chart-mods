@@ -27,10 +27,6 @@ namespace DEFLATE_custom_chart.Core.Bms
             return true;
         }
 
-        // 지원하지 않는 BMS 기능을 만났는지 (파싱 끝에 경고 한 줄씩). 파서 인스턴스는 파일마다 새로 만든다.
-        private bool _sawStop;
-        private bool _sawLnChannel;
-
         private static bool IsAllZerosOrEmpty(string line, int start)
         {
             for (int i = start; i < line.Length; i++)
@@ -137,19 +133,11 @@ namespace DEFLATE_custom_chart.Core.Bms
             {
                 chart.Warnings.Add("#RANDOM 분기가 있어 1번 분기(#IF 1)만 읽었습니다 (무작위 선택은 지원하지 않음)");
             }
-            if (_sawStop)
-            {
-                chart.Warnings.Add("STOP(#STOPxx / 09 채널)은 지원하지 않습니다. STOP 이후 노트가 그 길이만큼 일찍 나옵니다");
-            }
-            if (_sawLnChannel)
-            {
-                chart.Warnings.Add("LN 채널(5x/6x, #LNTYPE)은 지원하지 않아 무시했습니다. 홀드는 키음 이름(홀드 시작/홀드 끝) 또는 #LNOBJ로 지정하세요");
-            }
 
             // 마디별 시작 틱 위치 계산 (마디 배율 #XXX02 적용)
             var measureStartTicks = CalculateMeasureStartTicks(measureLengths, maxMeasure);
 
-            // BPM 변경 이벤트 목록 수집 및 틱 순서 정렬
+            // BPM 변경 및 STOP 이벤트 목록 수집 및 틱 순서 정렬 (타임라인 통합 계산)
             BuildBpmTimeline(chart, rawChannelData, measureStartTicks, noteWidth);
 
             // 마디선 / 박자선 위치 계산 (인게임 라인바 주입용)
@@ -161,7 +149,10 @@ namespace DEFLATE_custom_chart.Core.Bms
             // 이후 페어링 및 출력에서 정렬 재사용이 가능하도록 (Tick, Channel) 순으로 1회 인플레이스 정렬
             chart.Notes.Sort(CompareNotesByTickThenChannel);
 
-            // 롱노트(LN) Head-Tail 페어링 처리
+            // 표준 LN 채널(5x/6x) Head-Tail 페어링 처리
+            PairLongNotesFromLnChannels(chart);
+
+            // 롱노트(LN) Head-Tail 페어링 처리 (#LNOBJ)
             PairLongNotes(chart);
 
             // 키음 이름("홀드 시작"/"홀드 끝") 기반 홀드 페어링 (GRC2 / sxtg2와 동일한 매칭 시맨틱)
@@ -205,15 +196,7 @@ namespace DEFLATE_custom_chart.Core.Bms
                         measureLengths[measure] = lenMult;
                     }
                 }
-                else if (channel == "09")
-                {
-                    if (!IsAllZerosOrEmpty(line, 7)) _sawStop = true;
-                }
-                else if ((channel[0] == '5' || channel[0] == '6') && !IsAllZerosOrEmpty(line, 7))
-                {
-                    _sawLnChannel = true;
-                }
-                else if (channel == "03" || channel == "08" || BmsLaneMapper.IsNoteChannel(channel))
+                else if (channel == "03" || channel == "08" || channel == "09" || BmsLaneMapper.IsNoteChannel(channel))
                 {
                     // 사용하지 않는 BGM(01)/BGA(04) 등 수백 줄의 채널 데이터 객체 할당을 생략한다.
                     rawChannelData.Add(new RawMeasureChannel
@@ -278,7 +261,25 @@ namespace DEFLATE_custom_chart.Core.Bms
             }
             else if (line.StartsWith("#STOP", StringComparison.OrdinalIgnoreCase))
             {
-                _sawStop = true;
+                if (line.Length >= (5 + noteWidth) && !char.IsWhiteSpace(line[5]))
+                {
+                    // "#STOPxx 192" ➔ 확장 STOP 테이블 (09 채널용)
+                    string stopKey = line.Substring(5, noteWidth).ToUpperInvariant();
+                    string stopStr = line.Substring(5 + noteWidth).Trim();
+                    if (double.TryParse(stopStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double exStop) && exStop > 0)
+                    {
+                        chart.Header.StopTable[stopKey] = exStop;
+                    }
+                }
+                else
+                {
+                    // "#STOP 192" 단일 기본 정지값 (01 키로 등록)
+                    string stopStr = ExtractHeaderValue(line, "#STOP");
+                    if (double.TryParse(stopStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double defStop) && defStop > 0)
+                    {
+                        chart.Header.StopTable["01"] = defStop;
+                    }
+                }
             }
             else if (line.StartsWith("#WAV", StringComparison.OrdinalIgnoreCase) && line.Length >= (4 + noteWidth))
             {
@@ -331,8 +332,17 @@ namespace DEFLATE_custom_chart.Core.Bms
             return startTicks;
         }
 
+        private struct TimelineAnchor
+        {
+            public double Tick;
+            public int OrderIndex;
+            public float? NewBpm;
+            public double? StopValue;
+        }
+
         /// <summary>
-        /// 초기 BPM 및 03/08 채널의 BPM 변경 이벤트를 타임라인 틱 순으로 구성합니다.
+        /// 초기 BPM, 03/08 채널의 BPM 변경 및 09 채널의 STOP 이벤트를 타임라인 틱 순으로 통합 구성합니다.
+        /// STOP 이벤트 발생 시 해당 틱 이후의 타임라인에 정지 시간(초)이 누적 반영됩니다.
         /// </summary>
         private void BuildBpmTimeline(
             BmsChart chart,
@@ -341,24 +351,26 @@ namespace DEFLATE_custom_chart.Core.Bms
             int noteWidth)
         {
             chart.BpmEvents.Clear();
+            chart.StopEvents.Clear();
             int order = 0;
 
+            var anchors = new List<TimelineAnchor>();
+
             // 0번 Tick에 초기 BPM 설정
-            chart.BpmEvents.Add(new BmsBpmEvent
+            anchors.Add(new TimelineAnchor
             {
-                OrderIndex = order++,
                 Tick = 0,
-                Bpm = chart.Header.InitialBpm,
-                TimeSeconds = 0.0
+                OrderIndex = order++,
+                NewBpm = chart.Header.InitialBpm,
+                StopValue = null
             });
 
             foreach (var raw in rawChannels)
             {
-                if (raw.Channel != "03" && raw.Channel != "08") continue;
+                if (raw.Channel != "03" && raw.Channel != "08" && raw.Channel != "09") continue;
                 if (string.IsNullOrEmpty(raw.Data)) continue;
 
                 // 03 채널 값은 오브젝트 ID가 아니라 BPM 자체(16진 00~FF)라서 3자리 확장 ID 파일에서도 항상 2자리다.
-                // 예전에는 ID 폭(3)으로 나눠 "길이 4가 폭 3의 배수가 아님"으로 줄 전체를 버려 변속이 사라졌다.
                 int width = raw.Channel == "03" ? 2 : noteWidth;
                 if (raw.Data.Length % width != 0)
                 {
@@ -376,60 +388,103 @@ namespace DEFLATE_custom_chart.Core.Bms
                     if (IsAllZeros(raw.Data, startIdx, width)) continue;
 
                     string val = raw.Data.Substring(startIdx, width);
-
                     double eventTick = mStartTick + ((double)i / objectCount) * mLengthTicks;
-                    float newBpm = 0.0f;
 
                     if (raw.Channel == "03")
                     {
                         // 03 채널: 16진수 직접 지정 BPM
-                        if (byte.TryParse(val, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte hexBpm))
+                        if (byte.TryParse(val, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte hexBpm) && hexBpm > 0)
                         {
-                            newBpm = hexBpm;
+                            anchors.Add(new TimelineAnchor { Tick = eventTick, OrderIndex = order++, NewBpm = (float)hexBpm, StopValue = null });
                         }
                     }
                     else if (raw.Channel == "08")
                     {
                         // 08 채널: #BPMxx 확장 테이블의 지정 BPM
                         string key = val.ToUpperInvariant();
-                        if (chart.Header.BpmTable.TryGetValue(key, out float tableBpm))
+                        if (chart.Header.BpmTable.TryGetValue(key, out float tableBpm) && tableBpm > 0f)
                         {
-                            newBpm = tableBpm;
+                            anchors.Add(new TimelineAnchor { Tick = eventTick, OrderIndex = order++, NewBpm = tableBpm, StopValue = null });
                         }
                     }
-
-                    if (newBpm > 0)
+                    else if (raw.Channel == "09")
                     {
-                        chart.BpmEvents.Add(new BmsBpmEvent
+                        // 09 채널: STOP 이벤트 (#STOPxx 테이블 또는 16진수)
+                        string key = val.ToUpperInvariant();
+                        double stopVal = 0.0;
+                        if (chart.Header.StopTable.TryGetValue(key, out double tblVal))
                         {
-                            OrderIndex = order++,
-                            Tick = eventTick,
-                            Bpm = newBpm,
-                            TimeSeconds = 0.0 // 아래 누적 연산에서 채움
-                        });
+                            stopVal = tblVal;
+                        }
+                        else if (byte.TryParse(val, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out byte hexStop))
+                        {
+                            stopVal = hexStop;
+                        }
+
+                        if (stopVal > 0)
+                        {
+                            anchors.Add(new TimelineAnchor { Tick = eventTick, OrderIndex = order++, NewBpm = null, StopValue = stopVal });
+                        }
                     }
                 }
             }
 
-            // Tick 순서대로 정렬 후 시간(TimeSeconds) 누적 계산 (Tick 일치 시 출현 순서 OrderIndex 유지)
-            chart.BpmEvents.Sort(CompareBpmEventsByTick);
+            // Tick 순서대로 정렬 (동일 Tick 시 출현 순서 OrderIndex 유지)
+            anchors.Sort((a, b) =>
+            {
+                int cmp = a.Tick.CompareTo(b.Tick);
+                return cmp != 0 ? cmp : a.OrderIndex.CompareTo(b.OrderIndex);
+            });
 
             double prevTick = 0.0;
             double prevTime = 0.0;
             float currentBpm = chart.Header.InitialBpm > 0f ? chart.Header.InitialBpm : 130.0f;
 
-            foreach (var bpmEv in chart.BpmEvents)
+            foreach (var anchor in anchors)
             {
-                double deltaTick = bpmEv.Tick - prevTick;
-                // 공식: time = tick * 240 / (bpm * TicksPerMeasure)
+                double deltaTick = Math.Max(0.0, anchor.Tick - prevTick);
                 double safeBpm = currentBpm > 0f ? currentBpm : 130.0;
                 double deltaTime = deltaTick * 240.0 / (safeBpm * TicksPerMeasure);
                 prevTime += deltaTime;
-                bpmEv.TimeSeconds = prevTime;
+                prevTick = anchor.Tick;
 
-                prevTick = bpmEv.Tick;
-                if (bpmEv.Bpm > 0f) currentBpm = bpmEv.Bpm;
+                if (anchor.StopValue.HasValue)
+                {
+                    // STOP 계산: 192 = 1마디 정지 = 4박 정지 = 240 / bpm 초
+                    double stopSec = (anchor.StopValue.Value / 192.0) * (240.0 / safeBpm);
+                    chart.StopEvents.Add(new BmsStopEvent
+                    {
+                        OrderIndex = anchor.OrderIndex,
+                        Tick = anchor.Tick,
+                        StopValue = anchor.StopValue.Value,
+                        DurationSeconds = stopSec
+                    });
+                    prevTime += stopSec;
+
+                    chart.BpmEvents.Add(new BmsBpmEvent
+                    {
+                        OrderIndex = anchor.OrderIndex,
+                        Tick = anchor.Tick,
+                        Bpm = currentBpm,
+                        TimeSeconds = prevTime
+                    });
+                }
+
+                if (anchor.NewBpm.HasValue)
+                {
+                    currentBpm = anchor.NewBpm.Value;
+                    chart.BpmEvents.Add(new BmsBpmEvent
+                    {
+                        OrderIndex = anchor.OrderIndex,
+                        Tick = anchor.Tick,
+                        Bpm = currentBpm,
+                        TimeSeconds = prevTime
+                    });
+                }
             }
+
+            // 동일 Tick에 여러 BpmEvent가 생성되었을 수 있으므로 결정적 안정 정렬 재보장
+            chart.BpmEvents.Sort(CompareBpmEventsByTick);
         }
 
         private static int CompareBpmEventsByTick(BmsBpmEvent a, BmsBpmEvent b)
@@ -586,6 +641,54 @@ namespace DEFLATE_custom_chart.Core.Bms
                 list.Add(note);
             }
             return grouped;
+        }
+
+        /// <summary>
+        /// 표준 BMS 롱노트 채널(5x / 6x)의 노트들을 Tick 순으로 2개씩 짝지어(Head ~ Tail) 롱노트로 변환합니다.
+        /// (호출 시점에 chart.Notes는 이미 Tick 순으로 정렬되어 있어야 합니다.)
+        /// </summary>
+        private void PairLongNotesFromLnChannels(BmsChart chart)
+        {
+            if (chart.Notes.Count == 0) return;
+
+            var toRemove = new HashSet<BmsNote>();
+            var notesByChannel = GroupSortedNotesByChannel(chart.Notes);
+            int paired = 0, orphan = 0;
+
+            foreach (var kvp in notesByChannel)
+            {
+                string channel = kvp.Key;
+                if (!BmsLaneMapper.IsLnChannel(channel)) continue;
+
+                var ordered = kvp.Value;
+                for (int i = 0; i < ordered.Count; i += 2)
+                {
+                    var head = ordered[i];
+                    if (i + 1 < ordered.Count)
+                    {
+                        var tail = ordered[i + 1];
+                        head.IsLongNote = true;
+                        head.LongNoteEndTick = tail.Tick;
+                        head.LongNoteEndTimeSeconds = tail.TimeSeconds;
+                        head.LongNoteEndSamplePosition = tail.SamplePosition;
+                        toRemove.Add(tail);
+                        paired++;
+                    }
+                    else
+                    {
+                        head.IsLongNote = false;
+                        orphan++;
+                    }
+                }
+            }
+
+            if (toRemove.Count > 0)
+            {
+                chart.Notes.RemoveAll(n => toRemove.Contains(n));
+            }
+
+            chart.HoldPairedCount += paired;
+            chart.HoldOrphanHeadCount += orphan;
         }
 
         /// <summary>

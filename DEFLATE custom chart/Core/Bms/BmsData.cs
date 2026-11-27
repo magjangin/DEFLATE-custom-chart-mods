@@ -41,6 +41,11 @@ namespace DEFLATE_custom_chart.Core.Bms
         /// 확장 BPM 정의 (#BPMxx)
         /// </summary>
         public Dictionary<string, float> BpmTable { get; } = new Dictionary<string, float>();
+
+        /// <summary>
+        /// 확장 STOP 정의 (#STOPxx) - 192분음표 기준 단위 정지 시간
+        /// </summary>
+        public Dictionary<string, double> StopTable { get; } = new Dictionary<string, double>();
     }
 
     /// <summary>
@@ -86,6 +91,19 @@ namespace DEFLATE_custom_chart.Core.Bms
     }
 
     /// <summary>
+    /// 정지(STOP) 이벤트 정보 (09 채널 및 #STOPxx)
+    /// </summary>
+    public class BmsStopEvent
+    {
+        public int OrderIndex { get; set; }
+        public double Tick { get; set; }
+        /// <summary>192분음표 기준 단위 정지 수치 (192 = 1마디 = 4박)</summary>
+        public double StopValue { get; set; }
+        /// <summary>실제 계산된 정지 시간(초)</summary>
+        public double DurationSeconds { get; set; }
+    }
+
+    /// <summary>
     /// 라인바(마디선/박자선) 한 줄. BMS 마디 경계와 4분음표 박자 위치에서 만들어집니다.
     /// </summary>
     public class BmsBarLine
@@ -106,6 +124,7 @@ namespace DEFLATE_custom_chart.Core.Bms
         public int SampleRate { get; set; } = 44100;
         public BmsHeader Header { get; set; } = new BmsHeader();
         public List<BmsBpmEvent> BpmEvents { get; set; } = new List<BmsBpmEvent>();
+        public List<BmsStopEvent> StopEvents { get; set; } = new List<BmsStopEvent>();
         public List<BmsNote> Notes { get; set; } = new List<BmsNote>();
 
         /// <summary>인게임 라인바로 주입할 마디선/박자선 (틱 순).</summary>

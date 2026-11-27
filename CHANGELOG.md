@@ -2,6 +2,29 @@
 
 버전 기준은 `DEFLATE custom chart/Core/DeflateMod.cs`의 `DeflateMod.Version`입니다. 릴리즈는 `tools/release.ps1`이 이 값과 이 파일 최상단 `## [버전]`, `Properties/AssemblyInfo.cs`가 같은지 확인한 뒤 만듭니다.
 
+## [1.1.8] - 2026-11-27
+
+기준 게임 빌드는 그대로입니다: DEFLATE **1.2** (Steam Build `26402105`), Unity `2022.3.62f2`, MelonLoader **0.7.3**.
+
+### 신규 기능 및 차트 호환성 강화
+- **난이도별 차트 지원 (Easy / Normal / Hard):**
+  - `info.txt`에서 `chart_easy`, `chart_normal`, `chart_hard` (및 `ez`, `nm`, `hd`, 한글 키워드 `이지 차트`, `노멀 차트`, `하드 차트` 등) 파싱 지원.
+  - 곡 폴더 내 BMS 파일명 패턴(`*easy*.bms`, `*normal*.bms`, `*hard*.bms` 등) 자동 감지.
+  - 특정 난이도 미지정 시 기본 BMS 차트로 자동 폴백(기존 단일 차트 완벽 호환).
+  - 인게임 난이도 선택(`DiffCtrl`, `gameData.nowDifficulty`)과 연동하여 해당 난이도에 맞는 차트 동적 주입.
+- **표준 BMS 롱노트 채널 (5x / 6x 채널) 완벽 지원:**
+  - BMS 표준 롱노트 채널(51, 52, 53, 54, 56 및 2P 6x)을 단타로 버리거나 무시하지 않고 파싱.
+  - Head-Tail 페어링(`PairLongNotesFromLnChannels`)으로 롱노트 변환 및 고아 Head 노트 단타 강등 안전 처리.
+- **BMS 정지 명령 (#STOPxx 및 09 채널) 완벽 지원:**
+  - `#STOPxx` 확장 정의 테이블 파싱 및 `09` 채널 이벤트 수집.
+  - 타임라인 상 정지 시간(초) 누적 연산 및 타임라인 앵커링을 통해 STOP 기믹 이후의 모든 노트 싱크를 음악과 완벽히 일치하도록 보장.
+- **인게임 주입 및 로깅 연동:**
+  - `InGameRhythmHooks`에서 게임 난이도별 맞춤형 차트 주입 및 플레이 시작 로그에 난이도별 노트 수 상세 표기.
+
+### 테스트 & 품질
+- 오프라인 단위 테스트 4개 추가 (총 61개 전체 통과 확인): 난이도별 차트 키워드 파싱, 표준 5x 채널 롱노트 페어링, 고아 Head 단타 강등, #STOPxx 지연 누적, 16진 STOP 등.
+- 빌드 경고 0 / 오류 0 (`-warnaserror`), 훅 대상 대조 0건.
+
 ## [1.1.7] - 2026-11-26
 
 기준 게임 빌드는 그대로입니다: DEFLATE **1.2** (Steam Build `26402105`), Unity `2022.3.62f2`, MelonLoader **0.7.3**.

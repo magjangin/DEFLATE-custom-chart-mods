@@ -76,21 +76,38 @@ namespace DEFLATE_custom_chart.Hooks
             _rateMismatchWarned = false; // 곡마다 다시 알린다(예전에는 실행당 1회라 두 번째 곡부터 안내가 빠졌음)
         }
 
+        private static int GetCurrentDifficulty(RhythmGameController instance)
+        {
+            if (instance != null && instance.gameData != null)
+            {
+                return (int)instance.gameData.nowDifficulty;
+            }
+            return 1; // 기본 Normal (1)
+        }
+
+        private static BmsChart GetActiveChartForGame(RhythmGameController instance)
+        {
+            int diff = GetCurrentDifficulty(instance);
+            return HwaAssetManager.GetLoadedBmsChart(diff);
+        }
+
         private static void LogPlaySummaryOnce(RhythmGameController instance)
         {
             if (_summaryLogged || !HwaAssetManager.IsTargetTrackActive) return;
             _summaryLogged = true;
 
             var meta = HwaAssetManager.CurrentMeta;
-            var chart = HwaAssetManager.LoadedBmsChart;
+            var chart = GetActiveChartForGame(instance);
+            int diff = GetCurrentDifficulty(instance);
+            string diffName = diff == 0 ? "Easy" : (diff == 2 ? "Hard" : "Normal");
             var clip = instance != null && instance.audioCom != null ? instance.audioCom.clip : null;
             string Lane(string id) => _summaryLaneCounts.TryGetValue(id, out int c) ? c.ToString() : "-";
             string chartPart = chart == null
                 ? "BMS 없음(테스트 노트)"
-                : $"BMS 노트 {chart.Notes.Count}개 → 주입 하이햇 {Lane(BmsLaneMapper.HiHat1)}/{Lane(BmsLaneMapper.HiHat2)}/{Lane(BmsLaneMapper.HiHat3)}/{Lane(BmsLaneMapper.HiHat4)}"
+                : $"BMS [{diffName}] 노트 {chart.Notes.Count}개 → 주입 하이햇 {Lane(BmsLaneMapper.HiHat1)}/{Lane(BmsLaneMapper.HiHat2)}/{Lane(BmsLaneMapper.HiHat3)}/{Lane(BmsLaneMapper.HiHat4)}"
                     + $" · 킥·스네어 {Lane(BmsLaneMapper.SnareLeft)}/{Lane(BmsLaneMapper.KickLeft)}/{Lane(BmsLaneMapper.KickRight)}/{Lane(BmsLaneMapper.SnareRight)}(1~4열)"
                     + $" · 드롭 {Lane(BmsLaneMapper.Drop)} · 라인바 {_summaryBarLines}";
-            ModLog.Info($"[커스텀 차트] '{meta.Title}' — {chartPart} | 음악 '{(clip != null ? clip.name : "없음")}' {(clip != null ? clip.frequency : 0)}Hz (노트 기준 {_summaryTimelineRate}Hz) | BGA {(string.IsNullOrEmpty(HwaAssetManager.BgaFileUrl) ? "없음" : "있음")}");
+            ModLog.Info($"[커스텀 차트] '{meta.Title}' ({diffName}) — {chartPart} | 음악 '{(clip != null ? clip.name : "없음")}' {(clip != null ? clip.frequency : 0)}Hz (노트 기준 {_summaryTimelineRate}Hz) | BGA {(string.IsNullOrEmpty(HwaAssetManager.BgaFileUrl) ? "없음" : "있음")}");
             WarnIfInjectionIncomplete(chart);
         }
 
@@ -401,7 +418,7 @@ namespace DEFLATE_custom_chart.Hooks
                         __instance.nextDropEventIdx = 0;
 
                         // 2. 드롭 레인으로 라우팅되는 BMS 노트(14번 채널)를 O(1) 레인 인덱스로 dropEventSamples에 주입
-                        var bmsChart = HwaAssetManager.LoadedBmsChart;
+                        var bmsChart = GetActiveChartForGame(__instance);
                         if (bmsChart != null && bmsChart.Notes.Count > 0 && __instance.dropEventSamples != null)
                         {
                             var dropNotes = bmsChart.GetNotesForLane(BmsLaneMapper.Drop);
@@ -484,7 +501,7 @@ namespace DEFLATE_custom_chart.Hooks
             // 예전에는 playingKoreo가 아직 null인 레인 로드에서 빈 리스트를 돌려줘, BMS 노트 대신 레인이 통째로 비워졌다.
             var koreo = instance != null ? instance.playingKoreo : null;
             int before = lane.laneEvents != null ? lane.laneEvents.Count : -1;
-            var bmsChart = HwaAssetManager.LoadedBmsChart;
+            var bmsChart = GetActiveChartForGame(instance);
 
             if (bmsChart != null && bmsChart.Notes.Count > 0)
             {
@@ -666,7 +683,7 @@ namespace DEFLATE_custom_chart.Hooks
             {
                 if (lane == null || !HwaAssetManager.IsTargetTrackActive) return null;
 
-                var bmsChart = HwaAssetManager.LoadedBmsChart;
+                var bmsChart = GetActiveChartForGame(null);
                 if (bmsChart == null || bmsChart.Notes.Count == 0 || bmsChart.BarLines.Count == 0) return null;
 
                 // 1. 원본 라인바 이벤트 관찰: 페이로드 종류별 개수 / 대표 페이로드 / 이벤트 길이 / 평균 간격
