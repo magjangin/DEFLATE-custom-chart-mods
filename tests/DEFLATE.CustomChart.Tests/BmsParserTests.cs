@@ -236,5 +236,39 @@ namespace DEFLATE_custom_chart.Tests
             Assert.Equal(4.0, chart.BarLines.Last().TimeSeconds, 6);
             Assert.True(chart.BarLines.Zip(chart.BarLines.Skip(1)).All(p => p.First.Tick < p.Second.Tick));
         }
+
+        [Fact]
+        public void 헤더의_따옴표_및_작은따옴표가_자동으로_정제된다()
+        {
+            var chart = Parse(
+                "#TITLE \"My Super Track\"",
+                "#ARTIST 'Composer Name'",
+                "#SUBTITLE \"[Custom Cut]\"",
+                "#GENRE \"Pop / Rock\"",
+                "#LNOBJ \"ZZ\"",
+                "#WAV01 \"custom_kick.wav\"",
+                "#BPM01 \"155.5\"",
+                "#STOP01 \"192\"",
+                "#00016:01");
+
+            Assert.Equal("My Super Track", chart.Header.Title);
+            Assert.Equal("Composer Name", chart.Header.Artist);
+            Assert.Equal("[Custom Cut]", chart.Header.SubTitle);
+            Assert.Equal("Pop / Rock", chart.Header.Genre);
+            Assert.Equal("ZZ", chart.Header.LnObj);
+            Assert.Equal("custom_kick.wav", chart.Header.WavTable["01"]);
+            Assert.Equal(155.5f, chart.Header.BpmTable["01"]);
+            Assert.Equal(192.0, chart.Header.StopTable["01"]);
+        }
+
+        [Theory]
+        [InlineData("#PLAYER 1", 1)]
+        [InlineData("#PLAYER 2", 2)]
+        [InlineData("#PLAYER 3", 3)]
+        public void PLAYER_명령이_올바르게_파싱된다(string line, int expected)
+        {
+            var chart = Parse("#BPM 120", line, "#00016:01");
+            Assert.Equal(expected, chart.Header.Player);
+        }
     }
 }

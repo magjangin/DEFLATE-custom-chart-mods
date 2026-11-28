@@ -248,6 +248,13 @@ namespace DEFLATE_custom_chart.Core.Bms
                     chart.Header.Total = total;
                 }
             }
+            else if (line.StartsWith("#PLAYER", StringComparison.OrdinalIgnoreCase))
+            {
+                if (int.TryParse(ExtractHeaderValue(line, "#PLAYER"), out int player))
+                {
+                    chart.Header.Player = player;
+                }
+            }
             else if (line.StartsWith("#LNTYPE", StringComparison.OrdinalIgnoreCase))
             {
                 if (int.TryParse(ExtractHeaderValue(line, "#LNTYPE"), out int lntype))
@@ -257,7 +264,7 @@ namespace DEFLATE_custom_chart.Core.Bms
             }
             else if (line.StartsWith("#LNOBJ", StringComparison.OrdinalIgnoreCase))
             {
-                chart.Header.LnObj = ExtractHeaderValue(line, "#LNOBJ").Trim().ToUpperInvariant();
+                chart.Header.LnObj = ExtractHeaderValue(line, "#LNOBJ").Trim('\"', '\'').Trim().ToUpperInvariant();
             }
             else if (line.StartsWith("#STOP", StringComparison.OrdinalIgnoreCase))
             {
@@ -265,7 +272,7 @@ namespace DEFLATE_custom_chart.Core.Bms
                 {
                     // "#STOPxx 192" ➔ 확장 STOP 테이블 (09 채널용)
                     string stopKey = line.Substring(5, noteWidth).ToUpperInvariant();
-                    string stopStr = line.Substring(5 + noteWidth).Trim();
+                    string stopStr = line.Substring(5 + noteWidth).Trim().Trim('\"', '\'').Trim();
                     if (double.TryParse(stopStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double exStop) && exStop > 0)
                     {
                         chart.Header.StopTable[stopKey] = exStop;
@@ -274,7 +281,7 @@ namespace DEFLATE_custom_chart.Core.Bms
                 else
                 {
                     // "#STOP 192" 단일 기본 정지값 (01 키로 등록)
-                    string stopStr = ExtractHeaderValue(line, "#STOP");
+                    string stopStr = ExtractHeaderValue(line, "#STOP").Trim('\"', '\'').Trim();
                     if (double.TryParse(stopStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double defStop) && defStop > 0)
                     {
                         chart.Header.StopTable["01"] = defStop;
@@ -284,14 +291,14 @@ namespace DEFLATE_custom_chart.Core.Bms
             else if (line.StartsWith("#WAV", StringComparison.OrdinalIgnoreCase) && line.Length >= (4 + noteWidth))
             {
                 string wavKey = line.Substring(4, noteWidth).ToUpperInvariant();
-                string wavFile = line.Substring(4 + noteWidth).Trim();
+                string wavFile = line.Substring(4 + noteWidth).Trim().Trim('\"', '\'').Trim();
                 chart.Header.WavTable[wavKey] = wavFile;
             }
             else if (line.StartsWith("#BPM", StringComparison.OrdinalIgnoreCase) && line.Length >= (4 + noteWidth) && !char.IsWhiteSpace(line[4]))
             {
                 // "#BPMxx 150" ➔ 확장 BPM 테이블 (08 채널용)
                 string bpmKey = line.Substring(4, noteWidth).ToUpperInvariant();
-                string bpmStr = line.Substring(4 + noteWidth).Trim();
+                string bpmStr = line.Substring(4 + noteWidth).Trim().Trim('\"', '\'').Trim();
                 if (float.TryParse(bpmStr, NumberStyles.Any, CultureInfo.InvariantCulture, out float exBpm))
                 {
                     chart.Header.BpmTable[bpmKey] = exBpm;
@@ -302,7 +309,12 @@ namespace DEFLATE_custom_chart.Core.Bms
         private string ExtractHeaderValue(string line, string prefix)
         {
             if (line.Length <= prefix.Length) return string.Empty;
-            return line.Substring(prefix.Length).Trim();
+            string val = line.Substring(prefix.Length).Trim();
+            if (val.Length >= 2 && ((val[0] == '"' && val[val.Length - 1] == '"') || (val[0] == '\'' && val[val.Length - 1] == '\'')))
+            {
+                val = val.Substring(1, val.Length - 2).Trim();
+            }
+            return val;
         }
 
         /// <summary>

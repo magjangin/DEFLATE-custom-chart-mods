@@ -106,6 +106,7 @@ namespace DEFLATE_custom_chart.Core
         }
 
         private static readonly string[] CoverKeywords = { "cover", "jacket", "thumbnail", "thumb", "커버", "자켓" };
+        private static readonly string[] BgaKeywords = { "pv", "bga", "video", "movie", "영상" };
 
         /// <summary>커버 후보 순위: 이름에 커버 키워드가 있는 PNG/JPG = 2, 그 외 PNG = 1, 그 외(JPG) = 0(후보 아님).</summary>
         private static int CoverRank(string path)
@@ -116,6 +117,26 @@ namespace DEFLATE_custom_chart.Core
                 if (name.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0) return 2;
             }
             return string.Equals(Path.GetExtension(path), ".png", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        }
+
+        /// <summary>BGA 비디오 후보 순위: .mp4/.webm/.mov/.m4v 지원. 이름에 키워드가 있으면 2, 없으면 1, 비디오가 아니면 0.</summary>
+        private static int BgaRank(string path)
+        {
+            string ext = Path.GetExtension(path);
+            if (string.IsNullOrEmpty(ext)) return 0;
+
+            bool isSupported = string.Equals(ext, ".mp4", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(ext, ".webm", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(ext, ".mov", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(ext, ".m4v", StringComparison.OrdinalIgnoreCase);
+            if (!isSupported) return 0;
+
+            string name = Path.GetFileNameWithoutExtension(path);
+            foreach (var kw in BgaKeywords)
+            {
+                if (name.IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0) return 2;
+            }
+            return 1;
         }
 
         private static bool HasBgmKeyword(string fileNameWithoutExt)
@@ -172,6 +193,7 @@ namespace DEFLATE_custom_chart.Core
             // BGM 음원 파일 선별 (.ogg 최우선 채택 ➔ music/bgm 키워드 ➔ 최대 용량 오디오 순)
             // (.flac은 UnityWebRequestMultimedia가 읽지 못하므로 후보에서 제외)
             int coverRank = 0;
+            int bgaRank = 0;
             string bestBgm = null;
             bool bestIsOgg = false, bestHasKeyword = false;
             long bestSize = -1;
@@ -213,10 +235,12 @@ namespace DEFLATE_custom_chart.Core
                     continue;
                 }
 
-                if (BgaFilePath == null && string.Equals(ext, ".mp4", StringComparison.OrdinalIgnoreCase))
+                int currentBgaRank = BgaRank(f);
+                if (currentBgaRank > 0 && (BgaFilePath == null || currentBgaRank > bgaRank))
                 {
                     BgaFilePath = f;
                     BgaFileUrl = BuildFileUri(f);
+                    bgaRank = currentBgaRank;
                 }
                 else if (string.Equals(ext, ".png", StringComparison.OrdinalIgnoreCase) || string.Equals(ext, ".jpg", StringComparison.OrdinalIgnoreCase) || string.Equals(ext, ".jpeg", StringComparison.OrdinalIgnoreCase))
                 {

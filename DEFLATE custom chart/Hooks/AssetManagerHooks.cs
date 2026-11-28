@@ -414,6 +414,14 @@ namespace DEFLATE_custom_chart.Hooks
 
                     if (!HwaAssetManager.IsTargetTrackActive) return;
 
+                    if (__instance.gameData != null)
+                    {
+                        var customCover = HwaAssetManager.LoadCoverSprite();
+                        int targetStar = HwaAssetManager.CurrentMeta.GetLevelForDifficulty((int)__instance.gameData.nowDifficulty);
+                        HwaAssetManager.ApplyMetaToGameData(__instance.gameData, customCover, targetStar);
+                        ModLog.Verbose($"[Panel_Result] GameData 메타데이터 재동기화 완료: '{HwaAssetManager.CurrentMeta.Title}' (★{targetStar})");
+                    }
+
                     // 자켓 PNG 주입 (사본 전용)
                     HwaAssetManager.ApplyCustomCoverToHierarchy(__instance.gameObject);
 
