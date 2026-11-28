@@ -391,17 +391,23 @@ namespace DEFLATE_custom_chart.Core
 
             Chart = ParseSingleBmsChart(BmsFilePath, "기본", targetSampleRate, isPrimary: true);
 
-            if (!string.IsNullOrEmpty(EasyBmsFilePath) && !string.Equals(EasyBmsFilePath, BmsFilePath, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(EasyBmsFilePath))
             {
-                EasyChart = ParseSingleBmsChart(EasyBmsFilePath, "Easy", targetSampleRate);
+                EasyChart = string.Equals(EasyBmsFilePath, BmsFilePath, StringComparison.OrdinalIgnoreCase)
+                    ? Chart
+                    : ParseSingleBmsChart(EasyBmsFilePath, "Easy", targetSampleRate);
             }
-            if (!string.IsNullOrEmpty(NormalBmsFilePath) && !string.Equals(NormalBmsFilePath, BmsFilePath, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(NormalBmsFilePath))
             {
-                NormalChart = ParseSingleBmsChart(NormalBmsFilePath, "Normal", targetSampleRate);
+                NormalChart = string.Equals(NormalBmsFilePath, BmsFilePath, StringComparison.OrdinalIgnoreCase)
+                    ? Chart
+                    : ParseSingleBmsChart(NormalBmsFilePath, "Normal", targetSampleRate);
             }
-            if (!string.IsNullOrEmpty(HardBmsFilePath) && !string.Equals(HardBmsFilePath, BmsFilePath, StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(HardBmsFilePath))
             {
-                HardChart = ParseSingleBmsChart(HardBmsFilePath, "Hard", targetSampleRate);
+                HardChart = string.Equals(HardBmsFilePath, BmsFilePath, StringComparison.OrdinalIgnoreCase)
+                    ? Chart
+                    : ParseSingleBmsChart(HardBmsFilePath, "Hard", targetSampleRate);
             }
         }
 

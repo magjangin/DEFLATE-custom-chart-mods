@@ -270,5 +270,22 @@ namespace DEFLATE_custom_chart.Tests
             var chart = Parse("#BPM 120", line, "#00016:01");
             Assert.Equal(expected, chart.Header.Player);
         }
+
+        [Fact]
+        public void STOP과_동일_틱에_위치한_노트는_정지_직전_시간에_발생하고_이후_노트는_지연된다()
+        {
+            // 120 BPM (1마디 = 2초 = 3840틱). 0마디 중간(1920틱, 1.0초)에 STOP01 96 (1.0초 정지)과 16채널 노트 01이 함께 위치.
+            // 0마디 중간 노트는 1.0초에 발생해야 하고, 1마디 시작(3840틱) 노트는 2.0초 + 1.0초 정지 = 3.0초에 발생해야 함.
+            var chart = Parse(
+                "#BPM 120",
+                "#STOP01 96",
+                "#00009:0001",
+                "#00016:0001",
+                "#00116:01");
+
+            Assert.Equal(2, chart.Notes.Count);
+            Assert.Equal(1.0, chart.Notes[0].TimeSeconds, 6);
+            Assert.Equal(3.0, chart.Notes[1].TimeSeconds, 6);
+        }
     }
 }

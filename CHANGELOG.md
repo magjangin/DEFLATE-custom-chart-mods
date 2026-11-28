@@ -2,6 +2,30 @@
 
 버전 기준은 `DEFLATE custom chart/Core/DeflateMod.cs`의 `DeflateMod.Version`입니다. 릴리즈는 `tools/release.ps1`이 이 값과 이 파일 최상단 `## [버전]`, `Properties/AssemblyInfo.cs`가 같은지 확인한 뒤 만듭니다.
 
+## [1.1.10] - 2026-11-28
+
+기준 게임 빌드는 그대로입니다: DEFLATE **1.2** (Steam Build `26402105`), Unity `2022.3.62f2`, MelonLoader **0.7.3**.
+
+### 핵심 결함 수정 및 업데이트 내성 강화
+- **인게임 라인바(LineBar) 난이도별 차트 완벽 연동:**
+  - 기존 `BuildBmsLineBarEvents`에서 인게임 컨트롤러 미전달로 인해 Easy/Hard 플레이 시에도 라인바(마디선/박자선)가 Normal 차트 기준으로 고정 주입되던 버그 수정.
+  - `LoadLineBarEvents`, `ReplaceLineBarEventsFromTrack`, `ReplaceLineBarEventsFromTrackAtSample`에 컨트롤러 인스턴스를 전달하여 현재 선택된 난이도(`gameData.nowDifficulty`)의 차트 마디선/박자선과 정확히 동기화.
+- **세이브 데이터 차단(BlockSave) 조건부 Prepare 결함 수정:**
+  - `GameData_SaveGameData_Patch`, `SaveGamePlayDataToFile_Patch`, `UpdateGamePlayData_Patch`의 `Prepare()`가 `ModConfig.Instance.BlockSave`를 검사하여 `BlockSave=0`일 때 훅 자체가 빠지던 문제 수정.
+  - `BlockSave=0`(순정 곡 점수 저장 허용) 상태에서도 커스텀 곡 플레이(`HwaAssetManager.IsTargetTrackActive`) 시에는 100% 원천 차단되도록 패치를 상시 활성화.
+- **BMS 정지(#STOP) 이벤트와 동일 틱 노트 타이밍 정밀화:**
+  - STOP 이벤트와 동일한 틱(Tick)에 존재하는 노트가 정지 시간(stopSec) 가산 후로 밀리지 않고, 정지 직전의 올바른 시점에 정확히 판정되도록 타임라인 `PreStopTimeSeconds` 역추적 보정.
+- **스모크 테스트 난이도별 차트 판정 연동:**
+  - `SmokeTest.ProbeInGame`에서 현재 플레이 중인 난이도의 차트 노트 수를 기준으로 일치 여부를 검증하도록 개선.
+- **CustomSongEntry 난이도별 차트 참조 일관성 확보:**
+  - `EasyBmsFilePath` 등이 기본 차트와 동일할 때 `EasyChart` 속성이 `null`로 남지 않고 `Chart` 인스턴스로 일관되게 바인딩되도록 개선.
+- **MemberFallbacks 후보군 보강:**
+  - `GameData.nowDifficulty`, `GameData.targetKorePath`에 대한 백업 리플렉션 후보군 추가.
+
+### 테스트 & 품질
+- 오프라인 단위 테스트 1개 추가 (총 66개 전체 통과 확인): STOP과 동일 틱 노트 타이밍 검증, GameData 폴백 후보군 검증 등.
+- 빌드 경고 0 / 오류 0 (`-warnaserror`), 훅 대상 대조 0건.
+
 ## [1.1.9] - 2026-11-28
 
 기준 게임 빌드는 그대로입니다: DEFLATE **1.2** (Steam Build `26402105`), Unity `2022.3.62f2`, MelonLoader **0.7.3**.

@@ -677,13 +677,14 @@ namespace DEFLATE_custom_chart.Hooks
         /// 원본 이벤트의 페이로드가 마디선/박자선 구분에 쓰일 수 있으므로, 원본에서 가장 드문 페이로드를 마디 시작선에,
         /// 가장 흔한 페이로드를 박자선에 그대로 재사용합니다 (원본 분포는 로그로 남김).
         /// </summary>
-        private static Il2CppSystem.Collections.Generic.List<KoreographyEvent> BuildBmsLineBarEvents(LineBarController lane, string trackID, string source)
+        private static Il2CppSystem.Collections.Generic.List<KoreographyEvent> BuildBmsLineBarEvents(RhythmGameController instance, LineBarController lane, string trackID, string source)
         {
             try
             {
                 if (lane == null || !HwaAssetManager.IsTargetTrackActive) return null;
 
-                var bmsChart = GetActiveChartForGame(null);
+                var controller = instance ?? lane.gameController;
+                var bmsChart = GetActiveChartForGame(controller);
                 if (bmsChart == null || bmsChart.Notes.Count == 0 || bmsChart.BarLines.Count == 0) return null;
 
                 // 1. 원본 라인바 이벤트 관찰: 페이로드 종류별 개수 / 대표 페이로드 / 이벤트 길이 / 평균 간격
@@ -724,7 +725,7 @@ namespace DEFLATE_custom_chart.Hooks
                 // 2. BMS 마디선/박자선 ➔ KoreographyEvent
                 var events = new Il2CppSystem.Collections.Generic.List<KoreographyEvent>();
                 int measureLines = 0;
-                int targetSampleRate = TimelineSampleRate(lane.gameController != null ? lane.gameController.playingKoreo : null, bmsChart);
+                int targetSampleRate = TimelineSampleRate(controller != null ? controller.playingKoreo : (lane.gameController != null ? lane.gameController.playingKoreo : null), bmsChart);
                 foreach (var bar in bmsChart.BarLines)
                 {
                     int samplePos = ResolveSamplePosition(bar.TimeSeconds, bar.SamplePosition, bmsChart.SampleRate, targetSampleRate);
@@ -770,13 +771,13 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(RhythmGameController), nameof(RhythmGameController.LoadLineBarEvents))]
         public static class RhythmGameController_LoadLineBarEvents_Patch
         {
-            public static void Postfix(object[] __args)
+            public static void Postfix(RhythmGameController __instance, object[] __args)
             {
                 string trackID = HookArgs.First<string>(__args);
                 var lane = HookArgs.First<LineBarController>(__args);
                 try
                 {
-                    var events = BuildBmsLineBarEvents(lane, trackID, "LoadLineBarEvents");
+                    var events = BuildBmsLineBarEvents(__instance, lane, trackID, "LoadLineBarEvents");
                     if (events == null) return;
 
                     // 로드 직후라 아직 스폰된 라인바가 없으므로 리스트를 통째로 바꾸고 처음부터 소비하게 한다.
@@ -802,7 +803,7 @@ namespace DEFLATE_custom_chart.Hooks
                 var lane = HookArgs.First<LineBarController>(__args);
                 try
                 {
-                    var events = BuildBmsLineBarEvents(lane, trackID, "ReplaceLineBarEventsFromTrack");
+                    var events = BuildBmsLineBarEvents(__instance, lane, trackID, "ReplaceLineBarEventsFromTrack");
                     if (events == null) return;
 
                     int currentSample = __instance != null && __instance.audioCom != null ? __instance.audioCom.timeSamples : 0;
@@ -825,7 +826,7 @@ namespace DEFLATE_custom_chart.Hooks
                 int currentSample = HookArgs.FirstInt(__args, __instance != null && __instance.audioCom != null ? __instance.audioCom.timeSamples : 0);
                 try
                 {
-                    var events = BuildBmsLineBarEvents(lane, trackID, "ReplaceLineBarEventsFromTrackAtSample");
+                    var events = BuildBmsLineBarEvents(__instance, lane, trackID, "ReplaceLineBarEventsFromTrackAtSample");
                     if (events == null) return;
 
                     lane.ReplaceEvents(events, currentSample);
