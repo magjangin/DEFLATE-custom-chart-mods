@@ -213,6 +213,8 @@ namespace DEFLATE_custom_chart.Tests
 
             Assert.Contains("m_trackID", MemberFallbacks.TrackBlock.UniqueId);
             Assert.Contains("m_nowTrackTitle", MemberFallbacks.GameData.Title);
+            Assert.Contains("nowDifficulty", MemberFallbacks.GameData.Difficulty);
+            Assert.Contains("targetKorePath", MemberFallbacks.GameData.TargetKorePath);
         }
 
         [Fact]

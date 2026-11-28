@@ -243,8 +243,10 @@ namespace DEFLATE_custom_chart.Core
                 bool bgmPlaying = audio != null && audio.isPlaying && !audio.mute;
                 float t2 = audio != null ? audio.time : -1f;
                 bool bgmAdvancing = t1 >= 0f && t2 - t1 >= BgmProgressSeconds * 0.5f;
-                bool hasChart = HwaAssetManager.LoadedBmsChart != null;
-                int chartNotes = hasChart ? HwaAssetManager.LoadedBmsChart.Notes.Count : 0;
+                int currentDiff = controller != null && controller.gameData != null ? (int)controller.gameData.nowDifficulty : 1;
+                var activeChart = HwaAssetManager.GetLoadedBmsChart(currentDiff) ?? HwaAssetManager.LoadedBmsChart;
+                bool hasChart = activeChart != null;
+                int chartNotes = hasChart ? activeChart.Notes.Count : 0;
                 // 노트 하나는 정확히 한 레인에만 들어가야 한다(하이햇/킥·스네어 양쪽 복제 회귀 검사).
                 bool notesOk = !hasChart || (_injectedLaneEvents > 0 && _injectedLaneEvents == chartNotes);
                 int allNoteCount = -1;

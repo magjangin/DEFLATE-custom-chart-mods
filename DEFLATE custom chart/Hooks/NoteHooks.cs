@@ -37,7 +37,8 @@ namespace DEFLATE_custom_chart.Hooks
         {
             private static bool _loggedOnce;
 
-            public static bool Prepare() => ModConfig.Instance.BlockSave;
+            // BlockSave=1 설정뿐만 아니라 커스텀 곡 플레이 시에도 세이브를 원천 차단해야 하므로 항시 활성화
+            public static bool Prepare() => true;
 
             public static bool Prefix()
             {
@@ -64,7 +65,7 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(GameData), "SaveGamePlayDataToFile")]
         public static class GameData_SaveGamePlayDataToFile_Patch
         {
-            public static bool Prepare() => ModConfig.Instance.BlockSave && Il2CppReflectionHelper.HasPatchTarget(typeof(GameData), "SaveGamePlayDataToFile");
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(GameData), "SaveGamePlayDataToFile");
 
             public static bool Prefix()
             {
@@ -87,7 +88,7 @@ namespace DEFLATE_custom_chart.Hooks
         [HarmonyPatch(typeof(GameData), "UpdateGamePlayData")]
         public static class GameData_UpdateGamePlayData_Patch
         {
-            public static bool Prepare() => ModConfig.Instance.BlockSave && Il2CppReflectionHelper.HasPatchTarget(typeof(GameData), "UpdateGamePlayData");
+            public static bool Prepare() => Il2CppReflectionHelper.HasPatchTarget(typeof(GameData), "UpdateGamePlayData");
 
             public static bool Prefix()
             {

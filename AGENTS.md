@@ -16,6 +16,7 @@
 > **v1.1.7 (2026-11-26, 6차 감사):** 복제 템플릿 3차 폴백(`anyOriginalBlock`)·로딩 씬 UI 전면 리플렉션 내성 강화·MemberFallbacks 대폭 확장·BMS 동일 틱 변속 결정적 안정 정렬(`OrderIndex`) 및 음수 타임라인 방어·BGM 비동기 로딩 세대 가드(`_loadGeneration`)·일시정지 중 노트 흔들림 연산 가드·SafePatcher 타입 로더 예외 상세 진단, 단위 테스트 57개(전체 통과). §15 참고.
 > **v1.1.8 (2026-11-27, 7차 감사):** 난이도별 차트 지원(Easy/Normal/Hard BMS 파일명 패턴 및 info.txt chart_* 키 파싱, 미지정 난이도 자동 폴백) · 표준 5x/6x LN 채널 완벽 지원(`PairLongNotesFromLnChannels`, 고아 Head 단타 강등) · #STOPxx 및 09 채널 완벽 지원(정지 시간 누적 계산 및 타임라인 앵커링으로 싱크 완벽 유지) · 인게임 난이도 연동 주입 · 단위 테스트 61개(전체 통과). §16 참고.
 > **v1.1.9 (2026-11-28, 8차 감사):** BGA 비디오 지원 포맷 확장(`.mp4`/`.webm`/`.mov`/`.m4v`) 및 `BgaRank` 가중치 랭킹 시스템 · BMS 헤더 따옴표 자동 정제 및 `#PLAYER` 파싱 · `BlockSave` 원천 차단 강화(`SaveGamePlayDataToFile`, `UpdateGamePlayData`) · 결과 화면 메타데이터 재동기화 연동 · 단위 테스트 65개(전체 통과). §17 참고.
+> **v1.1.10 (2026-11-28, 9차 심층 감사):** 라인바(LineBar) 난이도별 차트 완벽 동기화 · `BlockSave` 조건부 Prepare 결함 수정(커스텀 곡 플레이 시 상시 100% 세이브 차단) · STOP 이벤트 동일 틱 노트 타이밍 정밀 보정(`PreStopTimeSeconds`) · 스모크 테스트 난이도 연동 · 단위 테스트 66개(전체 통과). §18 참고.
 > **2026-11-23 전수 감사/리팩토링:** §9 참고. 컴파일 경고 0 · 오류 0, `[SafePatcher] 성공 45 / 건너뜀 8(로그 레벨 LogLevel=1 기준) / 실패 0`, 스모크 테스트 `PASS`(BMS 552/552, 라인바 296, 커스텀 BGM·BGA, 컨텍스트 인게임).
 > 미확인: 롱노트(테스트 차트에 홀드 0개), 드롭 레인(테스트 차트 14번 채널 0개), 킥/스네어 키음 노트(테스트 차트에 없음).
 
@@ -534,5 +535,36 @@ Start-Process "steam://rungameid/3921360"
 
 **확인 상태**
 - 빌드 경고 0 / 오류 0 (`-warnaserror`), 단위 테스트 65/65, 훅 대상 대조 0건.
+
+---
+
+## 18. 9차 심층 감사 기록 (2026-11-28, v1.1.10)
+
+범위: 라인바(LineBar) 난이도별 동기화, BlockSave 조건부 Prepare 취약점 수정, STOP 동일 틱 노트 타이밍 정밀화, 스모크 테스트 난이도 연동, CustomSongEntry 차트 속성 바인딩 일관성, 단위 테스트 확장.
+
+**적용한 변경**
+- `InGameRhythmHooks`:
+  - `BuildBmsLineBarEvents`에 `RhythmGameController` 인스턴스 전달 지원(`controller = instance ?? lane.gameController`).
+  - `GetActiveChartForGame(controller)`를 호출하여, Easy/Hard 플레이 시에도 해당 난이도에 맞는 BMS 차트의 마디선/박자선이 완벽히 동기화되도록 수정(기존 Normal 고정 버그 해결).
+  - `LoadLineBarEvents`, `ReplaceLineBarEventsFromTrack`, `ReplaceLineBarEventsFromTrackAtSample` 훅에 인스턴스 바인딩 전달.
+  - `BuildBmsLaneEvents`에 `instance ?? lane?.gameController` 안전 폴백 적용.
+- `NoteHooks`:
+  - `GameData_SaveGameData_Patch`, `SaveGamePlayDataToFile_Patch`, `UpdateGamePlayData_Patch`의 `Prepare()`가 `ModConfig.Instance.BlockSave`를 체크하여 `BlockSave=0`일 때 훅 자체가 등록되지 않던 치명적 결함 수정.
+  - 세 패치 모두 `Prepare()`에서 상시 등록되도록 변경하여, 사용자가 순정 곡 저장을 허용(`BlockSave=0`)한 환경에서도 커스텀 곡 플레이(`HwaAssetManager.IsTargetTrackActive`) 시에는 100% 세이브를 원천 차단하여 순정 곡 랭킹 데이터 오염 방지.
+- `BmsData` & `BmsParser`:
+  - `BmsBpmEvent`에 `PreStopTimeSeconds` 속성 추가.
+  - `#STOP` 이벤트 발생 시 정지 시간 누적 직전의 시점을 보존하고, `CalculateTimeAtTick`에서 해당 STOP과 동일한 틱에 위치한 노트는 정지 직전 시점(`PreStopTimeSeconds`)으로 정확히 계산되도록 역추적 보정.
+- `SmokeTest`:
+  - `ProbeInGame`에서 인게임 난이도(`controller.gameData.nowDifficulty`)를 반영하여 해당 난이도 차트의 노트 수와 주입된 노트를 비교하도록 개선.
+- `CustomSongEntry`:
+  - `ParseBmsChart`에서 `EasyBmsFilePath`/`NormalBmsFilePath`/`HardBmsFilePath`가 기본 차트와 동일할 때 속성이 `null`로 남지 않고 `Chart` 인스턴스로 일관되게 바인딩되도록 개선.
+- `MemberFallbacks`:
+  - `GameData.Difficulty` (`nowDifficulty`, `Difficulty` 등) 및 `GameData.TargetKorePath` (`targetKorePath`, `TargetKorePath` 등) 후보군 보강.
+- `DEFLATE.CustomChart.Tests`:
+  - 단위 테스트 1개 추가 (총 66개 통과): STOP과 동일 틱 위치 노트 타이밍 검증, MemberFallbacks GameData 확장 검증.
+
+**확인 상태**
+- 빌드 경고 0 / 오류 0 (`-warnaserror`), 단위 테스트 66/66, 훅 대상 대조 0건.
+
 
 

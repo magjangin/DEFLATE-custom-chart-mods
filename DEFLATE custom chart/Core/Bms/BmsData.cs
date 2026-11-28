@@ -88,6 +88,8 @@ namespace DEFLATE_custom_chart.Core.Bms
         public double Tick { get; set; }
         public float Bpm { get; set; }
         public double TimeSeconds { get; set; }
+        /// <summary>정지(STOP) 이벤트와 동일 틱에 발생했을 때, 정지 시간 가산 직전의 시점(초)</summary>
+        public double? PreStopTimeSeconds { get; set; }
     }
 
     /// <summary>

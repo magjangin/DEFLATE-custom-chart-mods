@@ -40,6 +40,8 @@ namespace DEFLATE_custom_chart.Core.Wrapper
             public static readonly string[] Label = { "NowTrackLabel", "TrackLabel", "TrackAlbum", "nowTrackLabel", "nowTrackAlbum", "NowTrackAlbum" };
             public static readonly string[] Level = { "TrackLevel", "nowTrackLevel", "m_nowTrackLevel" };
             public static readonly string[] Cover = { "TrackCover", "nowTrackCover", "m_nowTrackCover" };
+            public static readonly string[] Difficulty = { "nowDifficulty", "Difficulty", "difficulty", "m_nowDifficulty" };
+            public static readonly string[] TargetKorePath = { "targetKorePath", "TargetKorePath", "m_targetKorePath", "korePath" };
         }
 
         public static class LoadingUi

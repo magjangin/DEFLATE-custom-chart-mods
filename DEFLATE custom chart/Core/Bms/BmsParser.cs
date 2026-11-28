@@ -462,6 +462,7 @@ namespace DEFLATE_custom_chart.Core.Bms
 
                 if (anchor.StopValue.HasValue)
                 {
+                    double preStopTime = prevTime;
                     // STOP 계산: 192 = 1마디 정지 = 4박 정지 = 240 / bpm 초
                     double stopSec = (anchor.StopValue.Value / 192.0) * (240.0 / safeBpm);
                     chart.StopEvents.Add(new BmsStopEvent
@@ -478,7 +479,8 @@ namespace DEFLATE_custom_chart.Core.Bms
                         OrderIndex = anchor.OrderIndex,
                         Tick = anchor.Tick,
                         Bpm = currentBpm,
-                        TimeSeconds = prevTime
+                        TimeSeconds = prevTime,
+                        PreStopTimeSeconds = preStopTime
                     });
                 }
 
@@ -533,6 +535,18 @@ namespace DEFLATE_custom_chart.Core.Bms
             }
 
             BmsBpmEvent currentEvent = bpmEvents[bestIdx];
+            if (Math.Abs(tick - currentEvent.Tick) < 1e-6)
+            {
+                // 동일 틱에 STOP 이벤트가 있었다면 정지 시작 시점(PreStopTime)으로 판정
+                for (int i = bestIdx; i >= 0 && Math.Abs(bpmEvents[i].Tick - tick) < 1e-6; i--)
+                {
+                    if (bpmEvents[i].PreStopTimeSeconds.HasValue)
+                    {
+                        return Math.Max(0.0, bpmEvents[i].PreStopTimeSeconds.Value);
+                    }
+                }
+            }
+
             double safeBpm = currentEvent.Bpm > 0f ? currentEvent.Bpm : 130.0;
             double deltaTick = tick - currentEvent.Tick;
             double deltaTime = deltaTick * 240.0 / (safeBpm * TicksPerMeasure);
