@@ -15,6 +15,7 @@
 > **v1.1.6 (2026-11-25, 5차 감사 2부):** info.txt 파서 분리(`SongInfoParser`)·`subtitle`/`album artist` 덮어쓰기 버그 수정, config.txt 오타 키 경고, 커버 FullRect·대형 커버 경고, 스캔/주입 시간 로그, 단위 테스트 53개. 훅 변경 없음. 빌드 경고 0·테스트 53/53. **인게임 미확인(v1.1.5와 함께 다음 실기).** §14 참고.
 > **v1.1.7 (2026-11-26, 6차 감사):** 복제 템플릿 3차 폴백(`anyOriginalBlock`)·로딩 씬 UI 전면 리플렉션 내성 강화·MemberFallbacks 대폭 확장·BMS 동일 틱 변속 결정적 안정 정렬(`OrderIndex`) 및 음수 타임라인 방어·BGM 비동기 로딩 세대 가드(`_loadGeneration`)·일시정지 중 노트 흔들림 연산 가드·SafePatcher 타입 로더 예외 상세 진단, 단위 테스트 57개(전체 통과). §15 참고.
 > **v1.1.8 (2026-11-27, 7차 감사):** 난이도별 차트 지원(Easy/Normal/Hard BMS 파일명 패턴 및 info.txt chart_* 키 파싱, 미지정 난이도 자동 폴백) · 표준 5x/6x LN 채널 완벽 지원(`PairLongNotesFromLnChannels`, 고아 Head 단타 강등) · #STOPxx 및 09 채널 완벽 지원(정지 시간 누적 계산 및 타임라인 앵커링으로 싱크 완벽 유지) · 인게임 난이도 연동 주입 · 단위 테스트 61개(전체 통과). §16 참고.
+> **v1.1.9 (2026-11-28, 8차 감사):** BGA 비디오 지원 포맷 확장(`.mp4`/`.webm`/`.mov`/`.m4v`) 및 `BgaRank` 가중치 랭킹 시스템 · BMS 헤더 따옴표 자동 정제 및 `#PLAYER` 파싱 · `BlockSave` 원천 차단 강화(`SaveGamePlayDataToFile`, `UpdateGamePlayData`) · 결과 화면 메타데이터 재동기화 연동 · 단위 테스트 65개(전체 통과). §17 참고.
 > **2026-11-23 전수 감사/리팩토링:** §9 참고. 컴파일 경고 0 · 오류 0, `[SafePatcher] 성공 45 / 건너뜀 8(로그 레벨 LogLevel=1 기준) / 실패 0`, 스모크 테스트 `PASS`(BMS 552/552, 라인바 296, 커스텀 BGM·BGA, 컨텍스트 인게임).
 > 미확인: 롱노트(테스트 차트에 홀드 0개), 드롭 레인(테스트 차트 14번 채널 0개), 킥/스네어 키음 노트(테스트 차트에 없음).
 
@@ -509,4 +510,29 @@ Start-Process "steam://rungameid/3921360"
 
 **확인 상태**
 - 빌드 경고 0 / 오류 0 (`-warnaserror`), 단위 테스트 61/61, 훅 대상 대조 0건.
+
+---
+
+## 17. 8차 감사 기록 (2026-11-28, v1.1.9)
+
+범위: BGA 영상 포맷 확장 및 우선순위 랭킹, BMS 헤더 따옴표 정제 및 PLAYER 지원, 세이브 차단(BlockSave) 완전 격리, 결과 화면 메타 연동, 단위 테스트 확장.
+
+**적용한 변경**
+- `CustomSongEntry`:
+  - BGA 지원 확장자를 `.mp4`, `.webm`, `.mov`, `.m4v`로 확장.
+  - `BgaRank` 랭킹 시스템을 도입하여 파일명 키워드(`pv`, `bga`, `video`, `movie`, `영상`) 가중치를 매겨 최적의 BGA 자동 선별.
+- `BmsParser`:
+  - `#TITLE`, `#ARTIST`, `#SUBTITLE`, `#GENRE`, `#LNOBJ`, `#STOP`, `#WAVxx`, `#BPMxx` 등 헤더 값 파싱 시 양 끝의 따옴표(`"`, `'`) 자동 제거.
+  - `#PLAYER` 헤더 파싱 추가 (`chart.Header.Player`).
+- `NoteHooks`:
+  - `GameData.SaveGamePlayDataToFile` 및 `GameData.UpdateGamePlayData` Harmony 훅 추가.
+  - `BlockSave` 활성 또는 커스텀 곡 플레이 시 원본 세이브 파일 기록 및 플레이 랭킹 데이터 갱신을 100% 원천 차단하여 순정 세이브 보호.
+- `AssetManagerHooks`:
+  - `Panel_Result.Awake` 시점에 `gameData`의 메타데이터(`Title`, `Author`, `Cover`, 난이도 별점)를 다시 한 번 커스텀 곡 정보로 재동기화(`HwaAssetManager.ApplyMetaToGameData`).
+- `DEFLATE.CustomChart.Tests`:
+  - 단위 테스트 4개 추가 (총 65개 전체 통과 확인): BMS 헤더 따옴표/작은따옴표 정제 검증, `#PLAYER` 지시어 파싱 검증 등.
+
+**확인 상태**
+- 빌드 경고 0 / 오류 0 (`-warnaserror`), 단위 테스트 65/65, 훅 대상 대조 0건.
+
 

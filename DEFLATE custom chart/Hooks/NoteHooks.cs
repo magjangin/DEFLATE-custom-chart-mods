@@ -43,12 +43,12 @@ namespace DEFLATE_custom_chart.Hooks
             {
                 try
                 {
-                    if (ModConfig.Instance.BlockSave)
+                    if (ModConfig.Instance.BlockSave || HwaAssetManager.IsTargetTrackActive)
                     {
                         if (!_loggedOnce)
                         {
                             _loggedOnce = true;
-                            MelonLogger.Msg("[ModConfig] BlockSave=1: 게임 스코어 및 랭킹 데이터 저장을 차단합니다 (이후 동일 로그 생략).");
+                            MelonLogger.Msg("[ModConfig] BlockSave: 게임 스코어 및 랭킹 데이터 저장을 차단합니다 (이후 동일 로그 생략).");
                         }
                         return false;
                     }
@@ -56,6 +56,52 @@ namespace DEFLATE_custom_chart.Hooks
                 catch (Exception ex)
                 {
                     MelonLogger.Warning($"[GameData.SaveGameData] Prefix 예외: {ex.Message}");
+                }
+                return true;
+            }
+        }
+
+        [HarmonyPatch(typeof(GameData), "SaveGamePlayDataToFile")]
+        public static class GameData_SaveGamePlayDataToFile_Patch
+        {
+            public static bool Prepare() => ModConfig.Instance.BlockSave && Il2CppReflectionHelper.HasPatchTarget(typeof(GameData), "SaveGamePlayDataToFile");
+
+            public static bool Prefix()
+            {
+                try
+                {
+                    if (ModConfig.Instance.BlockSave || HwaAssetManager.IsTargetTrackActive)
+                    {
+                        ModLog.Verbose("[BlockSave] SaveGamePlayDataToFile 차단 (커스텀/블록세이브)");
+                        return false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[GameData.SaveGamePlayDataToFile] Prefix 예외: {ex.Message}");
+                }
+                return true;
+            }
+        }
+
+        [HarmonyPatch(typeof(GameData), "UpdateGamePlayData")]
+        public static class GameData_UpdateGamePlayData_Patch
+        {
+            public static bool Prepare() => ModConfig.Instance.BlockSave && Il2CppReflectionHelper.HasPatchTarget(typeof(GameData), "UpdateGamePlayData");
+
+            public static bool Prefix()
+            {
+                try
+                {
+                    if (ModConfig.Instance.BlockSave || HwaAssetManager.IsTargetTrackActive)
+                    {
+                        ModLog.Verbose("[BlockSave] UpdateGamePlayData 차단 (커스텀/블록세이브)");
+                        return false;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MelonLogger.Warning($"[GameData.UpdateGamePlayData] Prefix 예외: {ex.Message}");
                 }
                 return true;
             }

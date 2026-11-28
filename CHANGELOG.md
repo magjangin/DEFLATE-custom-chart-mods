@@ -2,6 +2,27 @@
 
 버전 기준은 `DEFLATE custom chart/Core/DeflateMod.cs`의 `DeflateMod.Version`입니다. 릴리즈는 `tools/release.ps1`이 이 값과 이 파일 최상단 `## [버전]`, `Properties/AssemblyInfo.cs`가 같은지 확인한 뒤 만듭니다.
 
+## [1.1.9] - 2026-11-28
+
+기준 게임 빌드는 그대로입니다: DEFLATE **1.2** (Steam Build `26402105`), Unity `2022.3.62f2`, MelonLoader **0.7.3**.
+
+### 신규 기능 및 세이브 보호 강화
+- **BGA 비디오 지원 포맷 확장 및 가중치 랭킹 시스템:**
+  - 기존 `.mp4`에 더해 Unity `VideoPlayer`가 지원하는 `.webm`, `.mov`, `.m4v` 동영상 포맷 지원.
+  - 영상 파일명 키워드 가중치 판별 시스템(`BgaRank`)을 도입하여, 폴더 내 여러 영상이 존재할 경우 `pv`/`bga`/`video`/`movie`/`영상`이 포함된 영상을 우선 채택.
+- **BMS 헤더 따옴표 자동 정제 및 `#PLAYER` 파싱 지원:**
+  - `#TITLE`, `#ARTIST`, `#SUBTITLE`, `#GENRE`, `#LNOBJ`, `#STOP`, `#WAVxx`, `#BPMxx` 등 헤더 값에 둘러싸인 큰따옴표(`"`) 및 작은따옴표(`'`)를 자동 정제. 에디터 출력 포맷 차이로 인한 키음 누락 및 문자열 깨짐 방지.
+  - `#PLAYER` 헤더 파싱을 지원하여 1P/2P 모드 메타데이터 안전 보존.
+- **세이브 데이터 원천 차단(BlockSave) 범위 대폭 강화:**
+  - 기존 `GameData.SaveGameData` 차단에 더해, `GameData.SaveGamePlayDataToFile` 및 `GameData.UpdateGamePlayData` 훅을 신설.
+  - 커스텀 곡 플레이 시 원본 세이브 파일 및 게임 랭킹 데이터가 영구 세이브에 섞이거나 덮어씌워지는 위험을 100% 원천 차단.
+- **결과 화면(Panel_Result) 메타데이터 재동기화:**
+  - `Panel_Result.Awake` 시점에 `gameData`의 메타데이터(`Title`, `Author`, `Cover`, 난이도 별점)를 다시 한 번 커스텀 곡 정보로 재동기화하여 연출 일관성 확보.
+
+### 테스트 & 품질
+- 오프라인 단위 테스트 4개 추가 (총 65개 전체 통과 확인): BMS 헤더 따옴표/작은따옴표 자동 정제, `#PLAYER` 지시어 파싱 등.
+- 빌드 경고 0 / 오류 0 (`-warnaserror`), 훅 대상 대조 0건.
+
 ## [1.1.8] - 2026-11-27
 
 기준 게임 빌드는 그대로입니다: DEFLATE **1.2** (Steam Build `26402105`), Unity `2022.3.62f2`, MelonLoader **0.7.3**.
